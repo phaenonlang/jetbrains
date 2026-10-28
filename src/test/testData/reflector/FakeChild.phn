@@ -1,0 +1,41 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+class FakeChild extends FakeParent
+{
+    // Redeclared without the attribute: the property walk finds the parent's.
+    public string $inheritedProp = '';
+
+    private string $privateProp = '';
+
+    public string $childOnlyProp = '';
+
+    // Overridden without the attribute: the method walk finds the parent's.
+    public function annotatedMethod(): void
+    {
+    }
+
+    // Same name as FakeParent's private members: the walks must treat the
+    // parent's private declarations as unreachable and return null.
+    // describeChild() only exists so the private members are genuinely used.
+    private function privateAnnotated(): string
+    {
+        return 'child'.$this->privateProp;
+    }
+
+    public function describeChild(): string
+    {
+        return $this->privateAnnotated();
+    }
+
+    public function childOnlyMethod(): void
+    {
+    }
+
+    public function withParameters(
+        #[FakeLabel('param-a')]
+        #[FakeLabel('param-b')]
+        string $annotated,
+        string $plain,
+    ): void {
+    }
+}

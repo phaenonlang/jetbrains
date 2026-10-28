@@ -1,0 +1,9 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+#[\Attribute(\Attribute::TARGET_ALL | \Attribute::IS_REPEATABLE)]
+class FakeLabel
+{
+    public function __construct(public readonly string $value)
+    {
+    }
+}

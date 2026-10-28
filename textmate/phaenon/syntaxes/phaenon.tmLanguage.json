@@ -1,0 +1,13 @@
+{
+  "name": "Phaenon",
+  "scopeName": "source.phaenon",
+  "fileTypes": [
+    "phn"
+  ],
+  "comment": "A Phaenon file is PHP code from byte 0, so it is exactly the PHP code grammar (source.php) without the text.html.php wrapper that waits for an open tag. Both VS Code and JetBrains IDEs ship source.php in their PHP bundle.",
+  "patterns": [
+    {
+      "include": "source.php"
+    }
+  ]
+}

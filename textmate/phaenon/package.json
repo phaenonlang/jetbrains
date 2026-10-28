@@ -1,0 +1,36 @@
+{
+  "name": "phaenon",
+  "displayName": "Phaenon",
+  "description": "Syntax highlighting for Phaenon (.phn) source files, a typed dialect of PHP",
+  "version": "0.1.0",
+  "publisher": "phaenonlang",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "phaenon",
+        "aliases": [
+          "Phaenon",
+          "phaenon"
+        ],
+        "extensions": [
+          ".phn"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "phaenon",
+        "scopeName": "source.phaenon",
+        "path": "./syntaxes/phaenon.tmLanguage.json"
+      }
+    ]
+  }
+}

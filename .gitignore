@@ -1,0 +1,16 @@
+# Gradle
+.gradle/
+build/
+.kotlin/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IntelliJ Platform Gradle Plugin
+.intellijPlatform/
+
+# IDE
+.idea/
+*.iml
+out/
+
+# OS
+.DS_Store

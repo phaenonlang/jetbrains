@@ -1,0 +1,13 @@
+namespace App;
+
+final class Consumer
+{
+    public function __construct(private La<caret>bel $label)
+    {
+    }
+
+    public function describe(): string
+    {
+        return $this->label->upper();
+    }
+}

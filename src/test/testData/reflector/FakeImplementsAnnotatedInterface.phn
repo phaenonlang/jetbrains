@@ -1,0 +1,5 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+class FakeImplementsAnnotatedInterface implements FakeAnnotatedInterface
+{
+}

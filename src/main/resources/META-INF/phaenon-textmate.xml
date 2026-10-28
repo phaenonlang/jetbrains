@@ -1,0 +1,6 @@
+<!-- Loaded only when the TextMate Bundles plugin (org.jetbrains.plugins.textmate) is present. -->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <textmate.bundleProvider implementation="dev.phaenon.jetbrains.PhaenonTextMateBundleProvider"/>
+    </extensions>
+</idea-plugin>

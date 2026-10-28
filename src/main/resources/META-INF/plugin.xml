@@ -1,0 +1,23 @@
+<idea-plugin>
+    <id>dev.phaenon.jetbrains</id>
+    <name>Phaenon</name>
+    <vendor url="https://github.com/phaenonlang">Phaenon</vendor>
+
+    <description><![CDATA[
+        <p>Support for <b>Phaenon</b> source files (<code>.phn</code>): a typed dialect of PHP that compiles to PHP.</p>
+        <p>A Phaenon file is PHP code from the first byte: no <code>&lt;?php</code> open tag, no inline HTML,
+        <code>strict_types</code> implied. In PhpStorm (or any IDE with the PHP plugin) this plugin plugs
+        <code>.phn</code> files into the real PHP lexer, parser and PSI, starting the lexer in code mode, so
+        highlighting, completion, navigation, refactorings and inspections work exactly as they do for PHP.
+        Classes declared in <code>.phn</code> files are indexed and resolvable from PHP files and vice versa.</p>
+        <p>Without the PHP plugin, a bundled TextMate grammar still provides syntax highlighting.</p>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends optional="true" config-file="phaenon-php.xml">com.jetbrains.php</depends>
+    <depends optional="true" config-file="phaenon-textmate.xml">org.jetbrains.plugins.textmate</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileIconProvider implementation="dev.phaenon.jetbrains.PhaenonFileIconProvider"/>
+    </extensions>
+</idea-plugin>

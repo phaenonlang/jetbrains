@@ -1,0 +1,7 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+#[FakeSpecialLabel('special')]
+#[FakeLabel('plain')]
+class FakeWithSpecialLabel
+{
+}

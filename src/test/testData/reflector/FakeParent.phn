@@ -1,0 +1,36 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+#[FakeMarker]
+class FakeParent extends FakeGrandparent
+{
+    #[FakeLabel('parent-prop')]
+    public string $inheritedProp = '';
+
+    #[FakeLabel('parent-private-prop')]
+    private string $privateProp = '';
+
+    #[FakeLabel('parent-method')]
+    public function annotatedMethod(): void
+    {
+    }
+
+    // Private on purpose: the OrParent walks must stop at a private
+    // member of an ancestor. describeSelf() only exists so the private
+    // members are genuinely used.
+    #[FakeLabel('parent-private-method')]
+    private function privateAnnotated(): string
+    {
+        return 'parent'.$this->privateProp;
+    }
+
+    public function describeSelf(): string
+    {
+        return $this->privateAnnotated();
+    }
+
+    // Overrides without repeating the attribute: the method walk must
+    // continue past this class up to FakeGrandparent.
+    public function annotatedInGrandparent(): void
+    {
+    }
+}

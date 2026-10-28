@@ -1,0 +1,18 @@
+<!-- Loaded only when the PHP plugin (com.jetbrains.php) is present. -->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- .phn joins the PHP file type (no implementationClass: this bean only adds an extension). -->
+        <fileType name="PHP" extensions="phn"/>
+
+        <!-- Runs ahead of PhpStorm's factory; claims .phn, delegates every other PHP file. -->
+        <lang.fileViewProviderFactory language="PHP" order="first"
+                                      implementationClass="dev.phaenon.jetbrains.PhaenonFileViewProviderFactory"/>
+
+        <annotator language="PHP" implementationClass="dev.phaenon.jetbrains.PhaenonPhpTagAnnotator"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.jetbrains.php">
+        <!-- The editor highlighter is keyed by file type and asks this EP for its lexer. -->
+        <baseLexerProvider implementation="dev.phaenon.jetbrains.PhaenonBaseLexerProvider"/>
+    </extensions>
+</idea-plugin>

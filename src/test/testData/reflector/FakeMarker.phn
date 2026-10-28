@@ -1,0 +1,6 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class FakeMarker
+{
+}

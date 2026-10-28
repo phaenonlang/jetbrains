@@ -1,0 +1,14 @@
+namespace App;
+
+#[\Attribute(\Attribute::TARGET_CLASS)]
+final class Label
+{
+    public function __construct(public readonly string $value)
+    {
+    }
+
+    public function upper(): string
+    {
+        return strtoupper($this->value);
+    }
+}

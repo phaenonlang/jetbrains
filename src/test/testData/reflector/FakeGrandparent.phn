@@ -1,0 +1,11 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+#[FakeLabel('grandparent-a')]
+#[FakeLabel('grandparent-b')]
+class FakeGrandparent
+{
+    #[FakeLabel('gp-method')]
+    public function annotatedInGrandparent(): void
+    {
+    }
+}

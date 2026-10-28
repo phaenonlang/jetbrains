@@ -1,0 +1,300 @@
+namespace Tequila\Reflection;
+
+final readonly class AttributeReader
+{
+    /**
+     * @template ClassType of object
+     * @template EnumType of \UnitEnum
+     * @param ReflectorInterface<ClassType, EnumType> $reflector
+     */
+    public function __construct(private ReflectorInterface $reflector)
+    {
+    }
+
+    /**
+     * @param class-string $className FQN of a class we look for attributes in
+     * @return object[]
+     */
+    public function allFromClass(string $className): array
+    {
+        return array_map(
+            self::attributeInstance(...),
+            $this->reflector->reflect($className)->getAttributes()
+        );
+    }
+
+    /**
+     * @return array<object>
+     */
+    public function allFromMethod(\ReflectionFunctionAbstract $method): array
+    {
+        return array_map(self::attributeInstance(...), $method->getAttributes());
+    }
+
+    /**
+     * @return array<object>
+     */
+    public function allFromProperty(\ReflectionProperty $property): array
+    {
+        return array_map(self::attributeInstance(...), $property->getAttributes());
+    }
+
+    /**
+     * @return array<object>
+     */
+    public function allFromParameter(\ReflectionParameter $parameter): array
+    {
+        return array_map(self::attributeInstance(...), $parameter->getAttributes());
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @return T[]
+     */
+    public function allOfTypeFromMethod(string $attributeType, \ReflectionFunctionAbstract $method): array
+    {
+        return array_map(self::attributeInstance(...), $method->getAttributes($attributeType));
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     *
+     * @return array<T>
+     */
+    public function allOfTypeFromProperty(string $attributeType, \ReflectionProperty $property): array
+    {
+        return array_map(self::attributeInstance(...), $property->getAttributes($attributeType));
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     *
+     * @return array<T>
+     */
+    public function allOfTypeFromParameter(string $attributeType, \ReflectionParameter $parameter): array
+    {
+        return array_map(self::attributeInstance(...), $parameter->getAttributes($attributeType));
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @param class-string $className FQN of a class we look for attributes in
+     * @return array<T>
+     */
+    public function allOfTypeFromClass(string $attributeType, string $className): array
+    {
+        return array_map(
+            self::attributeInstance(...),
+            $this->reflector->reflect($className)->getAttributes($attributeType)
+        );
+    }
+
+    /**
+     * This method looks for attributes of a given type in a given class
+     * or its parents and returns all attributes of the type from the first
+     * class in an inheritance chain it detects them in
+     *
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @param class-string $className FQN of a class we look for attributes in
+     * @return T[]
+     */
+    public function allOfTypeFromClassOrParent(string $attributeType, string $className): array
+    {
+        return array_map(
+            self::attributeInstance(...),
+            $this->reflectionAttributesFromClassOrParent($attributeType, $className)
+        );
+    }
+
+    /**
+     * This method returns all attributes of a given type from a given class
+     * and all its parents
+     *
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @param class-string $className FQN of a class we look for attributes in
+     * @return array<T>
+     */
+    public function allOfTypeFromClassAndParents(string $attributeType, string $className): array
+    {
+        $class = $this->reflector->reflect($className);
+        $attributes = [];
+        do {
+            array_push($attributes, ...$class->getAttributes($attributeType));
+        } while ($class = $class->getParentClass());
+
+        return array_map(self::attributeInstance(...), $attributes);
+    }
+
+    /**
+     * This method returns all attributes from a given class and all its parents
+     *
+     * @param class-string $className FQN of a class we look for attributes in
+     * @return object[]
+     */
+    public function allFromClassAndParents(string $className): array
+    {
+        $class = $this->reflector->reflect($className);
+        $attributes = [];
+        do {
+            array_push($attributes, ...$class->getAttributes());
+        } while ($class = $class->getParentClass());
+
+        return array_map(self::attributeInstance(...), $attributes);
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @param class-string $className FQN of a class we look for attributes in
+     * @return T|null
+     */
+    public function firstOfTypeFromClass(string $attributeType, string $className): object|null
+    {
+        foreach ($this->reflector->reflect($className)->getAttributes($attributeType) as $attribute) {
+            return $attribute->newInstance();
+        }
+
+        return null;
+    }
+
+    /**
+     * This method looks for a first appearance of an attribute of a given
+     * type in a given class or its parents
+     *
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @param class-string $className FQN of a class we look for attributes in
+     * @return T|null
+     */
+    public function firstOfTypeFromClassOrParent(string $attributeType, string $className): object|null
+    {
+        $attribute = $this->reflectionAttributesFromClassOrParent($attributeType, $className)[0] ?? null;
+
+        return $attribute?->newInstance();
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @return T|null
+     */
+    public function firstOfTypeFromMethod(string $attributeType, \ReflectionFunctionAbstract $method): object|null
+    {
+        return $this->allOfTypeFromMethod($attributeType, $method)[0] ?? null;
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @return T|null
+     */
+    public function firstOfTypeFromMethodOrParent(string $attributeType, \ReflectionMethod $method): object|null
+    {
+        $class = $method->getDeclaringClass();
+        $methodName = $method->getName();
+        while (null === $attribute = $this->firstOfTypeFromMethod($attributeType, $method)) {
+            $class = $class->getParentClass();
+            if (false === $class) {
+                return null;
+            }
+
+            if (!$class->hasMethod($methodName)) {
+                return null;
+            }
+
+            $parentMethod = $class->getMethod($methodName);
+            if ($parentMethod->isPrivate()) {
+                return null;
+            }
+            $method = $parentMethod;
+        }
+
+        return $attribute;
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @return T|null
+     */
+    public function firstOfTypeFromProperty(string $attributeType, \ReflectionProperty $property): object|null
+    {
+        return $this->allOfTypeFromProperty($attributeType, $property)[0] ?? null;
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @return T|null
+     */
+    public function firstOfTypeFromPropertyOrParent(string $attributeType, \ReflectionProperty $property): object|null
+    {
+        $class = $property->getDeclaringClass();
+        $propertyName = $property->getName();
+        while (null === $attribute = $this->firstOfTypeFromProperty($attributeType, $property)) {
+            $class = $class->getParentClass();
+            if (false === $class) {
+                return null;
+            }
+
+            if (!$class->hasProperty($propertyName)) {
+                return null;
+            }
+
+            $parentProperty = $class->getProperty($propertyName);
+            if ($parentProperty->isPrivate()) {
+                return null;
+            }
+            $property = $parentProperty;
+        }
+
+        return $attribute;
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @return T|null
+     */
+    public function firstOfTypeFromParameter(string $attributeType, \ReflectionParameter $parameter): object|null
+    {
+        return $this->allOfTypeFromParameter($attributeType, $parameter)[0] ?? null;
+    }
+
+    /**
+     * @template T of object
+     *
+     * @param class-string<T> $attributeType FQN of an attribute class
+     * @param class-string $className FQN of a class we look for attributes in
+     * @return \ReflectionAttribute<T>[]
+     */
+    private function reflectionAttributesFromClassOrParent(string $attributeType, string $className): array
+    {
+        $class = $this->reflector->reflect($className);
+        do {
+            $attributes = $class->getAttributes($attributeType);
+            if ($attributes) {
+                return $attributes;
+            }
+        } while ($class = $class->getParentClass());
+
+        return [];
+    }
+
+    /**
+     * @template T of object
+     *
+     * @param \ReflectionAttribute<T> $attribute
+     * @return T
+     */
+    private static function attributeInstance(\ReflectionAttribute $attribute): object
+    {
+        return $attribute->newInstance();
+    }
+}

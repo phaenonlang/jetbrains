@@ -1,0 +1,10 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+/**
+ * Subclass of FakeLabel — exists to prove that type filtering is an
+ * exact class match: asking for FakeLabel must NOT return this.
+ */
+#[\Attribute(\Attribute::TARGET_ALL | \Attribute::IS_REPEATABLE)]
+final class FakeSpecialLabel extends FakeLabel
+{
+}

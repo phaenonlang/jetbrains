@@ -1,0 +1,20 @@
+namespace Tequila\Reflection;
+
+/**
+ * @template ClassType of object
+ * @template EnumType of \UnitEnum
+ */
+interface ReflectorInterface
+{
+    /**
+     * @param class-string<ClassType> $className
+     * @return \ReflectionClass<ClassType>
+     */
+    public function reflect(string $className): \ReflectionClass;
+
+    /**
+     * @param class-string<EnumType> $className
+     * @return \ReflectionEnum<EnumType>
+     */
+    public function reflectEnum(string $className): \ReflectionEnum;
+}

@@ -1,0 +1,6 @@
+namespace Tequila\Reflection\Tests\Fixture;
+
+#[FakeLabel('interface')]
+interface FakeAnnotatedInterface
+{
+}
