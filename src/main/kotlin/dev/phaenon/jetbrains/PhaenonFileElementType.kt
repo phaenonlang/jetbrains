@@ -3,7 +3,6 @@ package dev.phaenon.jetbrains
 import com.intellij.lang.ASTNode
 import com.intellij.lang.LanguageParserDefinitions
 import com.intellij.lang.PsiBuilderFactory
-import com.intellij.psi.ParsingDiagnostics
 import com.intellij.psi.tree.IFileElementType
 import com.jetbrains.php.lang.PhpLanguage
 import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
@@ -29,10 +28,6 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
             .createBuilder(project, chameleon, PhpWithOptionalOpenTagLexer(), PhpLanguage.INSTANCE, chameleon.chars)
         val parser = LanguageParserDefinitions.INSTANCE.forLanguage(PhpLanguage.INSTANCE).createParser(project)
 
-        val startedAt = System.nanoTime()
-        val root = parser.parse(this, builder)
-        ParsingDiagnostics.registerParse(builder, PhpLanguage.INSTANCE, System.nanoTime() - startedAt)
-
-        return root.firstChildNode
+        return parser.parse(this, builder).firstChildNode
     }
 }

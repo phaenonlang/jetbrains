@@ -101,6 +101,12 @@ mode.
   as a formatting or folding difference, not as broken analysis.
 - The TextMate fallback is highlighting only, and it needs the IDE's own PHP TextMate bundle
   (bundled with every JetBrains IDE) for `source.php`.
+- `com.jetbrains.php.baseLexerProvider` is marked internal by JetBrains. It is the only way to
+  hand the editor highlighter a lexer for a file of the PHP file type, and it is present unchanged
+  from 2025.1 through 2026.2 (both verified with the Plugin Verifier), but a future PhpStorm could
+  rename it. If that happens, parsing and every analysis feature keep working and only the editor
+  colouring of `.phn` files would regress until the plugin is updated. The verifier is configured
+  to report, not fail on, internal API usage for this reason.
 
 ## VS Code
 

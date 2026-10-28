@@ -1,5 +1,6 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 
 plugins {
     id("org.jetbrains.kotlin.jvm") version "2.3.0"
@@ -50,6 +51,15 @@ intellijPlatform {
     }
 
     pluginVerification {
+        // Fail on real compatibility problems only. The one internal API we use
+        // (com.jetbrains.php.baseLexerProvider) has no public alternative; see README.
+        failureLevel = listOf(
+            VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+            VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
+            VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+            VerifyPluginTask.FailureLevel.OVERRIDE_ONLY_API_USAGES,
+            VerifyPluginTask.FailureLevel.NON_EXTENDABLE_API_USAGES,
+        )
         ides {
             // The PhpStorm build the plugin is compiled against (platformVersion), already on disk.
             current()

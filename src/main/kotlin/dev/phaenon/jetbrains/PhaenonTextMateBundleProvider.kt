@@ -1,9 +1,9 @@
 package dev.phaenon.jetbrains
 
-import com.intellij.ide.plugins.PluginManagerCore
-import com.intellij.openapi.extensions.PluginId
+import com.intellij.openapi.application.PathManager
 import org.jetbrains.plugins.textmate.api.TextMateBundleProvider
 import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * Highlighting-only fallback: a TextMate grammar for `.phn` that wraps the stock `source.php`
@@ -18,8 +18,9 @@ import java.nio.file.Files
 class PhaenonTextMateBundleProvider : TextMateBundleProvider {
 
     override fun getBundles(): List<TextMateBundleProvider.PluginBundle> {
-        val pluginPath = PluginManagerCore.getPlugin(PluginId.getId(PhaenonFiles.PLUGIN_ID))?.pluginPath ?: return emptyList()
-        val bundle = pluginPath.resolve("textmate").resolve("phaenon")
+        // The plugin is installed as <plugin dir>/lib/<jar>; the bundle sits in <plugin dir>/textmate.
+        val jar = PathManager.getJarPathForClass(javaClass)?.let(Path::of) ?: return emptyList()
+        val bundle = jar.parent?.parent?.resolve("textmate")?.resolve("phaenon") ?: return emptyList()
         return if (Files.isDirectory(bundle)) listOf(TextMateBundleProvider.PluginBundle("Phaenon", bundle)) else emptyList()
     }
 }
