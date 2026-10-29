@@ -1,21 +1,10 @@
 namespace Tequila\Reflection;
 
-/**
- * @template ClassType of object
- * @template EnumType of \UnitEnum
- * @implements ReflectorInterface<ClassType, EnumType>
- */
-final class CachedReflector implements ReflectorInterface
+final class CachedReflector<ClassType of object, EnumType of \UnitEnum> implements ReflectorInterface<ClassType, EnumType>
 {
-    /**
-     * @var array<class-string<ClassType>, \ReflectionClass<ClassType>>
-     */
-    private array $cache = [];
+    private map<class<ClassType>, \ReflectionClass<ClassType>> $cache = [];
 
-    /**
-     * @var array<class-string<EnumType>, \ReflectionEnum<EnumType>>
-     */
-    private array $enumCache = [];
+    private map<class<EnumType>, \ReflectionEnum<EnumType>> $enumCache = [];
 
     #[\Override]
     public function reflect(string $className): \ReflectionClass
