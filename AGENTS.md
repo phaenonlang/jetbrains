@@ -17,5 +17,6 @@ rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 - Known limits (README § Limitations): Phaenon-only syntax (generics, `is` / `as`, `type` aliases)
   shows as PHP syntax errors; the implied `strict_types` is not modelled; editor colouring uses the
   internal extension point `com.jetbrains.php.baseLexerProvider`.
-- Commit messages say what changed and why, with no attribution lines and no `Co-Authored-By`: the
-  repository will be public.
+- Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, … with a body that says
+  what changed and why), with no attribution lines and no `Co-Authored-By`: the repository will be
+  public.
