@@ -124,6 +124,30 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
         assertContainsElements(erased, "<U of Aggregate>", "<Order>", "<int>")
     }
 
+    fun testPropertyHooksKeepTheirErasedTypes() {
+        val file = myFixture.configureByText(
+            "Hooks.phn",
+            "final class User\n{\n    public list<string> \$roles {\n        get => array_unique([\$this->role, ...\$this->extra]);\n    }\n\n    public map<string, int> \$counts {\n        get {\n            return \$this->counts is map<string, int> ? \$this->counts : [];\n        }\n        set(map<string, int> \$value) => \$value;\n    }\n\n    public string \$name { get => \$this->first . ' ' . \$this->last; }\n}\n",
+        )
+
+        val errors = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java)
+        assertEmpty("syntax errors: " + errors.map { "'${it.errorDescription}' at ${it.textOffset} near '${it.parent.text.take(40)}'" }, errors)
+        val erased = PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java).filter { it.text.isNotBlank() }.map { it.text.trim() }
+        assertContainsElements(erased, "list<string>", "map<string, int>", "is map<string, int>")
+    }
+
+    fun testPhpSyntaxUnknownToTheIdeIsReportedAsInPhpFiles() {
+        // The plugin erases Phaenon, not PHP: what PhpStorm's parser cannot read at its highest
+        // language level (the PHP 8.5 pipe operator in PhpStorm 2025.1) is an error in `.phn` and
+        // `.php` alike, and neither more nor less so.
+        val phn = myFixture.configureByText("Pipe.phn", "function f(array \$xs): array { return \$xs |> array_values(...); }\n")
+        val php = myFixture.configureByText("Pipe.php", "<?php\nfunction f(array \$xs): array { return \$xs |> array_values(...); }\n")
+
+        val phnErrors = PsiTreeUtil.collectElementsOfType(phn, PsiErrorElement::class.java).map { it.errorDescription to it.textOffset }
+        val phpErrors = PsiTreeUtil.collectElementsOfType(php, PsiErrorElement::class.java).map { it.errorDescription to it.textOffset - "<?php\n".length }
+        assertEquals(phpErrors, phnErrors)
+    }
+
     fun testPhpWithoutPhaenonSyntaxLexesExactlyAsPhpStormDoes() {
         val php = """
             namespace App;

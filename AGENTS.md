@@ -12,6 +12,9 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ./gradlew buildPlugin    # → build/distributions/phaenon-jetbrains-<version>.zip
 ./gradlew verifyPlugin   # JetBrains Plugin Verifier
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
+
+PHAENON_TREES=~/labs/tequila/core-phaenon-dogfood:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper \
+  ./gradlew test --tests '*RealTree*'   # parse every .phn of the dogfood trees; skipped when unset
 ```
 
 - JDK 21; Gradle provisions one if none is installed. `./gradlew test` is a no-op when nothing
@@ -24,6 +27,10 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
   `syntax/Constructs.phn` uses every Phaenon construct; `methods/` holds the method-syntax fixtures.
   Tests set the IDE's highest PHP level: the test project defaults to PHP 5.6.
+- `PhaenonRealTreeTest` runs the plugin over whole trees (`PHAENON_TREES`, above) and reports
+  per tree: files, files with syntax errors, errors, stub mismatches, files skipped for PHP syntax
+  the IDE's level lacks. Run it after every lexer or builder change; a `.phn` the compiler parses
+  (`../phaenon/bin/phn check`) and PhpStorm does not is a plugin bug unless plain PHP fails alike.
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
   element-array unions; the implied `strict_types` is not modelled; editor colouring uses the

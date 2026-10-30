@@ -137,6 +137,19 @@ To also verify against a locally installed IDE:
   undefined-method inspection accepts the method form and still reports a misspelt name, also at
   the end of a chain; erased declarations get their types; chains and `foreach` keep the element
   type; `readonly` properties with erased types are not errors.
+- `PhaenonRealTreeTest`: volume. Every `.phn` file under the directories named by `PHAENON_TREES`
+  (colon-separated; `vendor` excluded) is added to the test project; the test fails listing
+  `file:line: message` for every syntax error and every stub tree that does not match its text,
+  and checks that every erased `list<…>` / `map<…>` declaration got its pseudo-class. Files using
+  PHP syntax above the IDE's highest language level (`|>` on PhpStorm 2025.1) are skipped and
+  listed. The test framework's recursion assertion is off in this test: PhpStorm's own inference
+  has cycles in real code which the IDE resolves silently. Without the variable the test passes
+  trivially:
+
+  ```bash
+  PHAENON_TREES=~/labs/tequila/core-phaenon-dogfood:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper \
+    ./gradlew test --tests '*RealTree*'
+  ```
 
 `./gradlew test` is a no-op when nothing changed (build cache); `./gradlew test --rerun` forces a
 run. After changing a bundled stub, a stale index in the test sandbox can report "Outdated stub in
@@ -167,6 +180,15 @@ index": delete `.intellijPlatform/sandbox/phaenon-jetbrains/<IDE>/system-test/in
   imported or written `\Closure`, as in PHP.
 - A `<…>` that scans as a type list is one: `f(A < B, C > ($d))` and `A < B & C > $d` with constants
   are misread, as the compiler misreads the former (`generics.md` §2.4).
+- **The plugin erases Phaenon, not PHP.** PHP syntax newer than the IDE's highest language level
+  is a syntax error in `.phn` exactly as in `.php`: on PhpStorm 2025.1 (levels up to PHP 8.4)
+  that is the PHP 8.5 pipe operator `|>`, which breaks the enclosing class body. A newer PhpStorm
+  parses it.
+- **An erased return type leaves no PHP return type.** For `function f(): map<string, mixed>`
+  PhpStorm sees a function without a return type, so besides the type the plugin supplies it also
+  infers one from the body, as it does for untyped PHP functions. The union is wider than the
+  declaration, and methods that call each other this way give PhpStorm an inference cycle it
+  resolves by settling for a partial type, as in PHP.
 - The implied `declare(strict_types=1)` is not modelled: inspections that depend on strict types
   behave as they would in a PHP file without the declaration. PhpStorm's **project language level**
   governs the PHP parser (below PHP 7.4 it reads `fn` as a function name); a Phaenon project should

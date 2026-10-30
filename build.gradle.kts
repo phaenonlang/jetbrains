@@ -81,4 +81,10 @@ tasks.withType<PrepareSandboxTask>().configureEach {
 
 tasks.test {
     useJUnit()
+    // PhaenonRealTreeTest parses every .phn file under the directories named by PHAENON_TREES
+    // (colon-separated) and skips when the variable is unset. Passed on as a system property, and
+    // declared as an input so that setting it re-runs the task instead of hitting the build cache.
+    val trees = providers.environmentVariable("PHAENON_TREES").orElse("")
+    inputs.property("phaenonTrees", trees)
+    systemProperty("phaenon.trees", trees.get())
 }
