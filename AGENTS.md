@@ -22,6 +22,8 @@ PHAENON_TREES=~/labs/tequila/core-phaenon-dogfood:~/labs/tequila/mongodb-odm:~/l
 - `src/main/kotlin`: `PhaenonLexer` (erasure) and `PhaenonPsiBuilder` (no lazy bodies) feed the
   parser; `PhaenonErasedTypes` and `PhaenonTypeText` read the erased text back for
   `PhaenonTypeProvider`; `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
+  compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
   parameter — keep them in step when the stdlib changes.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
