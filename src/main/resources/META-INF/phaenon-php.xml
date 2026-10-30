@@ -9,6 +9,9 @@
                                       implementationClass="dev.phaenon.jetbrains.PhaenonFileViewProviderFactory"/>
 
         <annotator language="PHP" implementationClass="dev.phaenon.jetbrains.PhaenonPhpTagAnnotator"/>
+
+        <!-- Erased Phaenon types leave `readonly` properties untyped for PhpStorm's annotator. -->
+        <daemon.highlightInfoFilter implementation="dev.phaenon.jetbrains.PhaenonHighlightFilter"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.jetbrains.php">

@@ -1,0 +1,107 @@
+namespace App;
+
+use Closure;
+use Phaenon\Seq;
+
+type UserMap = map<Uuid, User>;
+type Result<T, E of \Throwable = \RuntimeException> = Ok<T> | Err<E>;
+
+interface Mapper<in TIn, out TOut>
+{
+    public function map(TIn $in): TOut;
+
+    public function get(Uuid $id): ?TOut;
+}
+
+final class Box<T of object = object> implements \IteratorAggregate<int, T>
+{
+    private readonly map<string, list<Event<T>>> $streams;
+
+    public list<T> $items = [];
+
+    private bytes $digest;
+
+    public function __construct(
+        private readonly class<T> $itemClass,
+        private readonly (string, int) $pair,
+        private readonly ?list<T> $maybe = null,
+        Closure(T, int): bool $pred = null,
+        list<T>|null $alt = null,
+        T ...$rest,
+    ) {
+        $this->digest = (bytes) random_bytes(16);
+    }
+
+    public function first(list<T> $items): ?T
+    {
+        return $items[0] ?? null;
+    }
+
+    public function with(Closure(T, int): bool $pred): static
+    {
+        return $this;
+    }
+
+    public function pairs(): list<(string, int)>
+    {
+        return [['a', 1]];
+    }
+
+    public function factory(): Closure(int): bool
+    {
+        return fn (int $x): bool => $x > 0;
+    }
+
+    public function all(): iterable<T>
+    {
+        yield from $this->items;
+    }
+
+    public function check(mixed $x, string|Id $id): bool
+    {
+        if ($x is list<int>) {
+            return true;
+        }
+        if ($x is ?User) {
+            return false;
+        }
+        if ($x is User) {
+            return true;
+        }
+        $y = $x as map<string, Money>;
+        $z = $x as? Money;
+        $ok = $x is int && $y is string;
+
+        return $ok || $z === null;
+    }
+
+    public static function of<U>(list<U> $rows): Box<U>
+    {
+        $id = fn<V>(V $v): V => $v;
+        $box = new Box<U>(Repo::class, ['a', 1]);
+        $first = first<User>($rows);
+        $x = $box->get<Address>(Uuid::nil());
+        $y = Collection::of<User>($rows);
+
+        return $box;
+    }
+
+    public function getIterator(): \Iterator
+    {
+        return new \ArrayIterator($this->items);
+    }
+}
+
+function first<T>(list<T> $items): ?T
+{
+    return $items[0] ?? null;
+}
+
+function keyed(map<string, int> $m, (int, int) $point, bytes $raw): map<string, int>
+{
+    foreach ($m as $k => $v) {
+        $m[$k] = $v + $point[0] + strlen($raw);
+    }
+
+    return $m;
+}
