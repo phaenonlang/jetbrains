@@ -1,0 +1,124 @@
+<?php
+
+/*
+ * Editor-only declaration, bundled with the Phaenon plugin for PhpStorm. This class does not
+ * exist at runtime: a Phaenon `map<K, V>` is a PHP array, and `$m->get($k)` compiles to
+ * `\Phaenon\Map::get($m, $k)`. The plugin adds this type to every `map<K, V>` value so that the
+ * IDE can complete, resolve and type the method form. The methods mirror `\Phaenon\Map`
+ * (phaenon/stdlib/runtime/Map.phn) without the receiver parameter.
+ */
+
+namespace Phaenon\Internal;
+
+/**
+ * The `@return` tags name the collection half and the pseudo-class without its type arguments:
+ * PhpStorm substitutes the templates in `array<K, V>` but not in `MapMethods<K, V>`, and the
+ * plugin's type provider adds the parametrised pseudo-class to every call of these methods itself.
+ *
+ * @template K of int|string
+ * @template V
+ * @implements \IteratorAggregate<K, V>
+ * @implements \ArrayAccess<K, V>
+ */
+final class MapMethods implements \IteratorAggregate, \ArrayAccess, \Countable
+{
+    private function __construct()
+    {
+    }
+
+    /**
+     * @param K $key
+     * @return V|null
+     * @see \Phaenon\Map::get()
+     */
+    public function get(int|string $key): mixed {}
+
+    /**
+     * @param K $key
+     * @see \Phaenon\Map::has()
+     */
+    public function has(int|string $key): bool {}
+
+    /**
+     * @return list<K>|ListMethods
+     * @see \Phaenon\Map::keys()
+     */
+    public function keys(): array {}
+
+    /**
+     * @return list<V>|ListMethods
+     * @see \Phaenon\Map::values()
+     */
+    public function values(): array {}
+
+    /**
+     * @template U
+     * @param \Closure(V, K): U $f
+     * @return array<K, U>|MapMethods
+     * @see \Phaenon\Map::map()
+     */
+    public function map(\Closure $f): array {}
+
+    /**
+     * @param \Closure(V, K): bool $keep
+     * @return array<K, V>|MapMethods
+     * @see \Phaenon\Map::filter()
+     */
+    public function filter(\Closure $keep): array {}
+
+    /**
+     * @param \Closure(V, K): void $f
+     * @see \Phaenon\Map::each()
+     */
+    public function each(\Closure $f): void {}
+
+    /**
+     * @param array<K, V> ...$maps
+     * @return array<K, V>|MapMethods
+     * @see \Phaenon\Map::merge()
+     */
+    public function merge(array ...$maps): array {}
+
+    /**
+     * @param K $key
+     * @param V $value
+     * @return array<K, V>|MapMethods
+     * @see \Phaenon\Map::with()
+     */
+    public function with(int|string $key, mixed $value): array {}
+
+    /**
+     * @param K ...$keys
+     * @return array<K, V>|MapMethods
+     * @see \Phaenon\Map::without()
+     */
+    public function without(int|string ...$keys): array {}
+
+    /**
+     * @return list<array{K, V}>|ListMethods
+     * @see \Phaenon\Map::toList()
+     */
+    public function toList(): array {}
+
+    /**
+     * @see \Phaenon\Map::isEmpty()
+     */
+    public function isEmpty(): bool {}
+
+    /**
+     * @see \Phaenon\Map::count()
+     */
+    public function count(): int {}
+
+    /** @return \Iterator<K, V> */
+    public function getIterator(): \Iterator {}
+
+    public function offsetExists(mixed $offset): bool {}
+
+    /** @return V */
+    public function offsetGet(mixed $offset): mixed {}
+
+    public function offsetSet(mixed $offset, mixed $value): void {}
+
+    public function offsetUnset(mixed $offset): void {}
+}

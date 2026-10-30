@@ -1,0 +1,2 @@
+# Not an ignore list: PhpStorm's library-root loader locates a bundled stub directory through a
+# file named `.gitignore` inside it when it runs in the test framework (PhpLibraryRoot.findRoot).

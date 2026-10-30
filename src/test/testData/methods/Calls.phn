@@ -1,0 +1,42 @@
+namespace App;
+
+final class Calls
+{
+    private readonly list<User> $users;
+
+    public function __construct(list<User> $users, private readonly map<string, User> $byName)
+    {
+        $this->users = $users;
+    }
+
+    public function names(): list<string>
+    {
+        return $this->users->filter(fn (User $u) => $u->active)->map(fn (User $u) => $u->name);
+    }
+
+    public function lookup(string $name): ?User
+    {
+        return $this->byName->get($name->trim());
+    }
+
+    public function digest(bytes $raw, Id $id): string
+    {
+        return $raw->hex() . $id->value() . $id->startsWith('u-');
+    }
+
+    public function broken(list<User> $users): void
+    {
+        $users->nonexistent();
+        $users->filter(fn (User $u) => $u->active)->alsoNonexistent();
+    }
+
+    public function arrays(list<User> $users): int
+    {
+        $names = array_map(fn (User $u) => $u->name, $users);
+        foreach ($users as $user) {
+            $names[] = $user->name;
+        }
+
+        return count($users) + count($names) + $users[0]->active;
+    }
+}

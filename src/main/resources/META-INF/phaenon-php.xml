@@ -12,10 +12,19 @@
 
         <!-- Erased Phaenon types leave `readonly` properties untyped for PhpStorm's annotator. -->
         <daemon.highlightInfoFilter implementation="dev.phaenon.jetbrains.PhaenonHighlightFilter"/>
+
+        <!-- `->map` on a list resolves to a bundled pseudo-class; navigation prefers \Phaenon\Seq::map. -->
+        <gotoDeclarationHandler implementation="dev.phaenon.jetbrains.PhaenonGotoDeclarationHandler"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.jetbrains.php">
         <!-- The editor highlighter is keyed by file type and asks this EP for its lexer. -->
         <baseLexerProvider implementation="dev.phaenon.jetbrains.PhaenonBaseLexerProvider"/>
+
+        <!-- Types for erased Phaenon declarations; the Str methods on string receivers. -->
+        <typeProvider4 implementation="dev.phaenon.jetbrains.PhaenonTypeProvider"/>
+
+        <!-- The editor-only \Phaenon\Internal\*Methods pseudo-classes behind the method syntax. -->
+        <libraryRoot id="phaenon" path="stubs/phaenon" runtime="false"/>
     </extensions>
 </idea-plugin>
