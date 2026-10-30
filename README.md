@@ -13,6 +13,12 @@ the **full PHP toolchain** rather than a syntax-colouring approximation of it:
 - refactorings (rename, move, extract, ...)
 - every PHP inspection and intention, plus one Phaenon-specific error for stray `<?php` / `?>` tags
 
+Phaenon's own syntax parses too — generics, `list<T>`, `map<K, V>`, `bytes`, tuples, `class<T>`,
+`Closure(T): U`, `is` / `as`, `type` aliases — and the **method syntax** on collections and strings
+is understood: `$users->filter(fn (User $u) => $u->active)->map(fn (User $u) => $u->name)`
+completes, resolves, shows parameter info and is type-checked like a method call on an object, and
+"go to declaration" lands on `\Phaenon\Seq::map()` when `phaenon/runtime` is installed.
+
 In IDEs without the PHP plugin (IntelliJ IDEA Community, WebStorm, ...) the plugin falls back to a
 bundled TextMate grammar and provides highlighting only.
 
@@ -29,8 +35,14 @@ PhpStorm. A `.phn` file *is* a PHP file to the IDE: PHP file type, PHP language,
 | `fileType name="PHP" extensions="phn"` | PHP file type | `.phn` joins the PHP file type. The bean has no `implementationClass`, which the platform reads as "add an extension to an existing type". |
 | `PhaenonFileViewProviderFactory` | `lang.fileViewProviderFactory` for PHP, `order="first"` | Claims `.phn` files and hands every other PHP file to PhpStorm's own factory. |
 | `PhaenonFileViewProvider` | created by the factory | A single-root PHP view provider that, right after creating the `PhpFileImpl`, sets its content element type to `PhaenonFileElementType`. That is the same hook PhpStorm's template view provider uses to give the HTML side of a `.php` file its own parser, and it happens before any AST exists. Single-rooted on purpose: PhpStorm's provider also hosts an HTML tree built from inline-HTML tokens, which for a Phaenon file would only yield spurious HTML inspections. |
-| `PhaenonFileElementType` | root AST node of `.phn` files | An `IFileElementType` of the PHP language whose `parseContents` builds the `PsiBuilder` with PhpStorm's `PhpWithOptionalOpenTagLexer` (starts in scripting mode unless the first token is an open tag) and runs the stock PHP parser, the way PhpStorm parses its own code fragments. Everything below the root is ordinary PHP PSI, so the stub builder, indices, inspections and refactorings never notice. |
-| `PhaenonBaseLexerProvider` | `com.jetbrains.php.baseLexerProvider` | Editor highlighting does not go through the parser: PhpStorm's editor highlighter is keyed by file type and builds its own lexer, asking this EP first. It gets the same open-tag-optional lexer, so what you see while typing matches the PSI. |
+| `PhaenonFileElementType` | root AST node of `.phn` files | An `IFileElementType` of the PHP language whose `parseContents` builds the `PsiBuilder` with `PhaenonLexer` and runs the stock PHP parser, the way PhpStorm parses its own code fragments. Everything below the root is ordinary PHP PSI, so the stub builder, indices, inspections and refactorings never notice. |
+| `PhaenonLexer` | the parser's lexer | PhpStorm's `PhpWithOptionalOpenTagLexer` (starts in scripting mode unless the first token is an open tag) wrapped in a `LookAheadLexer` that erases Phaenon-only syntax into whitespace tokens, text and offsets untouched. See [Phaenon syntax](#phaenon-syntax). |
+| `PhaenonPsiBuilder` | the parser's `PsiBuilder` | A `PsiBuilderAdapter` that intercepts PhpStorm's lazy function bodies and parses them on the spot, so the whole file goes through one lexer. PhpStorm expands a lazy block by re-lexing its text with a plain PHP lexer, which would discard the erasures inside every body. |
+| `PhaenonBaseLexerProvider` | `com.jetbrains.php.baseLexerProvider` | Editor highlighting does not go through the parser: PhpStorm's editor highlighter is keyed by file type and builds its own lexer, asking this EP first. It gets the plain open-tag-optional lexer, so Phaenon syntax is coloured as the PHP tokens it is made of. |
+| `PhaenonTypeProvider` | `com.jetbrains.php.typeProvider4` | Reads the erased Phaenon types back from the whitespace leaves (`PhaenonErasedTypes`, `PhaenonTypeText`) and gives parameters, properties and return types their types: `list<User>` → `User[]` plus `\Phaenon\Internal\ListMethods<User>`. Adds `StrMethods` to `string` and `\Stringable` receivers of `->`, and keeps the element type through chains (`->filter(...)->map(...)`). |
+| `stubs/phaenon` | `com.jetbrains.php.libraryRoot` | Bundled, editor-only pseudo-classes `\Phaenon\Internal\{List,Map,Str,Bytes}Methods`: the stdlib's `Seq`, `Map`, `Str` and `Bytes` functions as instance methods without the receiver parameter, with PHPStan docblocks. They are what the method syntax resolves to, so completion, parameter info, quick documentation and the undefined-method inspection are PhpStorm's own. |
+| `PhaenonGotoDeclarationHandler` | `gotoDeclarationHandler` | Redirects navigation from a pseudo-class method to the stdlib function (`\Phaenon\Seq::map()`) when the `phaenon/runtime` package is in the project. |
+| `PhaenonHighlightFilter` | `daemon.highlightInfoFilter` | Drops PhpStorm's "readonly property must have type" error where the property's type was erased: it had one. |
 | `PhaenonPhpTagAnnotator` | `annotator` for PHP | Reports `<?php`, `<?=` and `?>` as errors in Phaenon files. |
 | `PhaenonFileIconProvider` | `fileIconProvider` | Gives `.phn` files their own icon despite sharing the PHP file type. |
 | `PhaenonTextMateBundleProvider` | `textmate.bundleProvider` | Registers `textmate/phaenon`, a grammar that includes `source.php` (the PHP *code* grammar, not the `text.html.php` wrapper). Only used when the PHP plugin is absent. |
@@ -45,6 +57,39 @@ and its language agree, so a dialect needs its own file element type and its own
 mirroring PHP's. Keeping the file in the PHP language and only swapping the root element type
 removes that whole class of problems: nothing in PhpStorm can tell a `.phn` file apart from PHP
 unless it looks at the root node's type.
+
+## Phaenon syntax
+
+Everything Phaenon adds to PHP erases to PHP in the compiler, and the plugin performs the same
+erasure one level earlier, on tokens: a construct the PHP parser would reject reaches it as
+whitespace. The `PsiWhiteSpace` leaves keep the Phaenon text at its offsets, and the type provider
+reads it back.
+
+| Phaenon | Parser sees | PhpStorm type |
+|---|---|---|
+| `class Box<T of Bound = Default>`, `function f<T>(…)`, `fn<T>(…)` | the name, the list erased | the names become type parameters for the rest of the file |
+| `new Box<int>(…)`, `f<int>(…)`, `$o->m<T>(…)`, `C::m<T>(…)`, `implements I<T>` | the call or name, the list erased | — |
+| `Foo<T>` in a type position | `Foo` | `\Ns\Foo` (type arguments of user classes are not modelled) |
+| `list<T>` | erased | `T[]` and `\Phaenon\Internal\ListMethods<T>` |
+| `map<K, V>` | erased | `V[]` and `\Phaenon\Internal\MapMethods<K, V>` |
+| `bytes` | erased | `string` and `\Phaenon\Internal\BytesMethods` |
+| `(A, B)` tuple | erased | `A[]\|B[]` |
+| `class<T>` | erased | `class-string<T>` |
+| `Closure(A): R` | `Closure`, the signature erased | `\Closure` |
+| a type parameter `T` | erased | `mixed` |
+| `?T`, `T\|null` with `T` erased | `?` and `\|` erased with it; a return type takes its `:` | the native members stay PhpStorm's |
+| `$x is Foo` | `$x instanceof Foo` (the `is` token re-typed) | PhpStorm narrows as for `instanceof` |
+| `$x is list<int>`, `$x is ?Foo`, `$x as T`, `$x as? T` | `$x` — the test is erased | the operand's type |
+| `(bytes) $raw` | one `(string)` cast token | `string` |
+| `type Name = …;` | erased whole | — (uses of `Name` are unknown classes) |
+| `array<K, V>` (M3 spelling in migrated sources) | `array` | `array` |
+
+The rule for `Name<` is the compiler's (`generics.md` §2.4): PHP's relational operators are
+non-associative, so `A < B > C` has no PHP reading and a `<…>` that scans as a type list is a type
+list. The one PHP shape this misreads, `f(A < B, C > ($d))`, the compiler misreads too.
+
+Function bodies are parsed eagerly (see `PhaenonPsiBuilder` above), so an edit inside a body
+reparses the file rather than the block — how PhpStorm worked before lazy blocks existed.
 
 ## Install
 
@@ -75,23 +120,57 @@ To also verify against a locally installed IDE:
 
 ## Tests
 
-`src/test` runs the plugin inside the IntelliJ test framework with the real PHP plugin loaded. The
-fixtures under `src/test/testData/reflector` are real Phaenon sources from the Tequila platform. The
-tests check that `.phn` files are PHP files with a Phaenon root, that every fixture lexes as PHP code
-(no inline-HTML token), parses without errors and builds stubs consistent with its text, that the
-editor highlighter starts in code mode, that completion offers PHP members, that classes declared in
-`.phn` files resolve from both `.phn` and `.php` files, that a stray `<?php` is reported, that
-reformatting leaves a well-formatted file untouched, and that plain `.php` files still start in HTML
-mode.
+`src/test` runs the plugin inside the IntelliJ test framework with the real PHP plugin loaded.
+
+- `PhaenonFileTest`: `.phn` files are PHP files with a Phaenon root; the real Phaenon sources from
+  the Tequila platform under `testData/reflector` lex as PHP code (no inline-HTML token), parse
+  without errors and build stubs consistent with their text; the editor highlighter starts in code
+  mode; completion offers PHP members; classes declared in `.phn` files resolve from both `.phn` and
+  `.php` files; a stray `<?php` is reported; reformatting leaves a well-formatted file untouched;
+  plain `.php` files still start in HTML mode.
+- `PhaenonSyntaxTest`: `testData/syntax/Constructs.phn` uses every Phaenon construct and parses
+  without errors or error highlighting; the erased text is whitespace at its original offsets;
+  `is` on a class name is `instanceof`; `(bytes)` is a string cast; bodies are not lazy; PHP without
+  Phaenon syntax lexes exactly as PhpStorm lexes it; reformatting leaves erased syntax in place.
+- `PhaenonMethodsTest`: completion on `list`, `map`, `string`, `bytes` and `\Stringable` receivers;
+  the calls resolve to the pseudo-classes and navigate to `\Phaenon\Seq::map()`; the
+  undefined-method inspection accepts the method form and still reports a misspelt name, also at
+  the end of a chain; erased declarations get their types; chains and `foreach` keep the element
+  type; `readonly` properties with erased types are not errors.
+
+`./gradlew test` is a no-op when nothing changed (build cache); `./gradlew test --rerun` forces a
+run. After changing a bundled stub, a stale index in the test sandbox can report "Outdated stub in
+index": delete `.intellijPlatform/sandbox/phaenon-jetbrains/<IDE>/system-test/index`.
 
 ## Limitations
 
-- **Phaenon-only syntax is not understood yet.** Today a `.phn` file is plain PHP 8.5 without the
-  open tag, and that is all the plugin covers. Generics (`class Foo<T>`, `list<int>`), `is` / `as`
-  and `type` aliases from later Phaenon milestones will show up as PHP syntax errors until the
-  plugin grows its own parser extensions.
+- **Phaenon types are modelled as PhpStorm can hold them.** A `list<User>` is `User[]` plus the
+  pseudo-class; a `map<K, V>` keeps its value type and loses its key type in `foreach`; a tuple is
+  the union of its element arrays, so `$pair[0]` is `A|B` rather than `A`; a type parameter is
+  `mixed`; type arguments of user generics (`Box<User>`) are dropped, so `$box->get()` has the erased
+  return type. The Phaenon checker (`phn check`) is the authority on types; the editor approximates.
+- **`is` and `as` do not narrow**, except `$x is Foo` on a plain class name, which PhpStorm sees as
+  `instanceof`. The other forms are erased with their type, so the expression keeps its operand's
+  type and a `$y = $x as map<string, Money>` is typed as `$x`.
+- **`type` aliases are erased whole**: the alias name is an unknown class wherever it is used.
+- **Strings get their methods only as receivers.** `$s->upper()` works for any `string` or
+  `\Stringable` value; the `Str` methods are not listed among the members of a string anywhere
+  else, and a `\Stringable` object offers them only when the member name is a `Str` method (or is
+  being completed).
+- **Chains type through what the closure returns.** `->map(fn (User $u) => $u->name)` is a
+  `list<string>`; a closure whose return type PhpStorm cannot infer yields an unparametrised
+  `ListMethods`, whose methods still resolve but whose element type is `mixed`.
+- The union behind a `list` carries a `?` marker from PhpStorm on method calls (the array half has
+  no methods); it does not silence the undefined-method inspection, which still reports a misspelt
+  method at the end of a chain.
+- `Closure(T): U` keeps `Closure` as a PHP class reference: it resolves only when `Closure` is
+  imported or written `\Closure`, as in PHP.
+- A `<…>` that scans as a type list is one: `f(A < B, C > ($d))` and `A < B & C > $d` with constants
+  are misread, as the compiler misreads the former (`generics.md` §2.4).
 - The implied `declare(strict_types=1)` is not modelled: inspections that depend on strict types
-  behave as they would in a PHP file without the declaration.
+  behave as they would in a PHP file without the declaration. PhpStorm's **project language level**
+  governs the PHP parser (below PHP 7.4 it reads `fn` as a function name); a Phaenon project should
+  be set to PHP 8.x.
 - A few PHP features look at the *file type* and will treat `.phn` as a regular PHP file (for
   example the "PHP file" run configuration will try to run it with the PHP interpreter, which is
   not meaningful before compilation).
@@ -106,7 +185,10 @@ mode.
   from 2025.1 through 2026.2 (both verified with the Plugin Verifier), but a future PhpStorm could
   rename it. If that happens, parsing and every analysis feature keep working and only the editor
   colouring of `.phn` files would regress until the plugin is updated. The verifier is configured
-  to report, not fail on, internal API usage for this reason.
+  to report, not fail on, internal API usage for this reason. `PhaenonPsiBuilder` and
+  `PhaenonTypeProvider` also call PhpStorm parser and type-analysis classes (`PhpPsiBuilder`,
+  `StatementList`, `PhpTypeAnalyserVisitor`) that are public but outside the documented open API;
+  the verifier reports them compatible with 2025.1.
 
 ## VS Code
 
