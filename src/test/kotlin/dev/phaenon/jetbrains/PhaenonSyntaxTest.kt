@@ -109,6 +109,21 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
         assertEquals("\$x", condition!!.text)
     }
 
+    fun testKeywordNamedMethodsTakeTypeParameters() {
+        // PHP lets a method carry a reserved word as its name; `function for<U>` is one in tequila/core.
+        val file = myFixture.configureByText(
+            "Keyword.phn",
+            "final class Scenario<T>\n{\n    public static function for<U of Aggregate>(class<U> \$class, ?Id \$id = null): self<U>\n    {\n        return new self(\$class, \$id);\n    }\n\n    public function list<U>(list<U> \$xs): static { return \$this; }\n\n    public function run(): void\n    {\n        \$a = Scenario::for<Order>(Order::class);\n        \$b = \$this->list<int>([1]);\n        \$c = \$a?->list<int>([1]);\n    }\n}\n",
+        )
+
+        val errors = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java)
+        assertEmpty("syntax errors: " + errors.map { "'${it.errorDescription}' at ${it.textOffset} near '${it.parent.text.take(40)}'" }, errors)
+        val names = PsiTreeUtil.collectElementsOfType(file, com.jetbrains.php.lang.psi.elements.Method::class.java).map { it.name }
+        assertEquals(listOf("for", "list", "run"), names)
+        val erased = PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java).filter { it.text.isNotBlank() }.map { it.text.trim() }
+        assertContainsElements(erased, "<U of Aggregate>", "<Order>", "<int>")
+    }
+
     fun testPhpWithoutPhaenonSyntaxLexesExactlyAsPhpStormDoes() {
         val php = """
             namespace App;

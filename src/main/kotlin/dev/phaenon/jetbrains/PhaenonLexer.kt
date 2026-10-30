@@ -220,6 +220,10 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             lt = sig(1)
         } else if (c.type == PhpTokenTypes.IDENTIFIER && prevSig in DECLARATION_KEYWORDS) {
             lt = sig(1)
+        } else if (c.type in PhpTokenTypes.tsKEYWORDS && prevSig == PhpTokenTypes.kwFUNCTION) {
+            // A method may carry a reserved word as its name (`function for<U>(…)`); the lexer
+            // still hands it over as the keyword, and PhpStorm's parser remaps it to a name.
+            lt = sig(1)
         } else {
             return null
         }
@@ -270,7 +274,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
 
     /** `Name<…>` anywhere else: `new Box<int>(…)`, `f<int>(…)`, `->m<T>(…)`, `implements Foo<T>`. */
     private fun tryTypeArguments(c: Tok): Plan? {
-        if (c.type != PhpTokenTypes.IDENTIFIER) return null
+        // A member named with a reserved word, `Scenario::for<T>(…)`, reaches us as the keyword.
+        val named = c.type == PhpTokenTypes.IDENTIFIER || c.type in PhpTokenTypes.tsKEYWORDS && prevSig in MEMBER_ACCESS
+        if (!named) return null
         val lt = sig(1)
         if (typeAt(lt) != PhpTokenTypes.opLESS) return null
         val s = Scan()
@@ -519,6 +525,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         )
 
         val STATEMENT_START: Set<IElementType?> = setOf(null, PhpTokenTypes.opSEMICOLON, PhpTokenTypes.chRBRACE, PhpTokenTypes.chLBRACE)
+
+        /** `::` and `->`: after them a keyword is a member name. */
+        val MEMBER_ACCESS: TokenSet = TokenSet.create(PhpTokenTypes.SCOPE_RESOLUTION, PhpTokenTypes.ARROW)
 
         val DECLARATION_KEYWORDS: TokenSet = TokenSet.create(
             PhpTokenTypes.kwCLASS, PhpTokenTypes.kwINTERFACE, PhpTokenTypes.kwTRAIT, PhpTokenTypes.kwENUM, PhpTokenTypes.kwFUNCTION,
