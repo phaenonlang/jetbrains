@@ -7,6 +7,7 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.jetbrains.php.PhpBundle
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.lang.psi.elements.Field
+import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
@@ -17,7 +18,8 @@ import com.jetbrains.php.lang.psi.elements.PhpNamedElement
  * A `readonly` property must have a type in PHP, and PhpStorm's annotator says so when it sees
  * `private readonly $items`. In a Phaenon file the property had one — `list<Item>`, say — and
  * [PhaenonLexer] erased it. The annotator cannot be told; its message can be filtered, and only
- * where the property's erased type is still there in the whitespace.
+ * where the property's erased type is still there in the whitespace. The "missing type
+ * declaration" inspections for properties, parameters and return types are the same case.
  *
  * "Other declarations of class 'X' exist at X.php" is PhpStorm seeing the `.php` the compiler
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
@@ -29,7 +31,12 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (file == null || !PhaenonFiles.isPhaenonFile(file.viewProvider.virtualFile)) return true
         val description = info.description ?: return true
         if (description.startsWith(OTHER_DECLARATIONS_PREFIX)) return otherDeclarationIsHandWritten(info, file)
-        if (description != READONLY_NEEDS_TYPE && description != ASYMMETRIC_NEEDS_TYPE) return true
+        if (description == RETURN_TYPE_MISSING) {
+            val leaf = file.findElementAt(info.startOffset) ?: return true
+            val function = PsiTreeUtil.getParentOfType(leaf, Function::class.java) ?: return true
+            return PhaenonErasedTypes.returnType(function).isEmpty()
+        }
+        if (description !in MEMBER_NEEDS_TYPE) return true
         val leaf = file.findElementAt(info.startOffset) ?: return true
         val declaration = PsiTreeUtil.getParentOfType(leaf, Field::class.java, Parameter::class.java) as? PhpNamedElement ?: return true
         return PhaenonErasedTypes.beforeName(declaration).isEmpty()
@@ -45,8 +52,13 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
     }
 
     private companion object {
-        val READONLY_NEEDS_TYPE: String = PhpBundle.message("readonly.property.must.have.type")
-        val ASYMMETRIC_NEEDS_TYPE: String = PhpBundle.message("php.annotator.property.with.asymmetric.visibility.must.have.type")
+        val MEMBER_NEEDS_TYPE: Set<String> = setOf(
+            PhpBundle.message("readonly.property.must.have.type"),
+            PhpBundle.message("php.annotator.property.with.asymmetric.visibility.must.have.type"),
+            PhpBundle.message("inspection.missing.field.type"),
+            PhpBundle.message("inspection.php.missing.param.type.description"),
+        )
+        val RETURN_TYPE_MISSING: String = PhpBundle.message("inspection.php.missing.return.type.description")
 
         /** The message up to the class name, which the inspection fills in for `#ref`. */
         val OTHER_DECLARATIONS_PREFIX: String =

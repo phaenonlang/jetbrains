@@ -7,6 +7,9 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.inspections.PhpUndefinedMethodInspection
+import com.jetbrains.php.lang.inspections.type.PhpMissingFieldTypeInspection
+import com.jetbrains.php.lang.inspections.type.PhpMissingParamTypeInspection
+import com.jetbrains.php.lang.inspections.type.PhpMissingReturnTypeInspection
 import com.jetbrains.php.lang.psi.elements.AssignmentExpression
 import com.jetbrains.php.lang.psi.elements.ForeachStatement
 import com.jetbrains.php.lang.psi.elements.Function
@@ -181,6 +184,32 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
         assertEquals("[0] yields the element type", listOf("\\App\\User", "\\mixed"), types["d"])
         val foreachValue = PsiTreeUtil.findChildOfType(file, ForeachStatement::class.java)!!.value!!
         assertEquals("foreach yields the element type", listOf("\\App\\User", "\\mixed"), foreachValue.type.global(project).typesWithParametrisedParts.filter { it != "?" }.sorted())
+    }
+
+    fun testErasedTypesAreNotMissingTypeDeclarations() {
+        myFixture.enableInspections(PhpMissingFieldTypeInspection::class.java, PhpMissingParamTypeInspection::class.java, PhpMissingReturnTypeInspection::class.java)
+        myFixture.configureByText(
+            "Typed.phn",
+            """
+            namespace App;
+
+            final class Typed
+            {
+                private list<string> ${'$'}names = [];
+                private ${'$'}plain = null;
+
+                public function keys(map<string, int> ${'$'}m): list<string>
+                {
+                    return ${'$'}m->keys();
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val findings = myFixture.doHighlighting().filter { it.severity.myVal >= HighlightSeverity.WEAK_WARNING.myVal }.map { it.text }
+
+        assertDoesntContain(findings, "\$names", "\$m", "keys")
+        assertContainsElements(findings, "\$plain", "\$untyped")
     }
 
     fun testReadonlyPropertiesWithErasedTypesAreNotErrors() {
