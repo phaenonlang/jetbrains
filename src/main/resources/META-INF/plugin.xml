@@ -19,5 +19,13 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <fileIconProvider implementation="dev.phaenon.jetbrains.PhaenonFileIconProvider"/>
+
+        <!-- The output directories of phaenon.json hold compiled copies of the .phn declarations: not indexed. -->
+        <directoryIndexExcludePolicy implementation="dev.phaenon.jetbrains.PhaenonExcludePolicy"/>
     </extensions>
+
+    <projectListeners>
+        <listener class="dev.phaenon.jetbrains.PhaenonProjectFileListener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </projectListeners>
 </idea-plugin>

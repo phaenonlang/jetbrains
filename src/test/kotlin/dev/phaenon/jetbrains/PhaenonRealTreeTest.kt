@@ -33,7 +33,7 @@ import java.io.File
  * test suite stays self-contained:
  *
  * ```sh
- * PHAENON_TREES=~/labs/tequila/core-phaenon-dogfood:~/labs/tequila/mongodb-odm ./gradlew test --tests '*RealTree*'
+ * PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm ./gradlew test --tests '*RealTree*'
  * ```
  *
  * The listing of findings is capped per tree; the totals are not.

@@ -1,0 +1,6 @@
+namespace App;
+
+function consume(): Label
+{
+    return new La<caret>bel('x');
+}

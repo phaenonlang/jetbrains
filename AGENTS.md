@@ -13,7 +13,7 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ./gradlew verifyPlugin   # JetBrains Plugin Verifier
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
 
-PHAENON_TREES=~/labs/tequila/core-phaenon-dogfood:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper \
+PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper \
   ./gradlew test --tests '*RealTree*'   # parse every .phn of the dogfood trees; skipped when unset
 ```
 
@@ -21,7 +21,9 @@ PHAENON_TREES=~/labs/tequila/core-phaenon-dogfood:~/labs/tequila/mongodb-odm:~/l
   changed (build cache): `--rerun` forces it. The results are in `build/test-results/test/*.xml`.
 - `src/main/kotlin`: `PhaenonLexer` (erasure) and `PhaenonPsiBuilder` (no lazy bodies) feed the
   parser; `PhaenonErasedTypes` and `PhaenonTypeText` read the erased text back for
-  `PhaenonTypeProvider`; `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  `PhaenonTypeProvider`; `PhaenonExcludePolicy` keeps the output directories of `phaenon.json`
+  out of the index, and `PhaenonGotoDeclarationHandler` / `PhaenonHighlightFilter` prefer a `.phn`
+  declaration over its compiled copy when both are indexed (fixtures `testData/generated/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver

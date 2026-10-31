@@ -1,0 +1,4 @@
+{
+    "roots": {"src": ".src", "tests": ".tests"},
+    "exclude": ["tests/Fixture"]
+}
