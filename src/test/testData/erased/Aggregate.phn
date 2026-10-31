@@ -1,0 +1,9 @@
+namespace App;
+
+use App\Event\DomainEvent;
+use App\Event\Unrelated;
+
+interface Aggregate
+{
+    public function events(): list<Domain<caret>Event>;
+}

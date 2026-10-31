@@ -23,7 +23,9 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   parser; `PhaenonErasedTypes` and `PhaenonTypeText` read the erased text back for
   `PhaenonTypeProvider`; `PhaenonExcludePolicy` keeps the output directories of `phaenon.json`
   out of the index, and `PhaenonGotoDeclarationHandler` / `PhaenonHighlightFilter` prefer a `.phn`
-  declaration over its compiled copy when both are indexed (fixtures `testData/generated/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  declaration over its compiled copy when both are indexed (fixtures `testData/generated/`);
+  `PhaenonErasedNames` resolves class names inside erased types for navigation and the
+  unused-import inspection (fixtures `testData/erased/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver

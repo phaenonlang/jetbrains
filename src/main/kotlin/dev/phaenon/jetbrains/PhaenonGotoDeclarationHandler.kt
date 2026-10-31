@@ -3,6 +3,7 @@ package dev.phaenon.jetbrains
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.util.PsiTreeUtil
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.lang.psi.elements.ClassReference
@@ -13,7 +14,10 @@ import com.jetbrains.php.lang.psi.elements.MethodReference
 import com.jetbrains.php.lang.psi.elements.PhpReference
 
 /**
- * Two corrections to "go to declaration".
+ * Three corrections to "go to declaration".
+ *
+ * A class name inside an erased Phaenon type (`list<DomainEvent>`) is whitespace to PhpStorm and
+ * has no reference; [PhaenonErasedNames] resolves it as PHP would.
  *
  * A class, function or constant declared in a `.phn` file is declared a second time by the `.php`
  * the compiler wrote from it, when that output is in the project (built beside the source, or
@@ -32,6 +36,12 @@ class PhaenonGotoDeclarationHandler : GotoDeclarationHandler {
 
     override fun getGotoDeclarationTargets(sourceElement: PsiElement?, offset: Int, editor: Editor?): Array<PsiElement>? {
         if (sourceElement == null) return null
+        if (sourceElement is PsiWhiteSpace && PhaenonErasedTypes.isPhaenon(sourceElement)) {
+            // A name inside an erased type: `list<DomainEvent>` is whitespace to PhpStorm.
+            val name = PhaenonErasedNames.identifierAt(sourceElement, offset) ?: return null
+            val classes = PhaenonErasedNames.resolve(name, sourceElement)
+            return if (classes.isEmpty()) null else classes.toTypedArray()
+        }
         sourceDeclarations(sourceElement, offset)?.let { return it }
         if (!PhaenonErasedTypes.isPhaenon(sourceElement)) return null
         val reference = PsiTreeUtil.getParentOfType(sourceElement, MethodReference::class.java) ?: return null
