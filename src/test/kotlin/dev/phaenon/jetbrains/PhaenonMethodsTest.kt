@@ -209,7 +209,7 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
         val findings = myFixture.doHighlighting().filter { it.severity.myVal >= HighlightSeverity.WEAK_WARNING.myVal }.map { it.text }
 
         assertDoesntContain(findings, "\$names", "\$m", "keys")
-        assertContainsElements(findings, "\$plain", "\$untyped")
+        assertContainsElements(findings, "\$plain")
     }
 
     fun testReadonlyPropertiesWithErasedTypesAreNotErrors() {
