@@ -2,6 +2,7 @@ package dev.phaenon.jetbrains
 
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction
 import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.psi.PsiNamedElement
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.config.PhpLanguageLevel
@@ -28,6 +29,16 @@ class PhaenonErasedNamesTest : BasePlatformTestCase() {
         val targets = GotoDeclarationAction.findAllTargetElements(project, myFixture.editor, myFixture.caretOffset)
 
         assertEquals(listOf("\\App\\Event\\DomainEvent"), targets.map { (it as PhpClass).fqn })
+    }
+
+    fun testATypeParameterNavigatesToItsDeclaration() {
+        myFixture.configureByFiles("erased/TypeParameter.phn")
+
+        val targets = GotoDeclarationAction.findAllTargetElements(project, myFixture.editor, myFixture.caretOffset)
+
+        val target = targets.single()
+        assertEquals("T", (target as PsiNamedElement).name)
+        assertEquals(myFixture.editor.document.text.indexOf("<T of") + 1, target.textOffset)
     }
 
     fun testFindUsagesSeesANameInsideAnErasedType() {

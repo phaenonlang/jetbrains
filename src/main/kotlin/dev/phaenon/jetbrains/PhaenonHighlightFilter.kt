@@ -25,6 +25,11 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
  * An import used only inside an erased type (`use App\Event\DomainEvent;` for
  * `list<DomainEvent>`) is "never used" to PhpStorm, which cannot see into the erased text.
  *
+ * A method whose parameter or return type is erased — `id(): T` with `T of AggregateId`,
+ * overriding `id(): AggregateId` — has, to PhpStorm, no type there, so the hierarchy check finds
+ * it incompatible with the parent's declaration. Whether it is compatible is the compiler's
+ * question (P3xxx); the finding goes where an erased type is involved.
+ *
  * "Other declarations of class 'X' exist at X.php" is PhpStorm seeing the `.php` the compiler
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
  * some other declaration is hand-written.
@@ -37,6 +42,11 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (description.startsWith(OTHER_DECLARATIONS_PREFIX)) return otherDeclarationIsHandWritten(info, file)
         if (UNUSED_IMPORT.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             return !importIsUsedInAnErasedType(info, file)
+        }
+        if (INCOMPATIBLE_WITH_PARENT.any { description.startsWith(it) }) {
+            val leaf = file.findElementAt(info.startOffset) ?: return true
+            val function = PsiTreeUtil.getParentOfType(leaf, Function::class.java) ?: return true
+            return PhaenonErasedTypes.returnType(function).isEmpty() && function.parameters.all { PhaenonErasedTypes.beforeName(it).isEmpty() }
         }
         if (description == RETURN_TYPE_MISSING) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
@@ -74,6 +84,14 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
             PhpBundle.message("inspection.php.missing.param.type.description"),
         )
         val RETURN_TYPE_MISSING: String = PhpBundle.message("inspection.php.missing.return.type.description")
+
+        /** "Return type declaration must be compatible with X : Y", "Declaration must be compatible with X", up to what is filled in. */
+        val INCOMPATIBLE_WITH_PARENT: List<String> = listOf(
+            PhpBundle.message("inspection.message.return.type.declaration.must.be.compatible.with", "\u0000", "\u0000"),
+            PhpBundle.message("declaration.must.be.compatible.with.0", "\u0000"),
+            PhpBundle.message("declaration.must.be.compatible.with.super"),
+            PhpBundle.message("return.type.declaration.must.be.compatible.with.super"),
+        ).map { it.substringBefore('\u0000') }
 
         /** "Import '#ref' is never used" / "is unnecessary", split around the name the inspection fills in. */
         val UNUSED_IMPORT: List<Pair<String, String>> = listOf("inspection.php.unused.alias.description", "inspection.php.unused.alias.description2")

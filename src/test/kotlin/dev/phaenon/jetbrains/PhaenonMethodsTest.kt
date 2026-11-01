@@ -7,6 +7,7 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.inspections.PhpUndefinedMethodInspection
+import com.jetbrains.php.lang.inspections.classes.PhpHierarchyChecksInspection
 import com.jetbrains.php.lang.inspections.type.PhpMissingFieldTypeInspection
 import com.jetbrains.php.lang.inspections.type.PhpMissingParamTypeInspection
 import com.jetbrains.php.lang.inspections.type.PhpMissingReturnTypeInspection
@@ -210,6 +211,62 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
 
         assertDoesntContain(findings, "\$names", "\$m", "keys")
         assertContainsElements(findings, "\$plain")
+    }
+
+    fun testAMethodWithErasedTypesIsNotIncompatibleWithItsParent() {
+        myFixture.enableInspections(PhpHierarchyChecksInspection::class.java)
+        myFixture.configureByText(
+            "Hierarchy.phn",
+            """
+            namespace App;
+
+            final class AggregateId {}
+
+            interface Aggregate
+            {
+                public function id(): AggregateId;
+
+                public function withId(AggregateId ${'$'}id): static;
+            }
+
+            abstract class Base<T of AggregateId> implements Aggregate
+            {
+                public function __construct(protected T ${'$'}id) {}
+
+                final public function id(): T
+                {
+                    return ${'$'}this->id;
+                }
+
+                public function withId(T ${'$'}id): static
+                {
+                    return ${'$'}this;
+                }
+            }
+
+            final class Wrong implements Aggregate
+            {
+                public function id(): string
+                {
+                    return '';
+                }
+
+                public function withId(string ${'$'}id): static
+                {
+                    return ${'$'}this;
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val incompatible = myFixture.doHighlighting()
+            .filter { it.description.orEmpty().contains("must be compatible") }
+            .map { it.text to it.description.orEmpty().substringBefore(" with") }
+
+        assertEquals(
+            listOf("string" to "Return type declaration must be compatible", "string \$id" to "Declaration must be compatible"),
+            incompatible,
+        )
     }
 
     fun testReadonlyPropertiesWithErasedTypesAreNotErrors() {

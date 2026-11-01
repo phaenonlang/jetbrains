@@ -256,29 +256,41 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         )
 
         /** The parameter names of a declaration list: `<in TIn, out TOut, K of int|string = string>` → TIn, TOut, K. */
-        fun parameterNames(list: String): List<String> {
-            val inner = list.trim().removePrefix("<").removeSuffix(">")
-            val names = ArrayList<String>()
+        fun parameterNames(list: String): List<String> = parameters(list).map { it.second }
+
+        /**
+         * The type parameters a declaration list `<T, in K of Key, out V>` declares: the offset
+         * of each name in [list] and the name.
+         */
+        fun parameters(list: String): List<Pair<Int, String>> {
+            val open = list.indexOf('<')
+            val close = list.lastIndexOf('>')
+            if (open < 0 || close <= open) return emptyList()
+            val names = ArrayList<Pair<Int, String>>()
             var depth = 0
-            var start = 0
-            for ((k, ch) in inner.withIndex()) {
-                when (ch) {
+            var start = open + 1
+            for (k in open + 1 until close) {
+                when (list[k]) {
                     '<', '(' -> depth++
                     '>', ')' -> depth--
                     ',' -> if (depth == 0) {
-                        parameterName(inner.substring(start, k))?.let(names::add)
+                        parameterName(list, start, k)?.let(names::add)
                         start = k + 1
                     }
                 }
             }
-            parameterName(inner.substring(start))?.let(names::add)
+            parameterName(list, start, close)?.let(names::add)
             return names
         }
 
-        private fun parameterName(entry: String): String? {
-            val words = entry.trim().split(Regex("\\s+"))
-            val name = words.firstOrNull { it != "in" && it != "out" } ?: return null
-            return name.takeWhile { it.isLetterOrDigit() || it == '_' }.ifEmpty { null }
+        /** The name declared in one entry of the list: the first word that is not a variance keyword. */
+        private fun parameterName(list: String, start: Int, end: Int): Pair<Int, String>? {
+            for (word in Regex("\\S+").findAll(list.substring(start, end))) {
+                if (word.value == "in" || word.value == "out") continue
+                val name = word.value.takeWhile { it.isLetterOrDigit() || it == '_' }
+                return if (name.isEmpty()) null else (start + word.range.first) to name
+            }
+            return null
         }
     }
 }

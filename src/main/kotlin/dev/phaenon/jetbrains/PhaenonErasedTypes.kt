@@ -82,23 +82,45 @@ object PhaenonErasedTypes {
         val names = HashSet<String>()
         var scope: PsiElement? = element
         while (scope != null) {
-            if (scope is Function || scope is PhpClass) {
-                declaredTypeParameters(scope)?.let { names.addAll(it) }
-            }
+            declarationList(scope)?.let { names.addAll(PhaenonTypeText.parameterNames(it.text)) }
             scope = scope.parent
         }
         return names
     }
 
-    private fun declaredTypeParameters(declaration: PsiElement): List<String>? {
+    /**
+     * Where the type parameter [name], used at [element], is declared: the innermost enclosing
+     * declaration list `<…>` that names it. Null when no enclosing declaration does.
+     */
+    fun typeParameterDeclaration(element: PsiElement, name: String): PhaenonTypeParameter? {
+        var scope: PsiElement? = element
+        while (scope != null) {
+            val list = declarationList(scope)
+            if (list != null) {
+                val offset = PhaenonTypeText.parameters(list.text).firstOrNull { it.second == name }?.first
+                if (offset != null) return PhaenonTypeParameter(list, offset, name)
+            }
+            scope = scope.parent
+        }
+        return null
+    }
+
+    /** Whether [leaf] is the erased `<…>` list declaring a function's or class's type parameters. */
+    fun isDeclarationList(leaf: PsiElement): Boolean {
+        val declaration = leaf.parent ?: return false
+        return declarationList(declaration) === leaf
+    }
+
+    /** The erased leaf holding a function's or class's `<…>` type parameter list, if it declares one. */
+    private fun declarationList(declaration: PsiElement): PsiElement? {
+        if (declaration !is Function && declaration !is PhpClass) return null
         // `function f<T>(`, `class Box<T>`: the list follows the name; `fn<T>(`: it follows the keyword.
         val anchor = (declaration as? PhpNamedElement)?.nameIdentifier
             ?: declaration.firstChild?.takeIf { PsiUtilCore.getElementType(it) === PhpTokenTypes.kwFN }
             ?: return null
         var leaf: PsiElement? = PsiTreeUtil.nextLeaf(anchor, true)
         while (leaf is PsiWhiteSpace || leaf is PsiComment) {
-            val text = leaf.text.trim()
-            if (text.startsWith("<")) return PhaenonTypeText.parameterNames(text)
+            if (PhaenonTokenTypes.isErased(leaf) && leaf.text.trim().startsWith("<")) return leaf
             leaf = PsiTreeUtil.nextLeaf(leaf, true)
         }
         return null

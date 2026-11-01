@@ -1,0 +1,13 @@
+namespace App;
+
+abstract class Box<T of Item>
+{
+    public function __construct(protected T $item)
+    {
+    }
+
+    final public function item(): <caret>T
+    {
+        return $this->item;
+    }
+}

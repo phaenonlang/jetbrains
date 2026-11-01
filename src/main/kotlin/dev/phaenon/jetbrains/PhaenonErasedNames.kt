@@ -45,6 +45,16 @@ object PhaenonErasedNames {
         return names
     }
 
+    /** Each use of a type parameter in scope in an erased leaf's text: its range and name. */
+    fun typeParameters(leaf: PsiElement): List<Pair<TextRange, String>> {
+        val typeParameters = PhaenonErasedTypes.typeParametersInScope(leaf)
+        if (typeParameters.isEmpty()) return emptyList()
+        return NAME.findAll(leaf.text)
+            .filter { it.value in typeParameters }
+            .map { TextRange(it.range.first, it.range.last + 1) to it.value }
+            .toList()
+    }
+
     /** `type UserMap = …;` declares `UserMap`; it is not a reference. */
     private fun isAliasDeclaration(text: String, at: Int): Boolean {
         val before = text.substring(0, at).trimEnd()
