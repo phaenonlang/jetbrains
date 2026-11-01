@@ -86,6 +86,28 @@ class PhaenonErasedEditingTest : BasePlatformTestCase() {
         assertTrue(text, text.contains("use App\\Event\\DomainEvent;"))
     }
 
+    fun testAQualifiedNameCompletesTheNamespacesMembers() {
+        myFixture.configureByFiles("erased/Qualified.phn", "erased/DomainEvent.phn", "erased/Unrelated.phn")
+
+        val items = myFixture.completeBasic()
+        if (items != null) {
+            myFixture.lookup.currentItem = items.first { it.lookupString == "DomainEvent" }
+            myFixture.finishLookup('\n')
+        }
+
+        val text = myFixture.editor.document.text
+        assertTrue(text, text.contains("list<Event\\DomainEvent>"))
+        assertFalse(text, text.contains("use "))
+    }
+
+    fun testAnAbsoluteQualifiedNameCompletes() {
+        myFixture.configureByFiles("erased/Absolute.phn", "erased/DomainEvent.phn", "erased/Unrelated.phn")
+
+        myFixture.completeBasic()
+
+        assertContainsElements(myFixture.lookupElementStrings ?: listOf(myFixture.editor.document.text), "Unrelated")
+    }
+
     fun testKeywordsAndTypeParametersCompleteInsideTypeArguments() {
         myFixture.configureByFiles("erased/Keywords.phn")
 

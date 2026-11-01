@@ -1,5 +1,6 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.codeInsight.completion.PlainPrefixMatcher
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
@@ -62,6 +63,25 @@ object PhaenonErasedNames {
         val inNamespace = if (namespace.isEmpty()) "\\$name" else "\\$namespace\\$name"
         index.getAnyByFQN(inNamespace).takeIf { it.isNotEmpty() }?.let { return it.toList() }
         return index.getAnyByFQN("\\$name").toList()
+    }
+
+    /**
+     * The namespace a qualifier written in context names, without leading or trailing backslash:
+     * `\App\Event` as written, `Event` through an import or the current namespace, else global.
+     */
+    fun resolveNamespace(qualifier: String, context: PsiElement): String? {
+        if (qualifier.isEmpty()) return null
+        if (qualifier.startsWith("\\")) return qualifier.trim('\\')
+        val first = qualifier.substringBefore('\\')
+        val rest = qualifier.substring(first.length)
+        imports(context.containingFile)[first.lowercase()]?.let { return (it + rest).trim('\\') }
+        val namespace = PsiTreeUtil.getParentOfType(context, PhpNamespace::class.java)?.fqn?.trim('\\').orEmpty()
+        if (namespace.isEmpty()) return qualifier
+        val index = PhpIndex.getInstance(context.project)
+        val inNamespace = "$namespace\\$qualifier"
+        val known = index.getAllChildNamespacesFqns("\\$namespace\\").any { it.trim('\\').equals(inNamespace, ignoreCase = true) } ||
+            index.getAllClassFqns(PlainPrefixMatcher("\\$inNamespace\\", true)).isNotEmpty()
+        return if (known) inNamespace else qualifier
     }
 
     /** Whether the short name of an import appears in an erased construct anywhere in the file. */

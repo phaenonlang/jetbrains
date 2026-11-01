@@ -1,0 +1,6 @@
+namespace App;
+
+interface Absolute
+{
+    public function events(): list<\App\Event\<caret>>;
+}

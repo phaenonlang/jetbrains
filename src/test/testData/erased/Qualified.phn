@@ -1,0 +1,6 @@
+namespace App;
+
+interface Qualified
+{
+    public function events(): list<Event\Dom<caret>>;
+}
