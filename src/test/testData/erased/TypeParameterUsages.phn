@@ -1,0 +1,24 @@
+namespace App;
+
+final class Item
+{
+}
+
+abstract class Box<T<caret> of Item>
+{
+    public function __construct(protected T $item)
+    {
+    }
+
+    /** @param T $item - the replacement */
+    public function set(mixed $item): void
+    {
+        /** @var T $item */
+        $this->item = $item;
+    }
+
+    final public function item(): T
+    {
+        return $this->item;
+    }
+}

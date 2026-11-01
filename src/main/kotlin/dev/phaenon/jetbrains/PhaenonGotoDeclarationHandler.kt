@@ -5,6 +5,7 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import com.jetbrains.php.PhpIndex
+import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocType
 import com.jetbrains.php.lang.psi.elements.ClassReference
 import com.jetbrains.php.lang.psi.elements.ConstantReference
 import com.jetbrains.php.lang.psi.elements.FunctionReference
@@ -22,6 +23,9 @@ import com.jetbrains.php.lang.psi.elements.PhpReference
  * declaration and to its compiled copy goes to the source only, from `.phn` and `.php` files
  * alike. A hand-written `.php` declaring the same name stays a target: that is a real conflict.
  *
+ * A docblock type naming a type parameter in scope, `@var T $x`, goes to the declaration of
+ * `T` in the enclosing `<T of …>` list, which PhpStorm's own resolution cannot find.
+ *
  * And `$xs->map(...)` goes to `\Phaenon\Seq::map()`. The method form resolves to the editor-only
  * pseudo-classes under `\Phaenon\Internal` (see [PhaenonTypeText]); the code that runs is the
  * static function of the stdlib class in the `phaenon/runtime` package. When that package is in
@@ -33,6 +37,7 @@ class PhaenonGotoDeclarationHandler : GotoDeclarationHandler {
     override fun getGotoDeclarationTargets(sourceElement: PsiElement?, offset: Int, editor: Editor?): Array<PsiElement>? {
         if (sourceElement == null) return null
         sourceDeclarations(sourceElement, offset)?.let { return it }
+        typeParameterInDocblock(sourceElement)?.let { return arrayOf(it) }
         if (!PhaenonErasedTypes.isPhaenon(sourceElement)) return null
         val reference = PsiTreeUtil.getParentOfType(sourceElement, MethodReference::class.java) ?: return null
         if (reference.nameNode?.psi != sourceElement && reference.nameNode?.textRange?.contains(offset) != true) return null
@@ -64,6 +69,13 @@ class PhaenonGotoDeclarationHandler : GotoDeclarationHandler {
         val sources = targets.filter { !PhaenonFiles.isGeneratedOutput(it.containingFile) }
         if (sources.size == targets.size || sources.isEmpty()) return null
         return sources.toTypedArray()
+    }
+
+    /** `@var T $x`: a docblock type naming a type parameter in scope goes to the parameter's declaration. */
+    private fun typeParameterInDocblock(sourceElement: PsiElement): PsiElement? {
+        if (!PhaenonErasedTypes.isPhaenon(sourceElement)) return null
+        val docType = PsiTreeUtil.getParentOfType(sourceElement, PhpDocType::class.java, false) ?: return null
+        return PhaenonDocTypeReferenceSearcher.docTypeReference(docType)?.resolve()
     }
 
     private companion object {

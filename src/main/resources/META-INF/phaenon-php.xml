@@ -22,8 +22,14 @@
                               implementationClass="dev.phaenon.jetbrains.PhaenonSpellcheckingStrategy"/>
 
         <!-- A declaration in a .phn wins over its compiled copy; `->map` on a list resolves to a
-             bundled pseudo-class and navigation prefers \Phaenon\Seq::map. -->
+             bundled pseudo-class and navigation prefers \Phaenon\Seq::map; `@var T` goes to `<T of …>`. -->
         <gotoDeclarationHandler implementation="dev.phaenon.jetbrains.PhaenonGotoDeclarationHandler"/>
+
+        <!-- `T` in `class Box<T of Item>` is a declaration: Cmd+click shows its usages, which include
+             erased constructs and docblock types naming it. -->
+        <psi.declarationProvider implementation="dev.phaenon.jetbrains.PhaenonTypeParameterDeclarations"/>
+        <findUsagesHandlerFactory implementation="dev.phaenon.jetbrains.PhaenonTypeParameterFindUsagesHandlerFactory"/>
+        <referencesSearch implementation="dev.phaenon.jetbrains.PhaenonDocTypeReferenceSearcher"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.jetbrains.php">

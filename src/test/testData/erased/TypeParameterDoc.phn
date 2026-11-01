@@ -1,0 +1,10 @@
+namespace App;
+
+abstract class Box<T of Item>
+{
+    public function set(mixed $item): void
+    {
+        /** @var <caret>T $item */
+        $this->item = $item;
+    }
+}

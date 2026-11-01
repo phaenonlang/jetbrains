@@ -2,11 +2,15 @@ package dev.phaenon.jetbrains
 
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction
 import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.model.psi.PsiSymbolDeclarationProvider
+import com.intellij.model.psi.PsiSymbolService
+import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.psi.PsiNamedElement
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
+import com.jetbrains.php.lang.inspections.PhpUndefinedClassInspection
 import com.jetbrains.php.lang.inspections.PhpUnusedAliasInspection
 import com.jetbrains.php.lang.psi.elements.PhpClass
 
@@ -39,6 +43,37 @@ class PhaenonErasedNamesTest : BasePlatformTestCase() {
         val target = targets.single()
         assertEquals("T", (target as PsiNamedElement).name)
         assertEquals(myFixture.editor.document.text.indexOf("<T of") + 1, target.textOffset)
+    }
+
+    fun testTheDeclarationOfATypeParameterIsADeclarationWithUsages() {
+        myFixture.configureByFiles("erased/TypeParameterUsages.phn")
+        val list = myFixture.file.findElementAt(myFixture.caretOffset)!!
+        val text = myFixture.editor.document.text
+
+        val declarations = ExtensionPointName.create<PsiSymbolDeclarationProvider>("com.intellij.psi.declarationProvider")
+            .extensionList.flatMap { it.getDeclarations(list, myFixture.caretOffset - list.textRange.startOffset) }
+        val parameter = PhaenonErasedTypes.typeParameterDeclaration(list, "T")!!
+        val usages = myFixture.findUsages(parameter).map { it.element!!.textRange.startOffset + it.rangeInElement!!.startOffset }.sorted()
+
+        assertEquals(listOf(parameter), declarations.map { PsiSymbolService.getInstance().extractElementFromSymbol(it.symbol) })
+        assertEquals(listOf("protected T", "@param T", "@var T", "): T").map { text.indexOf(it) + it.length - 1 }, usages)
+    }
+
+    fun testATypeParameterInADocblockNavigatesToItsDeclaration() {
+        myFixture.configureByFiles("erased/TypeParameterDoc.phn")
+
+        val targets = GotoDeclarationAction.findAllTargetElements(project, myFixture.editor, myFixture.caretOffset)
+
+        assertEquals(myFixture.editor.document.text.indexOf("<T of") + 1, targets.single().textOffset)
+    }
+
+    fun testATypeParameterInADocblockIsNotAnUndefinedClass() {
+        myFixture.enableInspections(PhpUndefinedClassInspection::class.java)
+        myFixture.configureByFiles("erased/TypeParameterUsages.phn")
+
+        val undefined = myFixture.doHighlighting().filter { it.description.orEmpty().startsWith("Undefined class") }.map { it.text }
+
+        assertEmpty(undefined)
     }
 
     fun testFindUsagesSeesANameInsideAnErasedType() {

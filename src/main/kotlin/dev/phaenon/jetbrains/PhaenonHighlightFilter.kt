@@ -30,6 +30,9 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
  * it incompatible with the parent's declaration. Whether it is compatible is the compiler's
  * question (P3xxx); the finding goes where an erased type is involved.
  *
+ * A docblock type naming a type parameter in scope, `@var T $x`, is "Undefined class 'T'" to
+ * PhpStorm, which has no `@template` to read it from; the name is declared in the erased list.
+ *
  * "Other declarations of class 'X' exist at X.php" is PhpStorm seeing the `.php` the compiler
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
  * some other declaration is hand-written.
@@ -40,6 +43,10 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (file == null || !PhaenonFiles.isPhaenonFile(file.viewProvider.virtualFile)) return true
         val description = info.description ?: return true
         if (description.startsWith(OTHER_DECLARATIONS_PREFIX)) return otherDeclarationIsHandWritten(info, file)
+        if (UNDEFINED_CLASS.let { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
+            val leaf = file.findElementAt(info.startOffset) ?: return true
+            return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf)
+        }
         if (UNUSED_IMPORT.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             return !importIsUsedInAnErasedType(info, file)
         }
@@ -92,6 +99,10 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
             PhpBundle.message("declaration.must.be.compatible.with.super"),
             PhpBundle.message("return.type.declaration.must.be.compatible.with.super"),
         ).map { it.substringBefore('\u0000') }
+
+        /** "Undefined class '#ref'", split around the name: `T` in a docblock type is a type parameter, not a class. */
+        val UNDEFINED_CLASS: Pair<String, String> =
+            PhpBundle.message("inspection.php.undefined.class.description2").let { it.substringBefore("#ref") to it.substringAfter("#ref") }
 
         /** "Import '#ref' is never used" / "is unnecessary", split around the name the inspection fills in. */
         val UNUSED_IMPORT: List<Pair<String, String>> = listOf("inspection.php.unused.alias.description", "inspection.php.unused.alias.description2")

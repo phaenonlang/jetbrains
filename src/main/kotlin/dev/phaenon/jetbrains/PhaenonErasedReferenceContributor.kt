@@ -64,9 +64,13 @@ class PhaenonTypeParameterReference(element: PsiElement, range: TextRange, priva
     override fun getVariants(): Array<Any> = emptyArray()
 }
 
-/** Replaces [range] of the erased leaf's text, which no PhpStorm manipulator knows how to edit. */
+/**
+ * Replaces [range] of the erased leaf's text, which no PhpStorm manipulator knows how to edit. A
+ * reference on another kind of element (a docblock type) is left as it is.
+ */
 private fun renameIn(element: PsiElement, range: TextRange, newName: String): PsiElement {
+    val leaf = element as? LeafElement ?: return element
     val text = element.text
     val renamed = text.substring(0, range.startOffset) + newName + text.substring(range.endOffset)
-    return (element as LeafElement).replaceWithText(renamed).psi
+    return leaf.replaceWithText(renamed).psi
 }
