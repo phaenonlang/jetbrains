@@ -1,0 +1,6 @@
+namespace App;
+
+interface Keywords
+{
+    public function names(): map<string, st<caret>>;
+}

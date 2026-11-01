@@ -61,3 +61,45 @@ class PhaenonErasedNamesTest : BasePlatformTestCase() {
         assertEquals(listOf("App\\Event\\Unrelated"), unused)
     }
 }
+
+/** Completion and spell-checking inside erased constructs. */
+class PhaenonErasedEditingTest : BasePlatformTestCase() {
+
+    override fun getTestDataPath(): String = "src/test/testData"
+
+    override fun setUp() {
+        super.setUp()
+        PhpProjectConfigurationFacade.getInstance(project).languageLevel = PhpLanguageLevel.values().last()
+    }
+
+    fun testAClassCompletesInsideTypeArgumentsAndIsImported() {
+        myFixture.configureByFiles("erased/Completing.phn", "erased/DomainEvent.phn", "erased/Unrelated.phn")
+
+        val items = myFixture.completeBasic()
+        if (items != null) {
+            myFixture.lookup.currentItem = items.first { it.lookupString == "DomainEvent" }
+            myFixture.finishLookup('\n')
+        }
+
+        val text = myFixture.editor.document.text
+        assertTrue(text, text.contains("list<DomainEvent>"))
+        assertTrue(text, text.contains("use App\\Event\\DomainEvent;"))
+    }
+
+    fun testKeywordsAndTypeParametersCompleteInsideTypeArguments() {
+        myFixture.configureByFiles("erased/Keywords.phn")
+
+        myFixture.completeBasic()
+
+        assertContainsElements(myFixture.lookupElementStrings!!, "string", "static")
+    }
+
+    fun testErasedConstructsAreNotSpellChecked() {
+        myFixture.enableInspections(com.intellij.spellchecker.inspections.SpellCheckingInspection::class.java)
+        myFixture.configureByText("Spelled.phn", "namespace App;\n\n// a xqzvwt word\nfunction f(): list<Xqzvwt>\n{\n    return [];\n}\n")
+
+        val typos = myFixture.doHighlighting().filter { it.description.orEmpty().startsWith("Typo") }.map { it.text }
+
+        assertEquals(listOf("xqzvwt"), typos)
+    }
+}

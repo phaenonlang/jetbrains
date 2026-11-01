@@ -76,7 +76,7 @@ object PhaenonErasedNames {
         }.contains(shortName.lowercase())
 
     /** Lower-cased short name → FQN of every class import of the file. */
-    private fun imports(file: PsiFile): Map<String, String> =
+    fun imports(file: PsiFile): Map<String, String> =
         CachedValuesManager.getCachedValue(file) {
             val map = HashMap<String, String>()
             for (use in PsiTreeUtil.findChildrenOfType(file, PhpUse::class.java)) {

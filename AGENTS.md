@@ -26,7 +26,9 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   declaration over its compiled copy when both are indexed (fixtures `testData/generated/`);
   an erased construct is a `PhaenonErasedLeaf` (token `PhaenonTokenTypes.ERASED`, a comment to
   the parser through `PhaenonParserDefinition`) whose class names are references
-  (`PhaenonErasedReferenceContributor`, `PhaenonErasedNames`; fixtures `testData/erased/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  (`PhaenonErasedReferenceContributor`, `PhaenonErasedNames`; fixtures `testData/erased/`),
+  completed by `PhaenonErasedCompletionContributor` and left alone by the spell-checker
+  (`PhaenonSpellcheckingStrategy`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver

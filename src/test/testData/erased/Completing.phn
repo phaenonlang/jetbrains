@@ -1,0 +1,6 @@
+namespace App;
+
+interface Completing
+{
+    public function events(): list<Domain<caret>>;
+}
