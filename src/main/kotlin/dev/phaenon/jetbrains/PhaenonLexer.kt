@@ -30,7 +30,9 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  * - Types PHP has no spelling for, in type positions: `list<…>`, `map<…>`, `class<…>`, `bytes`,
  *   tuples `(A, B)` and type parameters. A union member is erased with its separator; a type
  *   erased completely takes its `?` and, for a return type, its `:` with it.
- * - `Closure(T): U` keeps `Closure` and erases the signature.
+ * - `Closure(T): U` is erased whole: a bare `Closure` with a signature is `\Closure` whatever the
+ *   namespace and imports (the compiler's reading), where PhpStorm would resolve the name in the
+ *   file's namespace. `\Closure(T): U` keeps its name and erases the signature.
  * - `$x is T` becomes `$x instanceof T` when `T` is a plain class name (the `is` token is re-typed,
  *   its text stays); every other `is`/`as`/`as?` test is erased together with its type, so the
  *   expression degrades to its operand.
@@ -465,6 +467,11 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 val next = sig(j + 1)
                 if ((name == "Closure" || name == "\\Closure") && (typeAt(next) == PhpTokenTypes.chLPAREN || typeAt(next) in PhpTokenTypes.tsCAST_OPS)) {
                     val end = scanClosureSignature(next, s) ?: return null
+                    // A bare `Closure(…)` is `\Closure` in any namespace (the compiler's parser reads
+                    // `Closure(` as a type form and the emitter writes `\Closure`), but a `Closure`
+                    // left to PhpStorm resolves in the file's namespace: erased whole, like `list<…>`,
+                    // and typed back by PhaenonTypeText. `\Closure(…)` means the same in PHP's reading.
+                    if (name == "Closure") return Member(i, end, native = false, classLike = false)
                     s.erase.add(next until end)
                     return Member(i, end, native = true, classLike = false)
                 }

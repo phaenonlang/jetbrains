@@ -1,0 +1,10 @@
+namespace Tequila\Tq\Dev;
+
+use Closure;
+
+final class Imported
+{
+    fun __construct(private readonly Closure(string...): (int, string) $kubectl)
+    {
+    }
+}

@@ -29,7 +29,11 @@ object PhaenonErasedNames {
 
     private val NAME: Regex = Regex("""\\?[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*""")
 
-    /** Each class name in an erased leaf's text: the range of its last segment, and the name as written. */
+    /**
+     * Each class name in an erased leaf's text: the range of its last segment, and the name to
+     * resolve — as written, except that a bare `Closure` before a signature is `\Closure`, as the
+     * compiler reads it whatever the namespace and imports.
+     */
     fun classNames(leaf: PsiElement): List<Pair<TextRange, String>> {
         val text = leaf.text
         val typeParameters = PhaenonErasedTypes.typeParametersInScope(leaf)
@@ -40,9 +44,17 @@ object PhaenonErasedNames {
             if (plain.lowercase() in NOT_A_CLASS || plain in typeParameters) continue
             if (isAliasDeclaration(text, match.range.first)) continue
             val last = name.lastIndexOf('\\') + 1
-            names.add(TextRange(match.range.first + last, match.range.last + 1) to name)
+            val range = TextRange(match.range.first + last, match.range.last + 1)
+            names.add(range to if (name == "Closure" && isClosureSignatureAt(text, range.endOffset)) "\\Closure" else name)
         }
         return names
+    }
+
+    /** Whether a closure signature `(…)` starts at [at], whitespace aside. */
+    private fun isClosureSignatureAt(text: String, at: Int): Boolean {
+        var i = at
+        while (i < text.length && text[i].isWhitespace()) i++
+        return i < text.length && text[i] == '('
     }
 
     /** Each use of a type parameter in scope in an erased leaf's text: its range and name. */

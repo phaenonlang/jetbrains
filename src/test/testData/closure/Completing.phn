@@ -1,0 +1,13 @@
+namespace Tequila\Tq\Dev;
+
+final class Completing
+{
+    fun __construct(private readonly Closure(string...): (int, string) $kubectl)
+    {
+    }
+
+    fun run(): void
+    {
+        $this->kubectl-><caret>
+    }
+}

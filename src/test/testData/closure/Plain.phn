@@ -1,0 +1,8 @@
+namespace Tequila\Tq\Dev;
+
+final class Plain
+{
+    fun run(Closure $callback): void
+    {
+    }
+}

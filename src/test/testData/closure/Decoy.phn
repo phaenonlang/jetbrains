@@ -1,0 +1,6 @@
+namespace Tequila\Tq\Dev;
+
+/** A class of the namespace named Closure, which a bare closure type never means. */
+final class Closure
+{
+}

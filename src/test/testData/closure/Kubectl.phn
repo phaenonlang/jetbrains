@@ -1,0 +1,40 @@
+namespace Tequila\Tq\Dev;
+
+final class Kubectl
+{
+    private readonly Closure(string...): (int, string) $kubectl;
+
+    fun __construct(
+        private readonly Closure(string): bool $accept,
+        ?Closure(string...): (int, string) $kubectl = null,
+    ) {
+        $this->kubectl = $kubectl ?? self::kubectl([]);
+    }
+
+    fun pods(): string
+    {
+        [$code, $out] = ($this->kubectl)('get', 'pods');
+
+        return ($this->accept)($out) ? $out : '';
+    }
+
+    static fun line(Closure(string...): (int, string) $kubectl): ?string
+    {
+        return null;
+    }
+
+    fun either(int|Closure(int): bool $test): bool
+    {
+        return \is_int($test) ? $test > 0 : $test(1);
+    }
+
+    private static fun kubectl(list<map<string, mixed>> $items): Closure(string...): (int, string)
+    {
+        return static fn (string ...$args): array => [0, ''];
+    }
+}
+
+interface Runner
+{
+    fun runner(): Closure(string...): (int, string);
+}

@@ -40,7 +40,8 @@ class PhaenonErasedReferenceContributor : PsiReferenceContributor() {
 
 /**
  * A class name written in an erased construct. [qualified] is the name as written (`User`,
- * `Event\Created`, `\Closure`); the range covers its last segment, which is what a rename changes.
+ * `Event\Created`, `\Closure`), and `\Closure` for a bare `Closure(…)`; the range covers its last
+ * segment, which is what a rename changes.
  */
 class PhaenonClassReference(element: PsiElement, range: TextRange, private val qualified: String) :
     PsiPolyVariantReferenceBase<PsiElement>(element, range, true) {

@@ -37,7 +37,7 @@ final class Box<T of object = object> implements \IteratorAggregate<int, T>
         return $items[0] ?? null;
     }
 
-    public function with(Closure(T, int): bool $pred): static
+    public function with(\Closure(T, int): bool $pred): static
     {
         return $this;
     }

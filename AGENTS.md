@@ -34,8 +34,11 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
   parameter — keep them in step when the stdlib changes.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
-  `syntax/Constructs.phn` uses every Phaenon construct; `methods/` holds the method-syntax fixtures.
-  Tests set the IDE's highest PHP level: the test project defaults to PHP 5.6.
+  `syntax/Constructs.phn` uses every Phaenon construct; `methods/` holds the method-syntax fixtures,
+  `closure/` the closure-type ones. Tests set the IDE's highest PHP level: the test project
+  defaults to PHP 5.6. It also lacks PhpStorm's bundled PHP stubs (they are indexed only for a
+  project with a PHP module), so a test that needs `\Closure` and the like copies a stand-in
+  (`closure/stubs/Closure.php`).
 - `PhaenonRealTreeTest` runs the plugin over whole trees (`PHAENON_TREES`, above) and reports
   per tree: files, files with syntax errors, errors, stub mismatches, files skipped for PHP syntax
   the IDE's level lacks. Run it after every lexer or builder change; a `.phn` the compiler parses

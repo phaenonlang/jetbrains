@@ -42,7 +42,7 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
      * [PhaenonReindexActivity] re-indexes the `.phn` files of a project once this number differs
      * from the one it stored.
      */
-    const val PSI_VERSION: Int = 1
+    const val PSI_VERSION: Int = 2
 
     override fun parseContents(chameleon: ASTNode): ASTNode? {
         val project = chameleon.psi.project
