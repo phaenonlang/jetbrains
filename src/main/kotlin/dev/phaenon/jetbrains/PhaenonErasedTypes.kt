@@ -51,7 +51,11 @@ object PhaenonErasedTypes {
         return join(parts)
     }
 
-    /** The erased return type text of a function, method or closure, `""` when there was none. */
+    /**
+     * The erased return type text of a function, method or closure, `""` when there was none. A
+     * return type erased whole took its `:` with it (`: list<User>`); the colon is the function's
+     * and is not part of the text.
+     */
     fun returnType(function: Function): String {
         // The body, the `;` of an abstract method, or the expression of an arrow function.
         val tail = function.lastChild ?: return ""
@@ -61,7 +65,7 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                PhaenonTokenTypes.isErased(leaf) -> parts.add(leaf.text.trim())
+                PhaenonTokenTypes.isErased(leaf) -> parts.add(leaf.text.trim().removePrefix(":").trimStart())
                 leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opHASH_ARRAY -> Unit
                 PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> Unit

@@ -150,6 +150,11 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
 
                 public function first<U>(list<U> ${'$'}xs): ?U { return ${'$'}xs[0] ?? null; }
             }
+
+            interface Users
+            {
+                public function all(): list<User>;
+            }
             """.trimIndent(),
         )
 
@@ -171,6 +176,7 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
         val returns = PsiTreeUtil.collectElementsOfType(file, Function::class.java).associate { it.name to it.type.global(project).typesWithParametrisedParts.sorted() }
         assertEquals(listOf("\\App\\User[]", "\\Phaenon\\Internal\\ListMethods<\\App\\User>"), returns["users"])
         assertEquals(listOf("\\mixed", "\\null"), returns["first"])
+        assertEquals("a return type erased whole, colon and all, with no body to infer from", listOf("\\App\\User[]", "\\Phaenon\\Internal\\ListMethods<\\App\\User>"), returns["all"])
     }
 
     fun testChainsAndElementsAreTyped() {
