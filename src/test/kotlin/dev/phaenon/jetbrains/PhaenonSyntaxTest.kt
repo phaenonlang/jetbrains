@@ -2,6 +2,7 @@ package dev.phaenon.jetbrains
 
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.codeStyle.CodeStyleManager
@@ -44,12 +45,13 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
         PsiTestUtil.checkStubsMatchText(file)
     }
 
-    fun testErasedSyntaxSurvivesAsWhitespaceAtItsOffsets() {
+    fun testErasedSyntaxSurvivesAsErasedLeavesAtItsOffsets() {
         val file = myFixture.configureByFile("syntax/Constructs.phn")
         val source = file.virtualFile.contentsToByteArray().toString(Charsets.UTF_8)
 
         assertEquals(source, file.text)
-        val erased = PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java).filter { it.text.isNotBlank() }.map { it.text.trim() }
+        val leaves = PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }
+        val erased = leaves.map { it.text.trim() }
         assertContainsElements(
             erased,
             "type UserMap = map<Uuid, User>;",
@@ -69,9 +71,11 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
             "<User>",
             "<Address>",
         )
-        for (leaf in PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java)) {
-            assertEquals("whitespace leaf text must map to the document", source.substring(leaf.textRange.startOffset, leaf.textRange.endOffset), leaf.text)
+        for (leaf in leaves) {
+            assertEquals("an erased leaf's text must map to the document", source.substring(leaf.textRange.startOffset, leaf.textRange.endOffset), leaf.text)
+            assertEquals("an erased leaf carries its own text, not the whitespace around it", leaf.text.trim(), leaf.text)
         }
+        assertEmpty(PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java).filter { it.text.isNotBlank() })
     }
 
     fun testIsOnAClassNameIsInstanceof() {
@@ -120,7 +124,7 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
         assertEmpty("syntax errors: " + errors.map { "'${it.errorDescription}' at ${it.textOffset} near '${it.parent.text.take(40)}'" }, errors)
         val names = PsiTreeUtil.collectElementsOfType(file, com.jetbrains.php.lang.psi.elements.Method::class.java).map { it.name }
         assertEquals(listOf("for", "list", "run"), names)
-        val erased = PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java).filter { it.text.isNotBlank() }.map { it.text.trim() }
+        val erased = PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }.map { it.text.trim() }
         assertContainsElements(erased, "<U of Aggregate>", "<Order>", "<int>")
     }
 
@@ -132,7 +136,7 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
 
         val errors = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java)
         assertEmpty("syntax errors: " + errors.map { "'${it.errorDescription}' at ${it.textOffset} near '${it.parent.text.take(40)}'" }, errors)
-        val erased = PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java).filter { it.text.isNotBlank() }.map { it.text.trim() }
+        val erased = PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }.map { it.text.trim() }
         assertContainsElements(erased, "list<string>", "map<string, int>", "is map<string, int>")
     }
 

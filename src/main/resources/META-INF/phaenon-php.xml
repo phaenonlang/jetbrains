@@ -14,6 +14,9 @@
              .php compiled from a .phn is not "another declaration" of its classes. -->
         <daemon.highlightInfoFilter implementation="dev.phaenon.jetbrains.PhaenonHighlightFilter"/>
 
+        <!-- Class names inside erased constructs (`list<User>`) are references. -->
+        <psi.referenceContributor language="PHP" implementation="dev.phaenon.jetbrains.PhaenonErasedReferenceContributor"/>
+
         <!-- A declaration in a .phn wins over its compiled copy; `->map` on a list resolves to a
              bundled pseudo-class and navigation prefers \Phaenon\Seq::map. -->
         <gotoDeclarationHandler implementation="dev.phaenon.jetbrains.PhaenonGotoDeclarationHandler"/>

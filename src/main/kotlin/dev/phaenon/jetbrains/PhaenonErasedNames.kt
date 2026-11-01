@@ -1,8 +1,9 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
 import com.intellij.psi.util.PsiTreeUtil
@@ -12,36 +13,46 @@ import com.jetbrains.php.lang.psi.elements.PhpNamespace
 import com.jetbrains.php.lang.psi.elements.PhpUse
 
 /**
- * The class names inside erased Phaenon types — `list<DomainEvent>`, `Box<User, Role>`,
- * `class<Aggregate>` — are plain text to PhpStorm: the type was erased into whitespace, so no
- * reference exists for them. This resolves such a name the way PHP would (the file's `use`
- * statements, then the current namespace), for navigation and for the unused-import inspection.
+ * The class names inside erased constructs — `list<DomainEvent>`, `Box<User, Role>`,
+ * `class<Aggregate>` — and how they resolve: the way PHP would, through the file's `use`
+ * statements, then the current namespace, then the global one.
  */
 object PhaenonErasedNames {
 
-    /** The words of a Phaenon type that name no class. */
+    /** The words of a Phaenon construct that name no class. */
     private val NOT_A_CLASS: Set<String> = setOf(
-        "list", "map", "class", "bytes", "of", "out", "in",
+        "list", "map", "class", "bytes", "of", "out", "in", "is", "as", "type",
         "int", "float", "string", "bool", "mixed", "null", "void", "never", "object", "array", "callable", "iterable",
         "self", "static", "parent", "true", "false",
     )
 
-    /** The identifier under offset in an erased leaf's text, `null` when offset is not on one. */
-    fun identifierAt(leaf: PsiWhiteSpace, offset: Int): String? {
+    private val NAME: Regex = Regex("""\\?[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*""")
+
+    /** Each class name in an erased leaf's text: the range of its last segment, and the name as written. */
+    fun classNames(leaf: PsiElement): List<Pair<TextRange, String>> {
         val text = leaf.text
-        val at = offset - leaf.textRange.startOffset
-        if (at < 0 || at > text.length) return null
-        var start = at
-        while (start > 0 && isNameChar(text[start - 1])) start--
-        var end = at
-        while (end < text.length && isNameChar(text[end])) end++
-        val name = text.substring(start, end).trimStart('\\').let { if (text.getOrNull(start) == '\\') "\\$it" else it }
-        return name.takeIf { it.isNotEmpty() && it.trimStart('\\').first().let { c -> c.isLetter() || c == '_' } }
+        val typeParameters = PhaenonErasedTypes.typeParametersInScope(leaf)
+        val names = ArrayList<Pair<TextRange, String>>()
+        for (match in NAME.findAll(text)) {
+            val name = match.value
+            val plain = name.trimStart('\\')
+            if (plain.lowercase() in NOT_A_CLASS || plain in typeParameters) continue
+            if (isAliasDeclaration(text, match.range.first)) continue
+            val last = name.lastIndexOf('\\') + 1
+            names.add(TextRange(match.range.first + last, match.range.last + 1) to name)
+        }
+        return names
+    }
+
+    /** `type UserMap = …;` declares `UserMap`; it is not a reference. */
+    private fun isAliasDeclaration(text: String, at: Int): Boolean {
+        val before = text.substring(0, at).trimEnd()
+        return before.endsWith("type") && (before.length == 4 || !before[before.length - 5].isLetterOrDigit())
     }
 
     /** The classes, interfaces and traits a name written in context resolves to; empty for keywords and type parameters. */
     fun resolve(name: String, context: PsiElement): List<PhpClass> {
-        if (name.lowercase() in NOT_A_CLASS) return emptyList()
+        if (name.trimStart('\\').lowercase() in NOT_A_CLASS) return emptyList()
         val index = PhpIndex.getInstance(context.project)
         if (name.startsWith("\\")) return index.getAnyByFQN(name).toList()
         val first = name.substringBefore('\\')
@@ -53,21 +64,13 @@ object PhaenonErasedNames {
         return index.getAnyByFQN("\\$name").toList()
     }
 
-    /** Whether the short name of an import appears in an erased type anywhere in the file. */
+    /** Whether the short name of an import appears in an erased construct anywhere in the file. */
     fun mentions(file: PsiFile, shortName: String): Boolean =
         CachedValuesManager.getCachedValue(file) {
             val words = HashSet<String>()
-            for (leaf in PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java)) {
-                val text = leaf.text
-                if (text.isBlank()) continue
-                var i = 0
-                while (i < text.length) {
-                    if (!isNameChar(text[i]) || text[i] == '\\') { i++; continue }
-                    var j = i
-                    while (j < text.length && isNameChar(text[j]) && text[j] != '\\') j++
-                    words.add(text.substring(i, j).lowercase())
-                    i = j
-                }
+            for (leaf in PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java)) {
+                if (!PhaenonTokenTypes.isErased(leaf)) continue
+                for (match in NAME.findAll(leaf.text)) words.add(match.value.trimStart('\\').substringBefore('\\').lowercase())
             }
             CachedValueProvider.Result.create(words, file)
         }.contains(shortName.lowercase())
@@ -84,6 +87,4 @@ object PhaenonErasedNames {
             }
             CachedValueProvider.Result.create(map, file)
         }
-
-    private fun isNameChar(c: Char): Boolean = c.isLetterOrDigit() || c == '_' || c == '\\'
 }

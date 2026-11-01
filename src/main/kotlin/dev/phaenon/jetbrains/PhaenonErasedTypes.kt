@@ -16,8 +16,8 @@ import com.jetbrains.php.lang.psi.elements.PhpTypeDeclaration
 /**
  * Reads Phaenon types back out of a `.phn` file's PSI.
  *
- * [PhaenonLexer] erases the types PHP cannot spell into whitespace, so in the tree they are
- * `PsiWhiteSpace` leaves whose text is not blank, sitting where the type was: before a parameter
+ * [PhaenonLexer] erases the types PHP cannot spell into [PhaenonTokenTypes.ERASED] tokens, so in
+ * the tree they are comment leaves of that type, sitting where the type was: before a parameter
  * or property name, between a parameter list and a function body. These functions collect that
  * text; [PhaenonTypeText] turns it into a `PhpType`.
  */
@@ -39,8 +39,8 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                leaf is PsiWhiteSpace -> if (leaf.text.isNotBlank()) parts.add(leaf.text.trim())
-                leaf is PsiComment -> Unit
+                PhaenonTokenTypes.isErased(leaf) -> parts.add(leaf.text.trim())
+                leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opBIT_AND || type === PhpTokenTypes.opVARIADIC -> Unit
                 PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> Unit
                 else -> break
@@ -61,8 +61,8 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                leaf is PsiWhiteSpace -> if (leaf.text.isNotBlank()) parts.add(leaf.text.trim())
-                leaf is PsiComment -> Unit
+                PhaenonTokenTypes.isErased(leaf) -> parts.add(leaf.text.trim())
+                leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opHASH_ARRAY -> Unit
                 PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> Unit
                 else -> break

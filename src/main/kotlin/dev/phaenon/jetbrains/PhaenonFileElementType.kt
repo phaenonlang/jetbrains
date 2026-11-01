@@ -2,7 +2,7 @@ package dev.phaenon.jetbrains
 
 import com.intellij.lang.ASTNode
 import com.intellij.lang.LanguageParserDefinitions
-import com.intellij.lang.PsiBuilderFactory
+import com.intellij.lang.impl.PsiBuilderImpl
 import com.intellij.psi.tree.IFileElementType
 import com.jetbrains.php.lang.PhpLanguage
 
@@ -16,7 +16,8 @@ import com.jetbrains.php.lang.PhpLanguage
  * file really begins with an open tag, which is exactly the Phaenon contract: PHP code from byte 0.
  *
  * The parse itself mirrors what PhpStorm does for its code fragments: build a `PsiBuilder` with
- * an explicit lexer and hand it to the stock PHP parser. The builder is wrapped in
+ * an explicit lexer and hand it to the stock PHP parser. The builder takes its comment tokens from
+ * [PhaenonParserDefinition], so the erased constructs are skipped as comments, and is wrapped in
  * [PhaenonPsiBuilder] so that no block is parsed lazily (a lazy block would be re-lexed later
  * without the erasures). Everything below the root is therefore ordinary PHP PSI, produced by
  * PhpStorm, and the stub builder, indices, inspections and refactorings never learn that the file
@@ -26,10 +27,9 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
 
     override fun parseContents(chameleon: ASTNode): ASTNode? {
         val project = chameleon.psi.project
-        val builder = PsiBuilderFactory.getInstance()
-            .createBuilder(project, chameleon, PhaenonLexer(), PhpLanguage.INSTANCE, chameleon.chars)
-        val parser = LanguageParserDefinitions.INSTANCE.forLanguage(PhpLanguage.INSTANCE).createParser(project)
+        val php = LanguageParserDefinitions.INSTANCE.forLanguage(PhpLanguage.INSTANCE)
+        val builder = PsiBuilderImpl(project, PhaenonParserDefinition(php), PhaenonLexer(), chameleon, chameleon.chars)
 
-        return parser.parse(this, PhaenonPsiBuilder(project, builder)).firstChildNode
+        return php.createParser(project).parse(this, PhaenonPsiBuilder(project, builder)).firstChildNode
     }
 }

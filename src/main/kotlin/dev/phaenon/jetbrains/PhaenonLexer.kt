@@ -126,7 +126,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         val joinWithPrev = BooleanArray(count)
 
         fun erase(range: IntRange): Plan {
-            for (i in range) types[i] = PhpTokenTypes.WHITE_SPACE
+            for (i in range) types[i] = PhaenonTokenTypes.ERASED
             return this
         }
 
@@ -154,8 +154,8 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             val type = plan.types[i]
             var end = pending[i].end
             var j = i + 1
-            // Erased spans and the real whitespace next to them become one whitespace leaf.
-            while (j < plan.count && (plan.joinWithPrev[j] || type == PhpTokenTypes.WHITE_SPACE && plan.types[j] == PhpTokenTypes.WHITE_SPACE)) {
+            // An erased span, whitespace inside it included, becomes one erased leaf.
+            while (j < plan.count && (plan.joinWithPrev[j] || type === PhaenonTokenTypes.ERASED && plan.types[j] === PhaenonTokenTypes.ERASED)) {
                 end = pending[j].end
                 j++
             }
@@ -504,7 +504,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     }
 
     private companion object {
-        val SKIPPABLE: TokenSet = TokenSet.orSet(TokenSet.create(PhpTokenTypes.WHITE_SPACE), PhpTokenTypes.COMMENTS)
+        val SKIPPABLE: TokenSet = TokenSet.orSet(TokenSet.create(PhpTokenTypes.WHITE_SPACE, PhaenonTokenTypes.ERASED), PhpTokenTypes.COMMENTS)
 
         /** What `$x is T` may follow: a value. */
         val EXPRESSION_END: TokenSet = TokenSet.orSet(

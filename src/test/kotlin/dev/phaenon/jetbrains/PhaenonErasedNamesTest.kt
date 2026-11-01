@@ -3,6 +3,7 @@ package dev.phaenon.jetbrains
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.inspections.PhpUnusedAliasInspection
@@ -27,6 +28,26 @@ class PhaenonErasedNamesTest : BasePlatformTestCase() {
         val targets = GotoDeclarationAction.findAllTargetElements(project, myFixture.editor, myFixture.caretOffset)
 
         assertEquals(listOf("\\App\\Event\\DomainEvent"), targets.map { (it as PhpClass).fqn })
+    }
+
+    fun testFindUsagesSeesANameInsideAnErasedType() {
+        myFixture.configureByFiles("erased/Aggregate.phn", "erased/DomainEvent.phn", "erased/Unrelated.phn")
+        val target = PhpIndex.getInstance(project).getAnyByFQN("\\App\\Event\\DomainEvent").single()
+
+        val usages = myFixture.findUsages(target).map { it.file?.name to it.element?.text?.trim() }
+
+        // The leaf is the whole erased return type, colon included.
+        assertContainsElements(usages, "Aggregate.phn" to ": list<DomainEvent>")
+    }
+
+    fun testRenamingTheClassRenamesItInsideTheErasedType() {
+        myFixture.configureByFiles("erased/Aggregate.phn", "erased/DomainEvent.phn", "erased/Unrelated.phn")
+
+        myFixture.renameElementAtCaret("StoredEvent")
+
+        val text = myFixture.editor.document.text
+        assertTrue(text, text.contains("list<StoredEvent>"))
+        assertTrue(text, text.contains("use App\\Event\\StoredEvent;"))
     }
 
     fun testAnImportUsedOnlyInAnErasedTypeIsNotUnused() {

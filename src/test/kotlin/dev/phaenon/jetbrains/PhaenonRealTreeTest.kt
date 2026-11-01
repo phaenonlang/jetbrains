@@ -3,11 +3,13 @@ package dev.phaenon.jetbrains
 import com.intellij.openapi.util.RecursionManager
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiErrorElement
+import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
+import com.jetbrains.php.lang.PhpFileType
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.Function
@@ -68,10 +70,15 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
             var errorCount = 0
             var stubMismatches = 0
             val listing = ArrayList<String>()
+            val phpStormFailsToo = ArrayList<String>()
             for (loaded in tree.files) {
                 assertSame("${loaded.relative} must parse through the Phaenon root", PhaenonFileElementType, loaded.file.node.elementType)
                 val errors = PsiTreeUtil.collectElementsOfType(loaded.file, PsiErrorElement::class.java)
-                if (errors.isNotEmpty()) {
+                if (errors.isNotEmpty() && failsAsPlainPhp(loaded.text, errors)) {
+                    // PhpStorm's own parser rejects the same PHP at the same places (`[...$a][0]`
+                    // on 2025.1): not the plugin's erasure, listed and not counted.
+                    phpStormFailsToo.add("${loaded.relative}:${line(loaded.text, errors.first().textOffset)}")
+                } else if (errors.isNotEmpty()) {
                     filesWithErrors++
                     errorCount += errors.size
                     for (error in errors) {
@@ -88,6 +95,7 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
             }
             report.append("${tree.root.path}: ${tree.files.size + tree.skipped.size} files, $filesWithErrors with errors, $errorCount errors, $stubMismatches stub mismatches")
             if (tree.skipped.isNotEmpty()) report.append(", ${tree.skipped.size} skipped (PHP syntax above the IDE's level ${ideLevel().versionString}): ${tree.skipped.joinToString()}")
+            if (phpStormFailsToo.isNotEmpty()) report.append(", ${phpStormFailsToo.size} with PHP PhpStorm itself does not parse: ${phpStormFailsToo.joinToString()}")
             report.append('\n')
             listing.forEach { report.append("  ").append(it).append('\n') }
             if (errorCount + stubMismatches > listing.size) report.append("  … ${errorCount + stubMismatches - listing.size} more\n")
@@ -177,6 +185,18 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
     }
 
     private fun ideLevel(): PhpLanguageLevel = PhpLanguageLevel.values().last()
+
+    /**
+     * Whether PhpStorm's own parser, given the file as plain PHP (an open tag in front, no
+     * erasure), reports errors at the same offsets. Then the construct is one PhpStorm does not
+     * know, not one the plugin erased wrongly.
+     */
+    private fun failsAsPlainPhp(text: String, errors: Collection<PsiErrorElement>): Boolean {
+        val prefix = "<?php\n"
+        val php = PsiFileFactory.getInstance(project).createFileFromText("plain.php", PhpFileType.INSTANCE, prefix + text)
+        val offsets = PsiTreeUtil.collectElementsOfType(php, PsiErrorElement::class.java).map { it.textOffset - prefix.length }.toSet()
+        return errors.all { it.textOffset in offsets }
+    }
 
     private fun line(text: String, offset: Int): Int = StringUtil.offsetToLineNumber(text, offset) + 1
 

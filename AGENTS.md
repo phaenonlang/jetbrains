@@ -24,8 +24,9 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   `PhaenonTypeProvider`; `PhaenonExcludePolicy` keeps the output directories of `phaenon.json`
   out of the index, and `PhaenonGotoDeclarationHandler` / `PhaenonHighlightFilter` prefer a `.phn`
   declaration over its compiled copy when both are indexed (fixtures `testData/generated/`);
-  `PhaenonErasedNames` resolves class names inside erased types for navigation and the
-  unused-import inspection (fixtures `testData/erased/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  an erased construct is a `PhaenonErasedLeaf` (token `PhaenonTokenTypes.ERASED`, a comment to
+  the parser through `PhaenonParserDefinition`) whose class names are references
+  (`PhaenonErasedReferenceContributor`, `PhaenonErasedNames`; fixtures `testData/erased/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
@@ -36,7 +37,8 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
 - `PhaenonRealTreeTest` runs the plugin over whole trees (`PHAENON_TREES`, above) and reports
   per tree: files, files with syntax errors, errors, stub mismatches, files skipped for PHP syntax
   the IDE's level lacks. Run it after every lexer or builder change; a `.phn` the compiler parses
-  (`../phaenon/bin/phn check`) and PhpStorm does not is a plugin bug unless plain PHP fails alike.
+  (`../phaenon/bin/phn check`) and PhpStorm does not is a plugin bug unless plain PHP fails alike
+  (the test checks that itself and lists such files instead of counting them).
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
   element-array unions; the implied `strict_types` is not modelled; editor colouring uses the
