@@ -37,7 +37,7 @@ class PhaenonFunTest : BasePlatformTestCase() {
         #[Map(fn (int ${'$'}x): int => ${'$'}x * 2)]
         final class Box
         {
-            public const \Closure UPPER = fn (string ${'$'}s): string => \strtoupper(${'$'}s);
+            const \Closure UPPER = fn (string ${'$'}s): string => \strtoupper(${'$'}s);
 
             private static ?\Closure ${'$'}lower = fn (string ${'$'}s): string => \strtolower(${'$'}s);
 

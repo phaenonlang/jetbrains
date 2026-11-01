@@ -29,8 +29,9 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
  * An import used only inside an erased type (`use App\Event\DomainEvent;` for
  * `list<DomainEvent>`) is "never used" to PhpStorm, which cannot see into the erased text.
  *
- * `fun` declares a public method (design/functions.md §1), and a property with an asymmetric
- * visibility and no main one is public: the PSR-12 "missing visibility" finding does not apply.
+ * `fun` declares a public method (design/functions.md §1), a class constant without a visibility
+ * is public, and so is a property with an asymmetric visibility and no main one: the PSR-12
+ * "missing visibility" finding does not apply, and the compiler writes the `public` out.
  * A closure in a constant expression — an attribute argument, a constant, a default — is lowered
  * to the `static function` PHP 8.5 accepts there (§2), so it is not an invalid constant expression.
  *
@@ -77,11 +78,12 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         return PhaenonErasedTypes.beforeName(declaration).isEmpty()
     }
 
-    /** A `fun` method, or a property or parameter with an asymmetric visibility and no main one, is public (design/functions.md §1). */
+    /** A `fun` method, a class constant, or a property or parameter with an asymmetric visibility and no main one, is public (design/functions.md §1). */
     private fun visibilityIsImplied(info: HighlightInfo, file: PsiFile): Boolean {
         val leaf = file.findElementAt(info.startOffset) ?: return false
         val declaration: PsiElement = PsiTreeUtil.getParentOfType(leaf, false, Method::class.java, Field::class.java, Parameter::class.java) ?: return false
         if (declaration is Method) return declaration.node.findChildByType(PhpTokenTypes.kwFUNCTION)?.text == "fun"
+        if (declaration is Field && declaration.isConstant) return true
         return declaration.node.findChildByType(PhpElementTypes.MODIFIER_LIST)?.text?.contains("(set)") == true
     }
 
