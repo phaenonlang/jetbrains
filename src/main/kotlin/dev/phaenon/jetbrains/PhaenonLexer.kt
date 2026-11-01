@@ -78,6 +78,8 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             return
         }
         val plan = tryFun(c)
+            ?: tryConcurrently(c)
+            ?: trySpawn(c)
             ?: tryIs(c)
             ?: tryAs(c)
             ?: tryTypeAlias(c)
@@ -186,6 +188,47 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         if (t != PhpTokenTypes.IDENTIFIER && t !in PhpTokenTypes.tsKEYWORDS) return null
         return Plan(1).replace(0, PhpTokenTypes.kwFUNCTION)
     }
+
+    /**
+     * `concurrently (opts) {`: the keyword and its options are erased so that the braces parse as a
+     * block (design/concurrency.md §11). The expression form, `return concurrently {`, stays a
+     * syntax error until a PSI block exists. `Api::concurrently(` and a `concurrently(…)` call with
+     * no brace after it are calls and stay.
+     */
+    private fun tryConcurrently(c: Tok): Plan? {
+        if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "concurrently" || afterMemberAccess()) return null
+        val next = sig(1)
+        when (typeAt(next)) {
+            PhpTokenTypes.chLBRACE -> return Plan(1).erase(0..0)
+            PhpTokenTypes.chLPAREN -> {}
+            else -> return null
+        }
+        var depth = 0
+        var i = next
+        while (true) {
+            when (typeAt(i) ?: return null) {
+                PhpTokenTypes.chLPAREN -> depth++
+                PhpTokenTypes.chRPAREN -> if (--depth == 0) break
+            }
+            i = sig(i + 1)
+            if (i < 0) return null
+        }
+        if (typeAt(sig(i + 1)) != PhpTokenTypes.chLBRACE) return null
+        return Plan(i + 1).erase(0..i)
+    }
+
+    /**
+     * `spawn expr`: the keyword is erased and the expression stays, typed as the call it wraps
+     * (design/concurrency.md §11). A member, a function or a constant called spawn is left alone.
+     */
+    private fun trySpawn(c: Tok): Plan? {
+        if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "spawn" || afterMemberAccess() || prevSig == PhpTokenTypes.kwFUNCTION) return null
+        val next = typeAt(sig(1)) ?: return null
+        if (next == PhpTokenTypes.opASGN || next == PhpTokenTypes.SCOPE_RESOLUTION || next == PhpTokenTypes.opSEMICOLON) return null
+        return Plan(1).erase(0..0)
+    }
+
+    private fun afterMemberAccess(): Boolean = prevSig != null && MEMBER_ACCESS.contains(prevSig)
 
     /** `$x is T`: `instanceof` for a class name, erased otherwise. */
     private fun tryIs(c: Tok): Plan? {

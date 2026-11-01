@@ -86,6 +86,8 @@ provider reads it back, and the class names in it are references.
 | `$x is list<int>`, `$x is ?Foo`, `$x as T`, `$x as? T` | `$x` — the test is erased | the operand's type |
 | `(bytes) $raw` | one `(string)` cast token | `string` |
 | `type Name = …;` | erased whole | — (uses of `Name` are unknown classes) |
+| `concurrently (opts) { … }` as a statement | the keyword and options erased: a block | the statements inside are ordinary statements |
+| `spawn expr` | erased: `expr` | the type of `expr`, not `Future<T>` |
 | `array<K, V>` (M3 spelling in migrated sources) | `array` | `array` |
 
 The rule for `Name<` is the compiler's (`generics.md` §2.4): PHP's relational operators are
@@ -181,6 +183,11 @@ index": delete `.intellijPlatform/sandbox/phaenon-jetbrains/<IDE>/system-test/in
   names (imported on insertion), the members of a namespace after a qualifier (`Event\Dom…`,
   `\App\Event\…`), type parameters and keywords.
 - **`type` aliases are erased whole**: the alias name is an unknown class wherever it is used.
+- **Concurrency is approximated at the token level** (`concurrency.md` §11). A `concurrently`
+  block used as a statement parses as a plain block and `spawn expr` as `expr`, so the body is
+  navigable and completable, with a handle typed as the task's value rather than `Future<T>`.
+  The expression forms — `return concurrently { … };`, `$x = concurrently { … };`, `spawn { … }` —
+  are syntax errors in the editor until the plugin has a PSI element for a block (M6).
 - **A parameter description without a type is written `@param $x - prose`.** PhpStorm's PHPDoc
   parser reads `@param $x prose` as the variable followed by a type named `prose` (an undefined
   class, a type mismatch, and `prose|string` as the parameter's type); the dash, which `phn
