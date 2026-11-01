@@ -482,8 +482,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     }
 
     /**
-     * `(A, B): R` after `Closure`; returns the index after the return type (or after `)`). A
-     * single primitive parameter, `Closure(int)`, reaches us as one cast token.
+     * `(A, B=, C...): R` after `Closure`; returns the index after the return type (or after `)`).
+     * A parameter's `=` (optional) or `...` (variadic) marker is part of the signature. A single
+     * primitive parameter, `Closure(int)`, reaches us as one cast token.
      */
     private fun scanClosureSignature(open: Int, s: Scan): Int? {
         if (typeAt(open) in PhpTokenTypes.tsCAST_OPS) return scanClosureReturnType(open + 1, s)
@@ -493,7 +494,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 val u = scanUnion(j, s) ?: return null
                 if (s.extraClosers > 0) return null
                 var next = sig(u.end)
-                if (typeAt(next) == PhpTokenTypes.opVARIADIC) next = sig(next + 1)
+                if (typeAt(next) == PhpTokenTypes.opVARIADIC || typeAt(next) == PhpTokenTypes.opASGN) next = sig(next + 1)
                 if (typeAt(next) == PhpTokenTypes.opCOMMA) {
                     j = sig(next + 1)
                     continue

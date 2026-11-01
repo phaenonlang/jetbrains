@@ -189,7 +189,7 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
                 while (true) {
                     union() ?: return false
                     skipSpaces()
-                    if (s.startsWith("...", i)) i += 3
+                    if (s.startsWith("...", i)) i += 3 else if (peek() == '=') i++
                     skipSpaces()
                     when (peek()) {
                         ',' -> i++

@@ -65,6 +65,8 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
             "(T, int): bool",
             ": list<(string, int)>",
             "(int): bool",
+            "(string, int=): void",
+            "(string, string...): (int, string)",
             "is list<int>",
             "as map<string, Money>",
             "as? Money",

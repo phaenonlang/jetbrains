@@ -52,6 +52,11 @@ final class Box<T of object = object> implements \IteratorAggregate<int, T>
         return fn (int $x): bool => $x > 0;
     }
 
+    public function kubectl(Closure(string, int=): void $log): Closure(string, string...): (int, string)
+    {
+        return static fn (string $stdin, string ...$args): array => [0, $stdin];
+    }
+
     public function all(): iterable<T>
     {
         yield from $this->items;

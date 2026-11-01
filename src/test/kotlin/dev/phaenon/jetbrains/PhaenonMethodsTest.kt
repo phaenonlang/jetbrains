@@ -139,6 +139,8 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
                     private readonly (string, int) ${'$'}pair,
                     private readonly class<User> ${'$'}userClass,
                     private readonly \Closure(T): bool ${'$'}pred,
+                    private readonly \Closure(string, int=): void ${'$'}log,
+                    private readonly \Closure(string, string...): (int, string) ${'$'}kubectl,
                     private readonly T ${'$'}item,
                     private readonly Seq|list<int> ${'$'}mixed,
                 ) {
@@ -160,6 +162,8 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
         assertEquals(listOf("\\int[]", "\\string[]"), types["pair"])
         assertEquals(listOf("\\class-string<\\App\\User>"), types["userClass"])
         assertEquals(listOf("\\Closure"), types["pred"])
+        assertEquals(listOf("\\Closure"), types["log"])
+        assertEquals(listOf("\\Closure"), types["kubectl"])
         assertEquals(listOf("\\mixed"), types["item"])
         assertEquals(listOf("\\Phaenon\\Internal\\ListMethods<int>", "\\Phaenon\\Seq", "\\int[]"), types["mixed"])
         assertEquals(listOf("\\Phaenon\\Internal\\ListMethods<mixed>", "\\array"), types["xs"])
