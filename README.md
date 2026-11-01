@@ -54,6 +54,16 @@ PhpStorm. A `.phn` file *is* a PHP file to the IDE: PHP file type, PHP language,
 Both plugin dependencies (`com.jetbrains.php`, `org.jetbrains.plugins.textmate`) are optional in
 `plugin.xml`; the PHP part lives in `phaenon-php.xml`, the fallback in `phaenon-textmate.xml`.
 
+One consequence of sharing the PHP file type: the stub trees PhpStorm stores for `.phn` files
+carry PhpStorm's stub version, not the plugin's (the platform versions stubs by language, through
+the PHP parser definition's file node type, and never asks a file's root element type). When a
+plugin update changes what a `.phn` parses into — a new erasure, `fun` handed over as `function` —
+the stored stubs no longer match the PSI and PhpStorm reports "PSI and index do not match". So the
+plugin keeps its own PSI version (`PhaenonFileElementType.PSI_VERSION`), and on the first start of
+a project after an update that changed it, `PhaenonReindexActivity` requests a re-index of the
+project's `.phn` files, once. An install older than this mechanism has no stored version and is
+re-indexed the same way; if the error still shows, **File | Invalidate Caches** is the manual remedy.
+
 Why not a Phaenon *language*? A PHP dialect (a `Language` with PHP as base) was the first attempt.
 It works for completion and inspections through the base-language fallback, but PhpStorm's file
 element type is bound to the PHP language and the platform asserts that a file's root element type
@@ -148,6 +158,11 @@ To also verify against a locally installed IDE:
   undefined-method inspection accepts the method form and still reports a misspelt name, also at
   the end of a chain; erased declarations get their types; chains and `foreach` keep the element
   type; `readonly` properties with erased types are not errors.
+- `PhaenonReindexActivityTest`: a project whose stored PSI version is absent or older asks the
+  index to redo exactly its `.phn` files and stores the current version; the current version, a
+  second start and a project without `.phn` files request nothing; after a real re-index the
+  classes of a `.phn` still resolve. Runs off the EDT, as the IDE runs a project activity, and
+  checks that the activity's coroutine metadata is a version the bundled Kotlin library reads.
 - `PhaenonRealTreeTest`: volume. Every `.phn` file under the directories named by `PHAENON_TREES`
   (colon-separated; `vendor` excluded) is added to the test project; the test fails listing
   `file:line: message` for every syntax error and every stub tree that does not match its text,

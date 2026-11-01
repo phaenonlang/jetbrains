@@ -13,6 +13,13 @@ version = providers.gradleProperty("pluginVersion").get()
 kotlin {
     // PhpStorm 2025.1+ runs on JBR 21, so the plugin targets Java 21 bytecode.
     jvmToolchain(21)
+    compilerOptions {
+        // The plugin runs on the Kotlin standard library the IDE bundles, 2.1 in PhpStorm 2025.1.
+        // A newer API version lets the compiler call library functions that are not there, and it
+        // writes coroutine debug metadata that library rejects: with the IDE's coroutine debug
+        // probes installed, a suspended coroutine of the plugin then never resumes.
+        apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+    }
 }
 
 repositories {

@@ -22,8 +22,27 @@ import com.jetbrains.php.lang.PhpLanguage
  * without the erasures). Everything below the root is therefore ordinary PHP PSI, produced by
  * PhpStorm, and the stub builder, indices, inspections and refactorings never learn that the file
  * was special.
+ *
+ * That is also why the stubs of a `.phn` file carry PhpStorm's stub version and not the plugin's:
+ * the platform keys the version by language, through the PHP parser definition's file node type
+ * ([PSI_VERSION] explains what the plugin does instead).
  */
 object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INSTANCE) {
+
+    /**
+     * The version of the PSI a `.phn` file produces. **Bump it whenever [PhaenonLexer], the
+     * erasures, [PhaenonPsiBuilder] or [PhaenonParserDefinition] change which elements a `.phn`
+     * parses into**: an erasure added or removed, a keyword handed to the parser differently, a
+     * body no longer lazy.
+     *
+     * The stub trees PhpStorm stores for `.phn` files are versioned by the PHP file type (the
+     * platform asks the language's parser definition, never the file's content element type), so
+     * a plugin update that changes the PSI leaves stale stub trees in the index and the next AST
+     * load fails with "PSI and index do not match: stub count doesn't match stubbed node length".
+     * [PhaenonReindexActivity] re-indexes the `.phn` files of a project once this number differs
+     * from the one it stored.
+     */
+    const val PSI_VERSION: Int = 1
 
     override fun parseContents(chameleon: ASTNode): ASTNode? {
         val project = chameleon.psi.project

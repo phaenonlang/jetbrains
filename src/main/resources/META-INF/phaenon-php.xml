@@ -30,6 +30,10 @@
         <psi.declarationProvider implementation="dev.phaenon.jetbrains.PhaenonTypeParameterDeclarations"/>
         <findUsagesHandlerFactory implementation="dev.phaenon.jetbrains.PhaenonTypeParameterFindUsagesHandlerFactory"/>
         <referencesSearch implementation="dev.phaenon.jetbrains.PhaenonDocTypeReferenceSearcher"/>
+
+        <!-- The stubs of .phn files carry PhpStorm's stub version: after a plugin update that changed
+             the PSI they are re-indexed once (PhaenonFileElementType.PSI_VERSION). -->
+        <postStartupActivity implementation="dev.phaenon.jetbrains.PhaenonReindexActivity"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.jetbrains.php">

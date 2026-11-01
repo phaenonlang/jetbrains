@@ -40,7 +40,10 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   per tree: files, files with syntax errors, errors, stub mismatches, files skipped for PHP syntax
   the IDE's level lacks. Run it after every lexer or builder change; a `.phn` the compiler parses
   (`../phaenon/bin/phn check`) and PhpStorm does not is a plugin bug unless plain PHP fails alike
-  (the test checks that itself and lists such files instead of counting them).
+  (the test checks that itself and lists such files instead of counting them). A change that
+  alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
+  `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update
+  (README § How it works).
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
   element-array unions; the implied `strict_types` is not modelled; editor colouring uses the
