@@ -4,6 +4,7 @@ import com.intellij.lexer.Lexer
 import com.intellij.lexer.LookAheadLexer
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.tree.TokenSet
+import com.jetbrains.php.lang.documentation.phpdoc.parser.PhpDocElementTypes
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
 
@@ -76,7 +77,8 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             emit(Plan(1))
             return
         }
-        val plan = tryIs(c)
+        val plan = tryFun(c)
+            ?: tryIs(c)
             ?: tryAs(c)
             ?: tryTypeAlias(c)
             ?: tryDeclarationTypeParams(c)
@@ -170,6 +172,20 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     }
 
     // ---------------------------------------------------------------- triggers
+
+    /**
+     * `fun name(`: the `function` keyword spelled short, `public` implied (design/functions.md §1).
+     * The token keeps its text and takes the keyword's type; a method without a visibility is
+     * public to PhpStorm's parser as it is to PHP. `fun(` and `fun =` stay identifiers.
+     */
+    private fun tryFun(c: Tok): Plan? {
+        if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "fun" || prevSig !in FUN_PREDECESSORS) return null
+        var next = sig(1)
+        if (typeAt(next) == PhpTokenTypes.opBIT_AND) next = sig(next + 1)
+        val t = typeAt(next) ?: return null
+        if (t != PhpTokenTypes.IDENTIFIER && t !in PhpTokenTypes.tsKEYWORDS) return null
+        return Plan(1).replace(0, PhpTokenTypes.kwFUNCTION)
+    }
 
     /** `$x is T`: `instanceof` for a class name, erased otherwise. */
     private fun tryIs(c: Tok): Plan? {
@@ -504,7 +520,8 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     }
 
     private companion object {
-        val SKIPPABLE: TokenSet = TokenSet.orSet(TokenSet.create(PhpTokenTypes.WHITE_SPACE, PhaenonTokenTypes.ERASED), PhpTokenTypes.COMMENTS)
+        /** Trivia between significant tokens: whitespace, erased text, comments — a docblock is a token of its own, outside COMMENTS. */
+        val SKIPPABLE: TokenSet = TokenSet.orSet(TokenSet.create(PhpTokenTypes.WHITE_SPACE, PhaenonTokenTypes.ERASED, PhpDocElementTypes.DOC_COMMENT), PhpTokenTypes.COMMENTS)
 
         /** What `$x is T` may follow: a value. */
         val EXPRESSION_END: TokenSet = TokenSet.orSet(
@@ -525,6 +542,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         )
 
         val STATEMENT_START: Set<IElementType?> = setOf(null, PhpTokenTypes.opSEMICOLON, PhpTokenTypes.chRBRACE, PhpTokenTypes.chLBRACE)
+
+        /** Where a declaration may start: a statement boundary, a modifier, the `]` of an attribute. */
+        val FUN_PREDECESSORS: Set<IElementType?> = STATEMENT_START + PhpTokenTypes.tsMODIFIERS.types + PhpTokenTypes.chRBRACKET
 
         /** `::` and `->`: after them a keyword is a member name. */
         val MEMBER_ACCESS: TokenSet = TokenSet.create(PhpTokenTypes.SCOPE_RESOLUTION, PhpTokenTypes.ARROW)

@@ -1,5 +1,6 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.codeInsight.completion.AddSpaceInsertHandler
 import com.intellij.codeInsight.completion.CompletionContributor
 import com.intellij.codeInsight.completion.CompletionInitializationContext
 import com.intellij.codeInsight.completion.CompletionParameters
@@ -13,10 +14,14 @@ import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.openapi.project.Project
 import com.intellij.patterns.PlatformPatterns
+import com.intellij.psi.PsiComment
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.ProcessingContext
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.codeInsight.PhpCodeInsightUtil
+import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamespace
 import com.jetbrains.php.refactoring.PhpAliasImporter
@@ -34,6 +39,7 @@ class PhaenonErasedCompletionContributor : CompletionContributor() {
 
     init {
         extend(CompletionType.BASIC, PlatformPatterns.psiElement(PhaenonTokenTypes.ERASED), Provider)
+        extend(CompletionType.BASIC, PlatformPatterns.psiElement(), FunProvider)
     }
 
     override fun beforeCompletion(context: CompletionInitializationContext) {
@@ -44,6 +50,22 @@ class PhaenonErasedCompletionContributor : CompletionContributor() {
         val before = if (context.startOffset > 0) context.file.findElementAt(context.startOffset - 1) else null
         if (PhaenonTokenTypes.isErased(at) || PhaenonTokenTypes.isErased(before)) {
             context.dummyIdentifier = CompletionInitializationContext.DUMMY_IDENTIFIER_TRIMMED
+        }
+    }
+
+    /** `fun` where a declaration may start in a `.phn` file: a class body, a statement, after modifiers or an attribute. */
+    private object FunProvider : CompletionProvider<CompletionParameters>() {
+        override fun addCompletions(parameters: CompletionParameters, context: ProcessingContext, result: CompletionResultSet) {
+            if (!PhaenonFiles.isPhaenonFile(parameters.originalFile.viewProvider.virtualFile)) return
+            if (!"fun".startsWith(result.prefixMatcher.prefix) || result.prefixMatcher.prefix.isEmpty()) return
+            var before: PsiElement? = PsiTreeUtil.prevLeaf(parameters.position, true)
+            while (before is PsiWhiteSpace || before is PsiComment) before = PsiTreeUtil.prevLeaf(before, true)
+            val type = before?.node?.elementType
+            if (type == null || type === PhpTokenTypes.chLBRACE || type === PhpTokenTypes.chRBRACE || type === PhpTokenTypes.opSEMICOLON ||
+                type === PhpTokenTypes.chRBRACKET || type in PhpTokenTypes.tsMODIFIERS
+            ) {
+                result.addElement(LookupElementBuilder.create("fun").bold().withInsertHandler(AddSpaceInsertHandler.INSTANCE))
+            }
         }
     }
 

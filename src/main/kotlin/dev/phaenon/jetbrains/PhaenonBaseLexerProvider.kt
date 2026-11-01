@@ -1,6 +1,9 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.lexer.DelegateLexer
 import com.intellij.lexer.Lexer
+import com.intellij.psi.tree.IElementType
+import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.jetbrains.php.lang.lexer.PhpBaseLexerProvider
@@ -13,9 +16,33 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  * editor highlighter provider is keyed by the PHP file type and builds its own lexer. It asks
  * `com.jetbrains.php.baseLexerProvider` extensions first, which lets us hand it the same
  * open-tag-optional lexer the parser uses, so what you see while typing matches the PSI.
+ * [PhaenonHighlightingLexer] colours `fun` as the keyword it is.
  */
 class PhaenonBaseLexerProvider : PhpBaseLexerProvider {
 
     override fun getBaseLexer(project: Project?, file: VirtualFile?): Lexer? =
-        if (PhaenonFiles.isPhaenonFile(file)) PhpWithOptionalOpenTagLexer() else null
+        if (PhaenonFiles.isPhaenonFile(file)) PhaenonHighlightingLexer(PhpWithOptionalOpenTagLexer()) else null
+}
+
+/**
+ * The editor's lexer with `fun` read as the `function` keyword where it declares something:
+ * before a name, or `&` and a name. [PhaenonLexer] does the same for the parser.
+ */
+class PhaenonHighlightingLexer(delegate: Lexer) : DelegateLexer(delegate) {
+
+    override fun getTokenType(): IElementType? {
+        val type = super.getTokenType()
+        if (type !== PhpTokenTypes.IDENTIFIER) return type
+        val text = bufferSequence
+        val start = tokenStart
+        val end = tokenEnd
+        if (end - start != 3 || text[start] != 'f' || text[start + 1] != 'u' || text[start + 2] != 'n') return type
+        var i = end
+        while (i < text.length && text[i].isWhitespace()) i++
+        if (i < text.length && text[i] == '&') {
+            i++
+            while (i < text.length && text[i].isWhitespace()) i++
+        }
+        return if (i < text.length && (text[i].isLetter() || text[i] == '_')) PhpTokenTypes.kwFUNCTION else type
+    }
 }
