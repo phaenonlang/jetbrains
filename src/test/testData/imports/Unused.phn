@@ -1,0 +1,8 @@
+namespace App;
+
+use App\Model\Unused;
+use App\Model\Converted;
+
+final class Nothing
+{
+}

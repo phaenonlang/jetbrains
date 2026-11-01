@@ -1,0 +1,15 @@
+namespace App;
+
+use App\Model\Unused;
+use App\Model\Converted as Target;
+use App\Model\{GroupedErased, GroupedNative};
+
+final class Aliased
+{
+    fun of(GroupedNative $native, mixed $x): list<GroupedErased>
+    {
+        $y = $x as Target;
+
+        return [];
+    }
+}

@@ -1,0 +1,14 @@
+namespace App;
+
+use App\Model\Native;
+use App\Model\ReturnOnly;
+
+use function App\Model\helper;
+
+final class Kinds
+{
+    fun of(Native $native): list<ReturnOnly>
+    {
+        return [helper()];
+    }
+}

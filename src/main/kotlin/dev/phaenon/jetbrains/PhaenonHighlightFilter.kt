@@ -98,8 +98,7 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
     private fun importIsUsedInAnErasedType(info: HighlightInfo, file: PsiFile): Boolean {
         val leaf = file.findElementAt(info.startOffset) ?: return false
         val use = PsiTreeUtil.getParentOfType(leaf, PhpUse::class.java, false) ?: return false
-        val short = use.aliasName ?: use.fqn.substringAfterLast('\\')
-        return short.isNotEmpty() && PhaenonErasedNames.mentions(file, short)
+        return PhaenonErasedNames.isUsedByErasedConstruct(use)
     }
 
     private fun otherDeclarationIsHandWritten(info: HighlightInfo, file: PsiFile): Boolean {

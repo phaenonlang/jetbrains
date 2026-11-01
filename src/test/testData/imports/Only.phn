@@ -1,0 +1,14 @@
+namespace App;
+
+use App\Model\ReturnOnly;
+use App\Model\ArgOnly;
+
+final class Only
+{
+    private list<ArgOnly> $args = [];
+
+    fun returns(): list<ReturnOnly>
+    {
+        return [];
+    }
+}

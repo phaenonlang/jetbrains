@@ -106,6 +106,16 @@ object PhaenonErasedNames {
         return if (known) inNamespace else qualifier
     }
 
+    /**
+     * Whether an erased construct of the file uses [import]: its short name (the alias, else the
+     * last segment) appears in one. What PhpStorm cannot see there counts as a use, as it does for
+     * `phn check` (P2013); the unused-import inspection and Optimize Imports both go by this.
+     */
+    fun isUsedByErasedConstruct(import: PhpUse): Boolean {
+        val short = import.aliasName ?: import.fqn.substringAfterLast('\\')
+        return short.isNotEmpty() && mentions(import.containingFile, short)
+    }
+
     /** Whether the short name of an import appears in an erased construct anywhere in the file. */
     fun mentions(file: PsiFile, shortName: String): Boolean =
         CachedValuesManager.getCachedValue(file) {

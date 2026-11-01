@@ -1,0 +1,38 @@
+namespace App;
+
+use App\Model\Unused;
+use App\Model\UnionOnly;
+use App\Model\SigOnly;
+use App\Model\ReturnOnly;
+use App\Model\QualifiedSigOnly;
+use App\Model\Native;
+use App\Model\IsOnly;
+use App\Model\DocOnly;
+use App\Model\AsOnly;
+use App\Model\ArgOnly;
+
+final class Box<T>
+{
+}
+
+final class Erased
+{
+    /**
+     * @return list<DocOnly>
+     */
+    fun docs(): array
+    {
+        return [];
+    }
+
+    fun of(Native $native, string|list<UnionOnly> $union, Closure(SigOnly): bool $test, \Closure(QualifiedSigOnly): bool $other): list<ReturnOnly>
+    {
+        $box = new Box<ArgOnly>();
+        if ($native is list<IsOnly>) {
+            return [];
+        }
+        $as = $native as AsOnly;
+
+        return [];
+    }
+}

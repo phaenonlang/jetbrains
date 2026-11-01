@@ -1,0 +1,12 @@
+namespace App {
+    use App\Model\Native;
+    use App\Model\ReturnOnly;
+
+    final class Braced
+    {
+        fun of(Native $native): list<ReturnOnly>
+        {
+            return [];
+        }
+    }
+}

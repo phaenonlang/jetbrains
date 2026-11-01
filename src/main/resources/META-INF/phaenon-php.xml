@@ -14,6 +14,10 @@
              .php compiled from a .phn is not "another declaration" of its classes. -->
         <daemon.highlightInfoFilter implementation="dev.phaenon.jetbrains.PhaenonHighlightFilter"/>
 
+        <!-- Optimize Imports in .phn files: PhpStorm's optimizer, but an import an erased construct uses
+             (`list<DomainEvent>`) stays. First: the platform takes the first optimizer that supports a file. -->
+        <lang.importOptimizer language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonImportOptimizer"/>
+
         <!-- Class names inside erased constructs (`list<User>`) are references, complete, and are not prose. -->
         <psi.referenceContributor language="PHP" implementation="dev.phaenon.jetbrains.PhaenonErasedReferenceContributor"/>
         <completion.contributor language="PHP" order="first"

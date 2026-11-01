@@ -1,0 +1,15 @@
+namespace App;
+
+use App\Model\DocOnly;
+use App\Model\Native;
+
+final class Layout
+{
+    /**
+     * @return DocOnly
+     */
+    fun of(Native $native): object
+    {
+        return new DocOnly();
+    }
+}

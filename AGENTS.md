@@ -35,10 +35,10 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   parameter — keep them in step when the stdlib changes.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
   `syntax/Constructs.phn` uses every Phaenon construct; `methods/` holds the method-syntax fixtures,
-  `closure/` the closure-type ones. Tests set the IDE's highest PHP level: the test project
-  defaults to PHP 5.6. It also lacks PhpStorm's bundled PHP stubs (they are indexed only for a
-  project with a PHP module), so a test that needs `\Closure` and the like copies a stand-in
-  (`closure/stubs/Closure.php`).
+  `closure/` the closure-type ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).
+  Tests set the IDE's highest PHP level: the test project defaults to PHP 5.6. It also lacks
+  PhpStorm's bundled PHP stubs (they are indexed only for a project with a PHP module), so a test
+  that needs `\Closure` and the like copies a stand-in (`closure/stubs/Closure.php`).
 - `PhaenonRealTreeTest` runs the plugin over whole trees (`PHAENON_TREES`, above) and reports
   per tree: files, files with syntax errors, errors, stub mismatches, files skipped for PHP syntax
   the IDE's level lacks. Run it after every lexer or builder change; a `.phn` the compiler parses
@@ -50,7 +50,9 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
   element-array unions; the implied `strict_types` is not modelled; editor colouring uses the
-  internal extension point `com.jetbrains.php.baseLexerProvider`.
+  internal extension point `com.jetbrains.php.baseLexerProvider`. PhpStorm's PHP formatter does
+  nothing to a `.phn` file, so code a feature inserts must bring its own line breaks
+  (`PhaenonImportOptimizer` lays out the import block itself).
 - Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, … with a body that says
   what changed and why), with no attribution lines and no `Co-Authored-By`: the repository will be
   public.
