@@ -1,10 +1,16 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.codeHighlighting.BackgroundEditorHighlighter
+import com.intellij.ide.structureView.StructureViewBuilder
+import com.intellij.openapi.actionSystem.ActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.fileEditor.FileEditorLocation
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorPolicy
 import com.intellij.openapi.fileEditor.FileEditorProvider
+import com.intellij.openapi.fileEditor.FileEditorState
+import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
@@ -59,7 +65,19 @@ class PhaenonCompiledTextEditor(
     private val created = System.currentTimeMillis()
     private var navigated = false
 
+    // Kotlin's delegation forwards the interfaces' abstract methods only: each default method is
+    // forwarded by hand, or the compiled file would lose its highlighting, structure view and state.
     override fun getFile(): VirtualFile = compiled
+    override fun isEditorLoaded(): Boolean = inner.isEditorLoaded
+    override fun getBackgroundHighlighter(): BackgroundEditorHighlighter? = inner.backgroundHighlighter
+    override fun getStructureViewBuilder(): StructureViewBuilder? = inner.structureViewBuilder
+    override fun getTabActions(): ActionGroup? = inner.tabActions
+    override fun getCurrentLocation(): FileEditorLocation? = inner.currentLocation
+    override fun getState(level: FileEditorStateLevel): FileEditorState = inner.getState(level)
+    override fun setState(state: FileEditorState, exactState: Boolean) = inner.setState(state, exactState)
+    override fun getFilesToRefresh(): List<VirtualFile> = inner.filesToRefresh
+    override fun selectNotify() = inner.selectNotify()
+    override fun deselectNotify() = inner.deselectNotify()
 
     override fun navigateTo(navigatable: Navigatable) {
         val first = !navigated

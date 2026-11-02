@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import java.io.File
+import java.io.RandomAccessFile
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -40,14 +41,38 @@ object PhaenonLineMaps {
         return map
     }
 
-    private fun read(compiled: VirtualFile, disk: File?): PhaenonLineMap? {
-        val text = try {
-            if (disk != null) disk.readText(Charsets.UTF_8) else String(compiled.contentsToByteArray(), Charsets.UTF_8)
-        } catch (e: Exception) {
-            return null
-        }
-        return (PhaenonLineMap.read(text) as? PhaenonLineMap.Parsed.Map)?.map
+    private fun read(compiled: VirtualFile, disk: File?): PhaenonLineMap? = try {
+        if (disk != null) readDisk(disk) else (PhaenonLineMap.read(String(compiled.contentsToByteArray(), Charsets.UTF_8)) as? PhaenonLineMap.Parsed.Map)?.map
+    } catch (e: Exception) {
+        null
     }
+
+    /**
+     * The file's tail first, since the map is its last line: the debugger asks of every file a frame
+     * is in, vendor code too. The whole file is read only when the last line is longer than the tail,
+     * or for a compiled file (the marker in its header) whose map may precede `__halt_compiler()`.
+     */
+    private fun readDisk(disk: File): PhaenonLineMap? = RandomAccessFile(disk, "r").use { file ->
+        val length = file.length()
+        val tailLength = minOf(length, TAIL.toLong()).toInt()
+        val tail = ByteArray(tailLength).also { file.seek(length - tailLength); file.readFully(it) }
+        val tailText = String(tail, Charsets.UTF_8)
+        val whole = tailLength.toLong() == length
+        val lastLineInTail = whole || tailText.trimEnd('\n', '\r').contains('\n')
+        if (lastLineInTail) {
+            when (val parsed = PhaenonLineMap.read(tailText)) {
+                is PhaenonLineMap.Parsed.Map -> return parsed.map
+                PhaenonLineMap.Parsed.Absent -> if (whole) return null
+                else -> return null
+            }
+            val head = ByteArray(minOf(length, HEAD.toLong()).toInt()).also { file.seek(0); file.readFully(it) }
+            if (!PhaenonFiles.hasMarkerInHeader(String(head, Charsets.UTF_8))) return null
+        }
+        (PhaenonLineMap.read(disk.readText(Charsets.UTF_8)) as? PhaenonLineMap.Parsed.Map)?.map
+    }
+
+    private const val TAIL = 65_536
+    private const val HEAD = 512
 
     private fun diskFile(file: VirtualFile): File? =
         if (file.isInLocalFileSystem) File(file.path).takeIf { it.isFile } else null

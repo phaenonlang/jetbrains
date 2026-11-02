@@ -82,6 +82,24 @@ class PhaenonNavigationTest : BasePlatformTestCase() {
         assertEquals(2, links("$path:14 and $path(24)").size)
     }
 
+    /** What PHP 8.5 printed for `bin/fail.php` (an uncaught exception thrown in an expression body): every compiled position links to its source line. */
+    fun testARealTrace() {
+        val root = this.root.path
+        val failing = "$root/.src/Domain/Failing.php"
+        val trace = listOf(
+            "PHP Fatal error:  Uncaught DomainException: not positive: -1 in $failing:13",
+            "Stack trace:",
+            "#0 $failing(18): App\\Domain\\Failing->check(-1)",
+            "#1 $root/bin/fail.php(3): App\\Domain\\Failing->run()",
+            "#2 {main}",
+            "  thrown in $failing on line 13",
+        )
+        assertEquals(
+            listOf(listOf("Failing.phn:4"), emptyList(), listOf("Failing.phn:7"), emptyList(), emptyList(), listOf("Failing.phn:4")),
+            trace.map { line -> links(line).map { it.first.substringBefore(' ') } },
+        )
+    }
+
     fun testTheRangeIsWhereTheTextIs() {
         val line = "#0 $path(24): x"
         val (_, start) = links(line, before = 37).single()
@@ -144,6 +162,25 @@ class PhaenonNavigationTest : BasePlatformTestCase() {
         val selected = FileEditorManager.getInstance(project).selectedTextEditor!!
         assertEquals(source, selected.virtualFile)
         assertEquals(9, selected.caretModel.logicalPosition.line)
+    }
+
+    /** Kotlin forwards an interface's abstract methods only: every default one must be forwarded by hand, today's and tomorrow's. */
+    fun testTheWrappedEditorForwardsEveryDefaultMethod() {
+        val defaults = listOf(com.intellij.openapi.fileEditor.TextEditor::class.java).flatMap { type ->
+            generateSequence(listOf<Class<*>>(type)) { level -> level.flatMap { it.interfaces.toList() }.takeIf { it.isNotEmpty() } }.flatten()
+        }.distinct().flatMap { it.declaredMethods.toList() }.filter { it.isDefault }
+        val wrapper = PhaenonCompiledTextEditor::class.java
+        val missing = defaults.filter { method ->
+            runCatching { wrapper.getDeclaredMethod(method.name, *method.parameterTypes) }.isFailure
+        }.map { "${it.declaringClass.simpleName}.${it.name}" }
+        assertEmpty(missing)
+        val editor = PhaenonCompiledEditorProvider().createEditor(project, compiled) as PhaenonCompiledTextEditor
+        try {
+            assertEquals(compiled, editor.file)
+            assertNotNull(editor.structureViewBuilder)
+        } finally {
+            Disposer.dispose(editor)
+        }
     }
 
     fun testTheBannerNamesTheSource() {
