@@ -36,17 +36,24 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   `.phn` files and decides the spacing next to erased constructs; `PhaenonDocCommentEnterHandler`,
   `PhaenonOverrides` (Implement / Override Methods and override completion) and
   `PhaenonPipeConversionIntention` make PhpStorm's generated code Phaenon's (fixtures
-  `testData/formatting/`, `testData/implement/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  `testData/formatting/`, `testData/implement/`); `PhaenonDocumentationProvider` and
+  `PhaenonParameterInfoHandler` print Phaenon's types as written in quick documentation, the
+  Ctrl+hover hint and parameter info (`PhaenonTypePresentation` turns a `PhpType` back into
+  Phaenon's spelling; fixtures `testData/docs/`, `testData/classstring/`); PHP 8.6 placeholders
+  are identifiers to the parser (`PhaenonLexer`), typed as closures (`PhaenonPartialApplication`),
+  and PhpStorm's findings on 8.6 code are dropped by target (`PhaenonTarget` reads `phaenon.json` and
+  composer.json; fixtures `testData/php86/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
   parameter — keep them in step when the stdlib changes.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
   `syntax/Constructs.phn` uses every Phaenon construct; `methods/` holds the method-syntax fixtures,
-  `closure/` the closure-type ones, `classstring/` the `class<T>` ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).
+  `closure/` the closure-type ones, `classstring/` the `class<T>` ones, `php86/` the PHP 8.6 ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).
   Tests set the IDE's highest PHP level: the test project defaults to PHP 5.6. It also lacks
   PhpStorm's bundled PHP stubs (they are indexed only for a project with a PHP module), so a test
-  that needs `\Closure` and the like copies a stand-in (`closure/stubs/Closure.php`).
+  that needs `\Closure` and the like copies a stand-in (`closure/stubs/Closure.php`), or the
+  bundled stub itself from the PHP plugin's resources (`stubs/Core/Core_c.php`, `PhaenonPhp86Test`).
 - `PhaenonRealTreeTest` runs the plugin over whole trees (`PHAENON_TREES`, above) and reports
   per tree: files, files with syntax errors, errors, stub mismatches, files skipped for PHP syntax
   the IDE's level lacks. Run it after every lexer or builder change; a `.phn` the compiler parses
@@ -57,7 +64,8 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   (README § How it works).
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
-  element-array unions; the implied `strict_types` is not modelled; editor colouring uses the
+  element-array unions, a partial application is also its callee's result to PhpStorm; the
+  implied `strict_types` is not modelled; editor colouring uses the
   internal extension point `com.jetbrains.php.baseLexerProvider`. Code a feature inserts is laid out
   by PhpStorm's formatter, as in PHP: insert it unformatted and let the reformatting that follows
   the command do it. Behaviour of a newer PhpStorm (the PHP 8.5 pipe and its inspection) is tested
