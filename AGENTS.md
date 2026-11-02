@@ -12,6 +12,7 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ./gradlew buildPlugin    # → build/distributions/phaenon-jetbrains-<version>.zip
 ./gradlew verifyPlugin   # JetBrains Plugin Verifier
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
+./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # tests against an installed, newer IDE
 
 PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper \
   ./gradlew test --tests '*RealTree*'   # parse every .phn of the dogfood trees; skipped when unset
@@ -28,7 +29,11 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   the parser through `PhaenonParserDefinition`) whose class names are references
   (`PhaenonErasedReferenceContributor`, `PhaenonErasedNames`; fixtures `testData/erased/`),
   completed by `PhaenonErasedCompletionContributor` and left alone by the spell-checker
-  (`PhaenonSpellcheckingStrategy`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  (`PhaenonSpellcheckingStrategy`); `PhaenonFormattingModelBuilder` runs PhpStorm's PHP formatter on
+  `.phn` files and decides the spacing next to erased constructs; `PhaenonDocCommentEnterHandler`,
+  `PhaenonOverrides` (Implement / Override Methods and override completion) and
+  `PhaenonPipeConversionIntention` make PhpStorm's generated code Phaenon's (fixtures
+  `testData/formatting/`, `testData/implement/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
@@ -50,9 +55,10 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
   element-array unions; the implied `strict_types` is not modelled; editor colouring uses the
-  internal extension point `com.jetbrains.php.baseLexerProvider`. PhpStorm's PHP formatter does
-  nothing to a `.phn` file, so code a feature inserts must bring its own line breaks
-  (`PhaenonImportOptimizer` lays out the import block itself).
+  internal extension point `com.jetbrains.php.baseLexerProvider`. Code a feature inserts is laid out
+  by PhpStorm's formatter, as in PHP: insert it unformatted and let the reformatting that follows
+  the command do it. Behaviour of a newer PhpStorm (the PHP 8.5 pipe and its inspection) is tested
+  with `-PtestIdePath`; on 2025.1 those tests return early.
 - Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, … with a body that says
   what changed and why), with no attribution lines and no `Co-Authored-By`: the repository will be
   public.
