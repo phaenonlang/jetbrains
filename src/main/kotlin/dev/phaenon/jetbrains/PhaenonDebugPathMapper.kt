@@ -1,8 +1,9 @@
 package dev.phaenon.jetbrains
 
-import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.XSourcePosition
@@ -60,18 +61,18 @@ class PhaenonDebugPathMapper : PhpTemplateLanguagePathMapper() {
         if (phpPosition == null) return null
         val compiled = phpPosition.file
         val source = PhaenonLineMaps.forward(compiled, phpPosition.line) ?: return phpPosition
-        val position = ReadAction.compute<XSourcePosition?, RuntimeException> {
+        val position = ApplicationManager.getApplication().runReadAction(Computable<XSourcePosition?> {
             XDebuggerUtil.getInstance().createPosition(source.file, source.line)
-        } ?: return phpPosition
+        }) ?: return phpPosition
         return PhaenonMappedPosition(position, compiled, phpPosition.line, PhaenonLineMaps.isHold(compiled, phpPosition.line))
     }
 
     override fun mapToPhp(templatePosition: XSourcePosition, project: Project, remotePathMapper: PhpPathMapper): XSourcePosition {
         if (!PhaenonFiles.isPhaenonFile(templatePosition.file)) return templatePosition
         val target = PhaenonLineMaps.reverse(templatePosition.file, templatePosition.line) ?: return templatePosition
-        return ReadAction.compute<XSourcePosition?, RuntimeException> {
+        return ApplicationManager.getApplication().runReadAction(Computable<XSourcePosition?> {
             XDebuggerUtil.getInstance().createPosition(target.file, target.line)
-        } ?: templatePosition
+        }) ?: templatePosition
     }
 
     /** No settings: the mapping comes from the compiled files themselves, not from a cache directory. */

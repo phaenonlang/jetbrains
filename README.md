@@ -631,7 +631,8 @@ index": delete `.intellijPlatform/sandbox/phaenon-jetbrains/<IDE>/system-test/in
   stack) right after `getInstance` asked `isGeneratedFile` about the breakpoint's file. If PhpStorm
   changes that, `.phn` breakpoints are no longer mapped (and not hit), while `.php` files are
   unaffected. Source-line stepping reads the platform's debugger action ids (`StepOver`, `StepInto`,
-  …, `XDebuggerActions`) as strings.
+  …, `XDebuggerActions`) as strings. The compiled file's wrapped editor forwards every method of
+  `TextEditor`, `isEditorLoaded()` among them, which is marked internal.
 - The TextMate fallback is highlighting only, and it needs the IDE's own PHP TextMate bundle
   (bundled with every JetBrains IDE) for `source.php`.
 - `com.jetbrains.php.baseLexerProvider` is marked internal by JetBrains. It is the only way to
