@@ -24,7 +24,7 @@ object PhaenonErasedNames {
     private val NOT_A_CLASS: Set<String> = setOf(
         "list", "map", "class", "bytes", "of", "out", "in", "is", "as", "type",
         "int", "float", "string", "bool", "mixed", "null", "void", "never", "object", "array", "callable", "iterable",
-        "self", "static", "parent", "true", "false",
+        "self", "static", "parent", "true", "false", "throws",
     )
 
     private val NAME: Regex = Regex("""\\?[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*""")

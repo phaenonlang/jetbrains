@@ -74,6 +74,7 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
+                isThrowsClause(leaf) -> Unit
                 PhaenonTokenTypes.isErased(leaf) -> parts.add(withClosureName(leaf, leaf.text.trim().removePrefix(":").trimStart()))
                 leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opHASH_ARRAY -> Unit
@@ -128,6 +129,7 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
+                isThrowsClause(leaf) -> Unit
                 PhaenonTokenTypes.isErased(leaf) -> first = leaf
                 leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opHASH_ARRAY -> Unit
@@ -185,9 +187,11 @@ object PhaenonErasedTypes {
         if (tail.node.elementType === PhpTokenTypes.chRPAREN) return null
         var first: PsiElement? = null
         var leaf: PsiElement? = PsiTreeUtil.prevLeaf(tail, true)
+        var end: PsiElement = tail
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
+                isThrowsClause(leaf) -> end = leaf
                 PhaenonTokenTypes.isErased(leaf) -> first = leaf
                 leaf is PsiWhiteSpace || leaf is PsiComment || type === PhpTokenTypes.opCOLON -> Unit
                 PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> first = leaf
@@ -196,9 +200,31 @@ object PhaenonErasedTypes {
             leaf = PsiTreeUtil.prevLeaf(leaf, true)
         }
         val start = first ?: return null
-        val text = written(start, tail)
+        val text = written(start, end)
         return text.removePrefix(":").trim().ifEmpty { null }
     }
+
+    /** Whether [leaf] is a function's erased `throws A|B` clause (design/functions.md §4). */
+    @JvmStatic
+    fun isThrowsClause(leaf: PsiElement?): Boolean =
+        leaf != null && PhaenonTokenTypes.isErased(leaf) && leaf.text.startsWith("throws") && leaf.text.getOrNull(6)?.isWhitespace() == true
+
+    /** The erased `throws` clause of a named function or method, or null when it declares none. */
+    @JvmStatic
+    fun throwsClause(function: Function): PsiElement? {
+        val tail = function.lastChild ?: return null
+        var leaf: PsiElement? = PsiTreeUtil.prevLeaf(tail, true)
+        while (leaf != null && (leaf is PsiWhiteSpace || leaf is PsiComment)) {
+            if (isThrowsClause(leaf)) return leaf
+            leaf = PsiTreeUtil.prevLeaf(leaf, true)
+        }
+        return null
+    }
+
+    /** The names a function's `throws` clause lists, as written. */
+    @JvmStatic
+    fun throwsNames(function: Function): List<String> =
+        throwsClause(function)?.text?.removePrefix("throws")?.split('|')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
     /** The `<…>` type parameter list a function or class declares, as written; null when it declares none. */
     fun writtenTypeParameters(declaration: PsiElement): String? = declarationList(declaration)?.let { normalize(it.text) }

@@ -1,0 +1,64 @@
+namespace App;
+
+use App\Errors\NotFound;
+use App\Errors\Unavailable;
+
+/** Names and their lengths. */
+interface Names {
+    fun find(int $id): ?string throws NotFound;
+
+    fun all(): list<string>;
+}
+
+trait Greets {
+    fun greet(string $who): string => 'Hello, ' . $who;
+}
+
+enum Level: int {
+    case Low = 1;
+    case High = 2;
+
+    fun label(): string => match ($this) {
+        Level::Low => 'low',
+        Level::High => 'high',
+    };
+}
+
+final readonly class Directory implements Names {
+    use Greets;
+
+    /** @param list<string> $names */
+    fun __construct(private array $names) {
+    }
+
+    fun find(int $id): ?string throws NotFound
+        => $this->names[$id] ?? throw new NotFound($id);
+
+    #[\Override]
+    fun all(): list<string> => $this->names;
+
+    fun count(): int => \count($this->names);
+
+    /** The first name. */
+    fun first(): string throws NotFound|Unavailable => $this->find(0) ?? throw new Unavailable();
+
+    fun log(string $message): void => $this->write($message);
+
+    /**
+     * Fails.
+     */
+    fun fail(string $why): never throws \LogicException => throw new \LogicException($why);
+
+    private fun write(string $message): void {
+        echo $message;
+    }
+
+    static fun of(string ...$names): self => new self(array_values($names));
+}
+
+fun twice(int $x): int => $x * 2;
+
+/** Checks the directory. */
+fun check(Directory $d): string throws NotFound {
+    return $d->find(1) ?? '';
+}

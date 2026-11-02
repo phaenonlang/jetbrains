@@ -31,6 +31,10 @@ import com.jetbrains.php.lang.parser.parsing.functions.Function
  *
  * The price is that an edit inside a body reparses the file rather than the block, which is how
  * PhpStorm worked before lazy blocks existed.
+ *
+ * An expression body, `=> expr;` (design/functions.md §3), reaches the parser as the block it
+ * compiles to: [PhaenonLexer] hands over the arrow as `{` and `return`. The source has no `}` for
+ * that block; it is closed here after its one statement, as the compiler's tree holds it.
  */
 class PhaenonPsiBuilder(private val project: Project, delegate: PsiBuilder) : PsiBuilderAdapter(delegate) {
 
@@ -41,6 +45,13 @@ class PhaenonPsiBuilder(private val project: Project, delegate: PsiBuilder) : Ps
     /** Parses the `{ … }` block at the current token into a non-lazy group statement. */
     private fun parseBlockNow() {
         val block = mark()
+        if (tokenText == ARROW_BRACE) {
+            // `=> expr;`: the `return expr;` (or `expr;` under void and never) the arrow stands for.
+            php.match(PhpTokenTypes.chLBRACE)
+            Statement.parse(php)
+            block.done(PhpElementTypes.NON_LAZY_GROUP_STATEMENT)
+            return
+        }
         php.match(PhpTokenTypes.chLBRACE)
         while (!php.eof() && !php.compare(PhpTokenTypes.chRBRACE)) {
             val before = php.currentOffset
@@ -58,6 +69,11 @@ class PhaenonPsiBuilder(private val project: Project, delegate: PsiBuilder) : Ps
         }
         php.match(PhpTokenTypes.chRBRACE)
         block.done(PhpElementTypes.NON_LAZY_GROUP_STATEMENT)
+    }
+
+    private companion object {
+        /** The text of the `{` an expression body's arrow begins with: its first character. */
+        const val ARROW_BRACE = "="
     }
 
     private inner class Marker(val delegate: PsiBuilder.Marker) : PsiBuilder.Marker {

@@ -44,6 +44,11 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  *   PSI. PhpStorm's levels stop at PHP 8.5 and read `?` there as a syntax error.
  *   [PhaenonTypeProvider] types the call as the closure it creates. The variadic placeholder
  *   `f(1, ...)` is left to PhpStorm, which parses it as a spread without an operand.
+ * - D18 (design/functions.md §3, §4): a named function's `throws A|B` clause, after its parameters
+ *   or its return type, is erased whole, its names references like any erased type's; an expression
+ *   body `=> expr;` is handed over as the block it compiles to, the arrow's two characters split into
+ *   `{` and `return` (`{` and an erased `>` under `void` or `never`), and [PhaenonPsiBuilder] closes
+ *   that block after its one statement, where the source has no `}`.
  * - `concurrently` and `spawn` (design/concurrency.md §11): a block used as a statement loses
  *   its keyword and options and parses as a block; a block used as a value, `spawn { … }` and
  *   `spawn expr` are handed over as the closures they compile to, the keyword's own characters
@@ -68,6 +73,14 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     private var prevSigText: String = ""
     /** The significant token before [prevSig], to tell a named argument's `name:` from other colons. */
     private var prevPrevSig: IElementType? = null
+
+    /** Where the lexer stands in a named function's header, for `throws` and an expression body. */
+    private enum class Header { NONE, KEYWORD, NAME, PARAMETERS, SIGNATURE }
+
+    private var header = Header.NONE
+    private var headerDepth = 0
+    /** The words of the return type written after the parameters, while [header] is [Header.SIGNATURE]. */
+    private val returnTypeWords = ArrayList<String>()
     private val typeParams = HashSet<String>()
     private var buffer: CharSequence = ""
 
@@ -77,6 +90,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         prevSig = null
         prevSigText = ""
         prevPrevSig = null
+        header = Header.NONE
+        headerDepth = 0
+        returnTypeWords.clear()
         typeParams.clear()
         super.start(buffer, startOffset, endOffset, initialState)
     }
@@ -92,7 +108,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             emit(Plan(1))
             return
         }
-        val plan = tryFun(c)
+        val plan = tryThrows(c)
+            ?: tryExpressionBody(c)
+            ?: tryFun(c)
             ?: tryPlaceholder(c)
             ?: tryConcurrently(c)
             ?: trySpawn(c)
@@ -187,9 +205,12 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         while (i < plan.count) {
             val parts = plan.splits[i]
             if (parts != null) {
-                for ((end, partType) in parts) addToken(end, partType)
+                for ((end, partType) in parts) {
+                    addToken(end, partType)
+                    if (partType !in SKIPPABLE) track(partType, "")
+                }
                 prevPrevSig = prevSig
-                prevSig = parts.last().second
+                prevSig = parts.last { it.second !in SKIPPABLE }.second
                 prevSigText = ""
                 i++
                 continue
@@ -207,13 +228,103 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 prevPrevSig = prevSig
                 prevSig = type
                 prevSigText = if (type == PhpTokenTypes.IDENTIFIER) buffer.subSequence(pending[i].start, end).toString() else ""
+                track(type, buffer.subSequence(pending[i].start, end).toString())
             }
             i = j
         }
         pending.subList(0, plan.count).clear()
     }
 
+    /**
+     * Follows a named function's header as its tokens go out: the keyword, the name, the parameter
+     * list, then the signature — return type and `throws` — up to the body. A closure has no name
+     * and is no header; `fn` is not `function`.
+     */
+    private fun track(type: IElementType, text: String) {
+        header = when (header) {
+            Header.NONE -> if (type === PhpTokenTypes.kwFUNCTION) Header.KEYWORD else Header.NONE
+            Header.KEYWORD -> when {
+                type === PhpTokenTypes.opBIT_AND -> Header.KEYWORD
+                type === PhpTokenTypes.IDENTIFIER || type in PhpTokenTypes.tsKEYWORDS -> Header.NAME
+                else -> Header.NONE
+            }
+            Header.NAME -> if (type === PhpTokenTypes.chLPAREN) {
+                headerDepth = 1
+                Header.PARAMETERS
+            } else {
+                Header.NONE
+            }
+            Header.PARAMETERS -> {
+                if (type === PhpTokenTypes.chLPAREN) headerDepth++
+                if (type === PhpTokenTypes.chRPAREN) headerDepth--
+                if (headerDepth == 0) {
+                    returnTypeWords.clear()
+                    Header.SIGNATURE
+                } else {
+                    Header.PARAMETERS
+                }
+            }
+            // What is left of a return type once its Phaenon parts are erased; anything else — the
+            // body, `;`, the arrow, or code typed after an unfinished header — ends the header, so an
+            // array's `=>` further down is never taken for a body.
+            Header.SIGNATURE -> if (type in SIGNATURE_TOKENS) {
+                if (type !== PhpTokenTypes.opCOLON) returnTypeWords.add(text.lowercase())
+                Header.SIGNATURE
+            } else {
+                Header.NONE
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- triggers
+
+    /**
+     * `throws A|B` after a named function's parameters or return type, before its body, `=>` or
+     * `;` (design/functions.md §4): erased whole. Elsewhere `throws` is a name like any other — a
+     * constant, a class, a trait method in an `as` adaptation.
+     */
+    private fun tryThrows(c: Tok): Plan? {
+        if (header != Header.SIGNATURE || c.type != PhpTokenTypes.IDENTIFIER || text(c) != "throws") return null
+        var i = sig(1)
+        while (true) {
+            i = scanThrowable(i) ?: return null
+            val next = sig(i)
+            if (typeAt(next) != PhpTokenTypes.opBIT_OR) break
+            i = sig(next + 1)
+        }
+        if (typeAt(sig(i)) !in BODY_STARTS) return null
+        return Plan(i).erase(0 until i)
+    }
+
+    /** A class name, `self`, `static`, `parent` or a type parameter at [i]; the index after it, or null. */
+    private fun scanThrowable(i: Int): Int? {
+        if (i < 0) return null
+        var j = i
+        when (typeAt(j)) {
+            PhpTokenTypes.kwSTATIC -> return j + 1
+            PhpTokenTypes.NAMESPACE_RESOLUTION -> {
+                j++
+                if (typeAt(j) != PhpTokenTypes.IDENTIFIER) return null
+            }
+            PhpTokenTypes.IDENTIFIER -> {}
+            else -> return null
+        }
+        while (typeAt(j + 1) == PhpTokenTypes.NAMESPACE_RESOLUTION && typeAt(j + 2) == PhpTokenTypes.IDENTIFIER) j += 2
+        return j + 1
+    }
+
+    /**
+     * `=> expr;` in place of a named function's body (design/functions.md §3): the arrow's two
+     * characters become `{` and `return` — the block the compiler writes — or `{` and an erased `>`
+     * when the written return type is `void` or `never`, whose body is only evaluated.
+     * [PhaenonPsiBuilder] ends the block after the statement. An arrow function's `fn (…) =>` is no
+     * named function's header and stays PHP's.
+     */
+    private fun tryExpressionBody(c: Tok): Plan? {
+        if (header != Header.SIGNATURE || c.type != PhpTokenTypes.opHASH_ARRAY || c.end - c.start != 2) return null
+        val evaluated = returnTypeWords.size == 1 && returnTypeWords[0] in NO_VALUE_TYPES
+        return Plan(1).split(0, 1 to PhpTokenTypes.chLBRACE, 1 to if (evaluated) PhaenonTokenTypes.ERASED else PhpTokenTypes.kwRETURN)
+    }
 
     /**
      * `fun name(`: the `function` keyword spelled short, `public` implied (design/functions.md §1).
@@ -385,7 +496,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         val s = Scan()
         val u = scanUnion(sig(1), s) ?: return null
         if (s.extraClosers > 0 || s.erase.isEmpty()) return null
-        if (typeAt(sig(u.end)) !in RETURN_TYPE_FOLLOWERS) return null
+        if (typeAt(sig(u.end)) !in RETURN_TYPE_FOLLOWERS && !isIdent(sig(u.end), "throws")) return null
         val plan = Plan(u.end).erase(s.erase)
         if (u.allErased) plan.erase(0 until u.end)
         return plan
@@ -699,6 +810,19 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         )
 
         val RETURN_TYPE_FOLLOWERS: TokenSet = TokenSet.create(PhpTokenTypes.chLBRACE, PhpTokenTypes.opSEMICOLON, PhpTokenTypes.opHASH_ARRAY)
+
+        /** The tokens of a native return type after the parameters: `: ?\Ns\Foo|(A&B)|static`. */
+        val SIGNATURE_TOKENS: TokenSet = TokenSet.create(
+            PhpTokenTypes.opCOLON, PhpTokenTypes.opQUEST, PhpTokenTypes.IDENTIFIER, PhpTokenTypes.NAMESPACE_RESOLUTION,
+            PhpTokenTypes.opBIT_OR, PhpTokenTypes.opBIT_AND, PhpTokenTypes.chLPAREN, PhpTokenTypes.chRPAREN,
+            PhpTokenTypes.kwSTATIC, PhpTokenTypes.kwARRAY, PhpTokenTypes.kwCALLABLE,
+        )
+
+        /** What may follow a `throws` clause: the body, an expression body's arrow, the `;` of an abstract method. */
+        val BODY_STARTS: TokenSet = RETURN_TYPE_FOLLOWERS
+
+        /** The return types under which an expression body is evaluated, not returned. */
+        val NO_VALUE_TYPES: Set<String> = setOf("void", "never")
 
         /** After `&` in a type, these mean a by-reference parameter rather than an intersection. */
         val BY_REF_FOLLOWERS: TokenSet = TokenSet.create(PhpTokenTypes.VARIABLE, PhpTokenTypes.opVARIADIC)
