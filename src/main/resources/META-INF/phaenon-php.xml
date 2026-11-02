@@ -73,7 +73,19 @@
         <!-- The stubs of .phn files carry PhpStorm's stub version: after a plugin update that changed
              the PSI they are re-indexed once (PhaenonFileElementType.PSI_VERSION). -->
         <postStartupActivity implementation="dev.phaenon.jetbrains.PhaenonReindexActivity"/>
+
+        <!-- Debugging .phn: PhpStorm's template debugging (Twig, Blade) with the compiled files' line maps —
+             breakpoints go to the compiled file at the reverse-mapped line, frames show the .phn. -->
+        <php.debug.templateLanguage implementation="dev.phaenon.jetbrains.PhaenonDebugPathMapper"/>
     </extensions>
+
+    <projectListeners>
+        <!-- A step that stays on a source line through lines the compiler wrote is repeated. -->
+        <listener class="dev.phaenon.jetbrains.PhaenonSourceStepping" topic="com.intellij.xdebugger.XDebuggerManagerListener"/>
+    </projectListeners>
+    <applicationListeners>
+        <listener class="dev.phaenon.jetbrains.PhaenonStepActionListener" topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
+    </applicationListeners>
 
     <extensions defaultExtensionNs="com.jetbrains.php">
         <!-- The editor highlighter is keyed by file type and asks this EP for its lexer. -->

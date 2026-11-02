@@ -98,4 +98,12 @@ tasks.test {
     val trees = providers.environmentVariable("PHAENON_TREES").orElse("")
     inputs.property("phaenonTrees", trees)
     systemProperty("phaenon.trees", trees.get())
+    // PhaenonXdebugTest drives a real Xdebug over DBGp: PHAENON_XDEBUG names the extension (loaded
+    // with `php -n -d zend_extension=…` only), PHAENON_PHP the php binary (default `php`).
+    val xdebug = providers.environmentVariable("PHAENON_XDEBUG").orElse("")
+    val php = providers.environmentVariable("PHAENON_PHP").orElse("")
+    inputs.property("phaenonXdebug", xdebug)
+    inputs.property("phaenonPhp", php)
+    systemProperty("phaenon.xdebug", xdebug.get())
+    systemProperty("phaenon.php", php.get())
 }
