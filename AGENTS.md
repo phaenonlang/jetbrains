@@ -44,7 +44,10 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   and PhpStorm's findings on 8.6 code are dropped by target (`PhaenonTarget` reads `phaenon.json` and
   composer.json; fixtures `testData/php86/`); a `concurrently` block used as a value and `spawn`
   are the closures they compile to, their keywords split into PHP tokens (`PhaenonBlocks`; fixtures
-  `testData/concurrency/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  `testData/concurrency/`); D18's `throws` clause is erased (`PhaenonThrows` answers the exception
+  findings it covers) and an expression body is the block it compiles to, opened by the lexer and
+  closed by `PhaenonPsiBuilder`; `.phn` is formatted in the canonical layout, braces of declarations
+  on their line (fixtures `testData/d18/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
