@@ -4,7 +4,8 @@ fun label(string $prefix, string $value): string {
     return $prefix . $value;
 }
 
-final class Style {
+final class Style
+{
     public static fun line(string $s): string {
         return $s;
     }
@@ -14,7 +15,8 @@ final class Style {
     }
 }
 
-final class Piped {
+final class Piped
+{
     fun run(string $ns): void {
         $line = $ns |> label('✓ ', ?) |> Style::line(...);
         $width = $ns |> Style::width(2, ?);

@@ -4,7 +4,8 @@ fun format(int $count, string $unit = 'items', string ...$tags): string {
     return $count . $unit;
 }
 
-final class Calc {
+final class Calc
+{
     const ROUNDED = Calc::round(?, 2);
 
     public static fun round(float $value, int $precision): float {
@@ -16,7 +17,8 @@ final class Calc {
     }
 }
 
-final class Partials {
+final class Partials
+{
     fun __construct(private \Closure $formatter = format(?, 'pcs')) {
     }
 

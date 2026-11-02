@@ -191,10 +191,10 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
      * `.php` files as well (the compiled `SitesApi.php` of tq-cli does it as its `.phn` does).
      *
      * The canonical layout (design/functions.md §5) holds afterwards: the opening brace of every
-     * class-like, function and method stands on the line of the code before it (unless a comment
-     * stands between them), and an expression body's arrow stays where it was written — after the
-     * signature, or starting a line of its own one level in from the declaration. The braces the
-     * pass moved up are counted: none in a tree `phn migrate` laid out.
+     * function and method stands on the line of the code before it (unless a comment stands between
+     * them), a class-like's on a line of its own, and an expression body's arrow stays where it was
+     * written — after the signature, or starting a line of its own one level in from the
+     * declaration. The braces the pass moved are counted: none in a tree `phn migrate` laid out.
      */
     fun testRealTreesReformatAroundErasedConstructsAndNeverInsideThem() {
         val trees = loadTrees() ?: return
@@ -226,7 +226,8 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
                             if (after.joined != before.joined) failures.add("$where: the arrow of `${after.name}` moved ${if (after.joined) "up" else "down"}")
                             if (!after.joined && after.indent != after.declarationIndent + INDENT) failures.add("$where: the wrapped arrow of `${after.name}` is not one level in")
                         } else {
-                            if (!after.joined && !after.commentBefore) failures.add("$where: the brace of `${after.name}` is on a line of its own")
+                            if (after.classLike && after.joined) failures.add("$where: the brace of class-like `${after.name}` is on its declaration's line")
+                            if (!after.classLike && !after.joined && !after.commentBefore) failures.add("$where: the brace of `${after.name}` is on a line of its own")
                             if (after.joined != before.joined) bracesMoved++
                         }
                     }
@@ -243,7 +244,7 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
                 reformat(file)
                 if (file.text != once) unsettled.add(loaded.relative)
             }
-            report.append("${tree.root.path}: ${tree.files.size} files reformatted, $changed changed, $bracesMoved braces moved onto their declaration's line, $arrows expression bodies kept")
+            report.append("${tree.root.path}: ${tree.files.size} files reformatted, $changed changed, $bracesMoved braces moved to their canonical place, $arrows expression bodies kept")
             if (unsettled.isNotEmpty()) report.append(", ${unsettled.size} changed again by a second pass: ${unsettled.joinToString()}")
             report.append('\n')
         }
@@ -254,6 +255,7 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
     /** Where a declaration's body begins, `{` or `=>`, and whether it stands on the line of the code before it. */
     private class BodyStart(
         val name: String,
+        val classLike: Boolean,
         val offset: Int,
         val arrow: Boolean,
         val joined: Boolean,
@@ -268,7 +270,11 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
         val out = ArrayList<BodyStart>()
         for (element in PsiTreeUtil.findChildrenOfAnyType<PhpNamedElement>(file, PhpClass::class.java, Function::class.java)) {
             val (brace, keyword) = when (element) {
-                is PhpClass -> element.node.findChildByType(PhpTokenTypes.chLBRACE)?.psi to element.nameIdentifier
+                is PhpClass -> {
+                    // An anonymous class keeps its brace on the line, as a closure does.
+                    if (element.isAnonymous) continue
+                    element.node.findChildByType(PhpTokenTypes.chLBRACE)?.psi to element.nameIdentifier
+                }
                 is Function -> {
                     if (element.isClosure) continue
                     PsiTreeUtil.getChildOfType(element, GroupStatement::class.java)?.firstChild to element.node.findChildByType(PhpTokenTypes.kwFUNCTION)?.psi
@@ -282,6 +288,7 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
             out.add(
                 BodyStart(
                     name = (element as PhpNamedElement).name,
+                    classLike = element is PhpClass,
                     offset = offset,
                     arrow = brace.text == "=",
                     joined = before != null && !text.substring(before.textRange.endOffset, offset).contains('\n'),

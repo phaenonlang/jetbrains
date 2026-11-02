@@ -3,7 +3,8 @@ namespace App\User;
 use App\Domain\Repository\AggregateNotFound;
 use App\Domain\Repository\AggregateRepository;
 
-final class Repo implements AggregateRepository<UserId, User> {
+final class Repo implements AggregateRepository<UserId, User>
+{
     /** The aggregate, or null when there is none. */
     fun get(UserId $id): ?User {
         // TODO: Implement get() method.

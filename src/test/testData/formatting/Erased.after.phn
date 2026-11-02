@@ -4,13 +4,15 @@ use Closure;
 
 type   UserMap = map<Uuid,User>;
 
-interface Mapper<in TIn, out TOut> {
+interface Mapper<in TIn, out TOut>
+{
     fun map(TIn $in): TOut;
 
     fun get(Uuid $id):?TOut;
 }
 
-final class Box<T of object = object> implements \IteratorAggregate<int, T> {
+final class Box<T of object = object> implements \IteratorAggregate<int, T>
+{
     private readonly map<string, list<Event<T>>> $streams;
     public list<T> $items = [];
     private bytes $digest;

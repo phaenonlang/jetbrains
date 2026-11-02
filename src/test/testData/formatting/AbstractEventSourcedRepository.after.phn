@@ -9,7 +9,8 @@ use Tequila\Core\EventSourcing\EventStore\EventStore;
 use Tequila\Core\EventSourcing\EventStore\EventStoreFactory;
 
 abstract readonly class AbstractEventSourcedRepository<Id of AggregateId, T of EventSourcedAggregate> implements
-    AggregateRepository<Id, T> {
+    AggregateRepository<Id, T>
+{
     abstract protected static fun aggregateClass(): class<T>;
 
     fun __construct(private EventStoreFactory $eventStoreFactory) {

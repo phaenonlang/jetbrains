@@ -3,7 +3,8 @@ namespace App\User;
 use App\Domain\Repository\AggregateNotFound;
 use App\EventSourcing\Repository\AbstractEventSourcedRepository;
 
-final readonly class UserRepository extends AbstractEventSourcedRepository<UserId, User> {
+final readonly class UserRepository extends AbstractEventSourcedRepository<UserId, User>
+{
     protected static fun aggregateClass(): class<User> {
         // TODO: Implement aggregateClass() method.
     }

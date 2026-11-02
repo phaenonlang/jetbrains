@@ -2,14 +2,17 @@ namespace App;
 
 use Phaenon\Concurrent\Scope;
 
-final class ApiException extends \Exception {
+final class ApiException extends \Exception
+{
 }
 
-final class User {
+final class User
+{
     public string $name = '';
 }
 
-final class Users {
+final class Users
+{
     fun find(int $id): User {
         $user = new User();
         $user->name = 'user ' . $id;
@@ -22,7 +25,8 @@ final class Users {
     }
 }
 
-final class Blocks {
+final class Blocks
+{
     fun __construct(private Users $users) {
     }
 

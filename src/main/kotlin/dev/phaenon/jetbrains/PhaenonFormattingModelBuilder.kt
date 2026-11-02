@@ -57,17 +57,17 @@ import com.jetbrains.php.lang.psi.elements.Parameter
  * block and is never changed. A construct is never split or moved off its line: a `<…>` list, an
  * erased return type and a union member stay against what they belong to, and an erased type
  * stays on the line of the parameter it types. Line breaks come only from PhpStorm's rules (brace
- * placement, wrapping at the right margin), as in a `.php` file, and the compiler keeps the lines
- * of whatever the formatter wrote, so a formatted `.phn` still maps line for line to its output.
+ * placement, wrapping at the right margin), as in a `.php` file; the compiler lays out its output
+ * itself and maps it back to the `.phn`'s lines (design/line-map.md).
  *
  * `createTemplateFormattingModel` is a public method of PhpStorm's PHP formatter; the formatter's
  * blocks are used as PhpStorm builds them and only wrapped, never subclassed.
  *
  * The PHP code style is the project's, with one change for `.phn` files: Phaenon's canonical layout
- * (design/functions.md §5) puts the opening brace of a class-like, a function, a method and a
- * closure on the declaration's line. PhpStorm's formatter is handed a copy of the settings whose
- * brace placement for those says so; Reformat Code, the indent of Enter and the code an action
- * generates follow it, and a brace is never moved back to a line of its own in a `.phn`.
+ * (design/functions.md §5) puts the opening brace of a function, a method and a closure on the
+ * declaration's line, and keeps a class-like's on a line of its own. PhpStorm's formatter is
+ * handed a copy of the settings whose brace placement says so; Reformat Code, the indent of Enter
+ * and the code an action generates follow it.
  */
 class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
 
@@ -87,14 +87,18 @@ class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
         return DocumentBasedFormattingModel(root, file.project, settings, file.fileType, file)
     }
 
-    /** [settings] with the opening braces of class-likes, functions, methods and closures on the declaration's line. */
+    /**
+     * [settings] with Phaenon's brace placement: a class-like's opening brace on a line of its own,
+     * a function's, a method's and a closure's on the declaration's line.
+     */
     private fun canonical(settings: CodeStyleSettings, project: Project): CodeStyleSettings {
         val php = settings.getCommonSettings(PhpLanguage.INSTANCE)
         val endOfLine = CommonCodeStyleSettings.END_OF_LINE
-        if (php.CLASS_BRACE_STYLE == endOfLine && php.METHOD_BRACE_STYLE == endOfLine && php.LAMBDA_BRACE_STYLE == endOfLine) return settings
+        val nextLine = CommonCodeStyleSettings.NEXT_LINE
+        if (php.CLASS_BRACE_STYLE == nextLine && php.METHOD_BRACE_STYLE == endOfLine && php.LAMBDA_BRACE_STYLE == endOfLine) return settings
         val copy = CodeStyleSettingsManager.getInstance(project).cloneSettings(settings)
         copy.getCommonSettings(PhpLanguage.INSTANCE).apply {
-            CLASS_BRACE_STYLE = endOfLine
+            CLASS_BRACE_STYLE = nextLine
             METHOD_BRACE_STYLE = endOfLine
             LAMBDA_BRACE_STYLE = endOfLine
         }

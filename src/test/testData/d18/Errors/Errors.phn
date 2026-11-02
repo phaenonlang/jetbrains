@@ -1,10 +1,12 @@
 namespace App\Errors;
 
-final class NotFound extends \Exception {
+final class NotFound extends \Exception
+{
     fun __construct(int $id) {
         parent::__construct('not found: ' . $id);
     }
 }
 
-final class Unavailable extends \Exception {
+final class Unavailable extends \Exception
+{
 }

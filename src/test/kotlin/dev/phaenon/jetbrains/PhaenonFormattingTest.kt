@@ -55,25 +55,36 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         // which a .phn file does not have.
         val php = CommonCodeStyleSettings.END_OF_LINE.let { endOfLine ->
             val settings = CodeStyle.getSettings(project).getCommonSettings(PhpLanguage.INSTANCE)
-            settings.CLASS_BRACE_STYLE = endOfLine
+            settings.CLASS_BRACE_STYLE = CommonCodeStyleSettings.NEXT_LINE
             settings.METHOD_BRACE_STYLE = endOfLine
             settings.LAMBDA_BRACE_STYLE = endOfLine
             reformatted("Plain.php", "<?php\n" + source).removePrefix("<?php\n").trimStart('\n')
         }
 
         assertEquals(php, phn)
+        assertTrue(phn.contains("\nabstract readonly class AbstractEventSourcedRepository implements AggregateRepository\n{\n"))
         assertTrue(phn.contains("\n    public function get(AggregateId \$id): ?EventSourcedAggregate {\n        \$events = "))
         assertTrue(phn.contains("\n        if (0 === count(\$events)) {\n"))
     }
 
     fun testOpeningBracesOfDeclarationsStandOnTheirLine() {
-        // PhpStorm's PSR-12 style puts them on a line of their own; a .phn file keeps the
-        // canonical layout whatever the PHP code style says (design/functions.md §5).
-        val phn = reformatted("Braces.phn", "namespace App;\n\nfinal class A\n{\n    fun f(): void\n    {\n        \$g = function ()\n        {\n            return 1;\n        };\n    }\n}\n")
+        // PhpStorm's PSR-12 style puts a function's and a method's on a line of their own; a .phn
+        // file keeps the canonical layout whatever the PHP code style says (design/functions.md
+        // §5): a function's, a method's and a closure's brace on the declaration's line, a
+        // class-like's on a line of its own — moved there when it was written on the line.
+        val phn = reformatted(
+            "Braces.phn",
+            "namespace App;\n\nfinal class A\n{\n    fun f(): void\n    {\n        \$g = function ()\n        {\n            return 1;\n        };\n    }\n}\n\n" +
+                "interface I {\n}\n\ntrait T {\n}\n\nenum E: int {\n    case One = 1;\n}\n\nfun g(): object\n{\n    return new class {\n    };\n}\n",
+        )
 
-        assertEquals("namespace App;\n\nfinal class A {\n    fun f(): void {\n        \$g = function () {\n            return 1;\n        };\n    }\n}\n", phn)
+        assertEquals(
+            "namespace App;\n\nfinal class A\n{\n    fun f(): void {\n        \$g = function () {\n            return 1;\n        };\n    }\n}\n\n" +
+                "interface I\n{\n}\n\ntrait T\n{\n}\n\nenum E: int\n{\n    case One = 1;\n}\n\nfun g(): object {\n    return new class {\n    };\n}\n",
+            phn,
+        )
         val php = reformatted("Braces.php", "<?php\nnamespace App;\n\nfinal class A {\n    public function f(): void {\n    }\n}\n")
-        assertTrue("a .php file keeps PSR-12's\n$php", php.contains("final class A\n{\n"))
+        assertTrue("a .php file keeps PSR-12's\n$php", php.contains("final class A\n{\n    public function f(): void\n    {\n"))
     }
 
     fun testErasedConstructsAreFormattedAroundAndNeverInside() {

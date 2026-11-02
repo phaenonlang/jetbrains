@@ -4,17 +4,20 @@ use App\Errors\NotFound;
 use App\Errors\Unavailable;
 
 /** Names and their lengths. */
-interface Names {
+interface Names
+{
     fun find(int $id): ?string throws NotFound;
 
     fun all(): list<string>;
 }
 
-trait Greets {
+trait Greets
+{
     fun greet(string $who): string => 'Hello, ' . $who;
 }
 
-enum Level: int {
+enum Level: int
+{
     case Low = 1;
     case High = 2;
 
@@ -24,7 +27,8 @@ enum Level: int {
     };
 }
 
-final readonly class Directory implements Names {
+final readonly class Directory implements Names
+{
     use Greets;
 
     /** @param list<string> $names */

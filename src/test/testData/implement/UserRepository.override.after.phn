@@ -6,7 +6,8 @@ use App\EventSourcing\EventStore\EventStore;
 use App\EventSourcing\EventStore\EventStoreFactory;
 use App\EventSourcing\Repository\AbstractEventSourcedRepository;
 
-final readonly class UserRepository extends AbstractEventSourcedRepository<UserId, User> {
+final readonly class UserRepository extends AbstractEventSourcedRepository<UserId, User>
+{
     fun __construct(EventStoreFactory $eventStoreFactory) {
         parent::__construct($eventStoreFactory);
     }
