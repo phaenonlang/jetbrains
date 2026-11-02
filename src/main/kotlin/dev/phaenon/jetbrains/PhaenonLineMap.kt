@@ -104,9 +104,10 @@ class PhaenonLineMap private constructor(
         @JvmStatic
         fun looksLikeMap(line: CharSequence): Boolean = line.startsWith(MARKER) || line.startsWith(MARKER_AFTER_HTML)
 
-        /** Reads one line (without its line break) as a map. */
+        /** Reads one line (without its line break; one trailing `\r` is dropped) as a map. */
         @JvmStatic
-        fun parse(line: String): Parsed {
+        fun parse(text: String): Parsed {
+            val line = text.removeSuffix("\r")
             val body = when {
                 line.startsWith(MARKER) -> line.substring(MARKER.length)
                 line.startsWith(MARKER_AFTER_HTML) -> line.substring(MARKER_AFTER_HTML.length)
@@ -137,11 +138,13 @@ class PhaenonLineMap private constructor(
             return haltCompilerMapLine(text)?.let(::parse) ?: Parsed.Absent
         }
 
+        /** The last line without its line break: one `\n`, then one `\r`, are dropped from the end, as `phaenon/runtime`'s reader does. */
         private fun lastLine(text: CharSequence): String {
             var end = text.length
-            while (end > 0 && (text[end - 1] == '\n' || text[end - 1] == '\r')) end--
+            if (end > 0 && text[end - 1] == '\n') end--
+            if (end > 0 && text[end - 1] == '\r') end--
             var start = end
-            while (start > 0 && text[start - 1] != '\n' && text[start - 1] != '\r') start--
+            while (start > 0 && text[start - 1] != '\n') start--
             return text.subSequence(start, end).toString()
         }
 
@@ -194,10 +197,10 @@ class PhaenonLineMap private constructor(
             return Entry(output, source, null)
         }
 
-        /** A line number: decimal digits only, at least 1. */
+        /** A line number: decimal digits without a leading zero, at least 1. */
         private fun number(text: String): Int? {
-            if (text.isEmpty() || text.any { it !in '0'..'9' }) return null
-            return text.toIntOrNull()?.takeIf { it >= 1 }
+            if (text.isEmpty() || text[0] == '0' || text.any { it !in '0'..'9' }) return null
+            return text.toIntOrNull()
         }
 
         /** The first entry starts at output line 1; entries ascend and never overlap; a hold `O-P=S` is followed at `P+1`. */

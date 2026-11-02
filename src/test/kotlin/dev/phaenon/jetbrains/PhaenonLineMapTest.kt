@@ -62,6 +62,11 @@ class PhaenonLineMapTest : TestCase() {
         }
     }
 
+    fun testOneTrailingCarriageReturnIsDropped() {
+        assertEquals("Foo.phn", parse("// phaenon-map v1 Foo.phn 1:1\r").source)
+        assertEquals(PhaenonLineMap.Parsed.Invalid, PhaenonLineMap.parse("// phaenon-map v1 Foo.phn 1:1\r\r"))
+    }
+
     fun testHolds() {
         val map = parse("// phaenon-map v1 Foo.phn 1-6=1 7:1 15-17=9 18:9")
         assertEquals(listOf(true, true, false, false, true, true, false, false), listOf(1, 6, 7, 14, 15, 17, 18, 100).map(map::isHold))
@@ -79,6 +84,8 @@ class PhaenonLineMapTest : TestCase() {
         for (text in listOf(body + map, body + map + "\n", (body + map + "\n").replace("\n", "\r\n"))) {
             assertTrue(text, PhaenonLineMap.read(text) is PhaenonLineMap.Parsed.Map)
         }
+        // The last line of a file ending in an empty line is that empty line.
+        assertEquals(PhaenonLineMap.Parsed.Absent, PhaenonLineMap.read(body + map + "\n\n"))
         assertEquals(PhaenonLineMap.Parsed.Absent, PhaenonLineMap.read(body + "echo 1;\n"))
         assertEquals(PhaenonLineMap.Parsed.Absent, PhaenonLineMap.read(map + "\necho 1;\n"))
         val halted = "<?php\n\$x = 1;\n$map\n__halt_compiler();\u0000binary // phaenon-map v1 B.phn 1:1\n"
@@ -154,7 +161,8 @@ class PhaenonLineMapsTest : BasePlatformTestCase() {
     fun testLexicalResolution() {
         assertEquals("/a/src/Foo.phn", PhaenonLineMaps.resolve("/a/.src", "../src/Foo.phn"))
         assertEquals("/a/b/Foo.phn", PhaenonLineMaps.resolve("/a/b", "./Foo.phn"))
-        assertNull(PhaenonLineMaps.resolve("/a", "../../Foo.phn"))
+        assertEquals("/Foo.phn", PhaenonLineMaps.resolve("/a", "../../Foo.phn"))
+        assertEquals("C:/Foo.phn", PhaenonLineMaps.resolve("C:/a", "../../Foo.phn"))
         assertEquals("C:/p/src/Foo.phn", PhaenonLineMaps.resolve("C:/p/.src", "../src/Foo.phn"))
     }
 }

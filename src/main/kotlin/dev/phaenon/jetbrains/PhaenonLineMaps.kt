@@ -130,18 +130,27 @@ object PhaenonLineMaps {
     @JvmStatic
     fun isMappedOutput(file: VirtualFile): Boolean = sourceOf(file) != null
 
-    /** [relative] (`/`-separated) against the directory [base], without touching the file system; null when it climbs above the root. */
+    /**
+     * [relative] (`/`-separated) against the directory [base], without touching the file system. A
+     * `..` above the root stays at it, as `phaenon/runtime`'s reader resolves it. Null only for a
+     * relative [base] that `..` climbs out of.
+     */
     @JvmStatic
     fun resolve(base: String, relative: String): String? {
+        val rooted = base.startsWith("/") || relative.startsWith("/") || base.matches(DRIVE)
         val parts = if (relative.startsWith("/")) ArrayList() else base.split('/').filter { it.isNotEmpty() }.toMutableList()
+        val keep = if (base.matches(DRIVE) && !relative.startsWith("/")) 1 else 0
         for (part in relative.split('/')) {
             when (part) {
                 "", "." -> {}
-                ".." -> if (parts.isEmpty()) return null else parts.removeAt(parts.size - 1)
+                ".." -> if (parts.size > keep) parts.removeAt(parts.size - 1) else if (!rooted) return null
                 else -> parts.add(part)
             }
         }
         val prefix = if (base.startsWith("/") || relative.startsWith("/")) "/" else ""
         return prefix + parts.joinToString("/")
     }
+
+    /** A Windows directory: a drive letter first (`C:/project/.src`). */
+    private val DRIVE = Regex("^[A-Za-z]:/.*")
 }
