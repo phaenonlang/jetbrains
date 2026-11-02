@@ -35,10 +35,13 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
  * A closure in a constant expression — an attribute argument, a constant, a default — is lowered
  * to the `static function` PHP 8.5 accepts there (§2), so it is not an invalid constant expression.
  *
- * A method whose parameter or return type is erased — `id(): T` with `T of AggregateId`,
- * overriding `id(): AggregateId` — has, to PhpStorm, no type there, so the hierarchy check finds
- * it incompatible with the parent's declaration. Whether it is compatible is the compiler's
- * question (P3xxx); the finding goes where an erased type is involved.
+ * PhpStorm's "Declaration must be compatible with …" and "Return type declaration must be
+ * compatible with …" compare the types declared in the PSI, and an erased type declares none: to
+ * PhpStorm the interface's `save(T $aggregate)` takes `mixed`, and every typed implementation
+ * narrows it. On an override where either side has an erased type, in a `.phn` or in a `.php`
+ * implementing a Phaenon interface, PhpStorm's finding goes and [PhaenonHierarchyInspection]
+ * judges the pair with the types the compiler writes; it reports the real incompatibilities.
+
  *
  * A docblock type naming a type parameter in scope, `@var T $x`, is "Undefined class 'T'" to
  * PhpStorm, which has no `@template` to read it from; the name is declared in the erased list.
@@ -50,8 +53,10 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
 class PhaenonHighlightFilter : HighlightInfoFilter {
 
     override fun accept(info: HighlightInfo, file: PsiFile?): Boolean {
-        if (file == null || !PhaenonFiles.isPhaenonFile(file.viewProvider.virtualFile)) return true
+        if (file == null) return true
         val description = info.description ?: return true
+        if (INCOMPATIBLE_WITH_PARENT.any { description.startsWith(it) }) return !overrideIsPhaenons(info, file)
+        if (!PhaenonFiles.isPhaenonFile(file.viewProvider.virtualFile)) return true
         if (description.startsWith(OTHER_DECLARATIONS_PREFIX)) return otherDeclarationIsHandWritten(info, file)
         if (description == PSR_MISSING_VISIBILITY) return !visibilityIsImplied(info, file)
         if (description in INVALID_CONSTANT_EXPRESSION) return !closureInConstantExpression(info, file)
@@ -62,11 +67,6 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (UNUSED_IMPORT.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             return !importIsUsedInAnErasedType(info, file)
         }
-        if (INCOMPATIBLE_WITH_PARENT.any { description.startsWith(it) }) {
-            val leaf = file.findElementAt(info.startOffset) ?: return true
-            val function = PsiTreeUtil.getParentOfType(leaf, Function::class.java) ?: return true
-            return PhaenonErasedTypes.returnType(function).isEmpty() && function.parameters.all { PhaenonErasedTypes.beforeName(it).isEmpty() }
-        }
         if (description == RETURN_TYPE_MISSING) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
             val function = PsiTreeUtil.getParentOfType(leaf, Function::class.java) ?: return true
@@ -76,6 +76,17 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val leaf = file.findElementAt(info.startOffset) ?: return true
         val declaration = PsiTreeUtil.getParentOfType(leaf, Field::class.java, Parameter::class.java) as? PhpNamedElement ?: return true
         return PhaenonErasedTypes.beforeName(declaration).isEmpty()
+    }
+
+    /**
+     * PhpStorm's hierarchy finding on a method whose override [PhaenonHierarchyInspection] judges:
+     * dropped, unless the finding is that inspection's own.
+     */
+    private fun overrideIsPhaenons(info: HighlightInfo, file: PsiFile): Boolean {
+        if (info.problemGroup === PhaenonHierarchyInspection.PROBLEMS) return false
+        val leaf = file.findElementAt(info.startOffset) ?: return false
+        val method = PsiTreeUtil.getParentOfType(leaf, Method::class.java) ?: return false
+        return PhaenonHierarchyInspection.owns(method)
     }
 
     /** A `fun` method, a class constant, or a property or parameter with an asymmetric visibility and no main one, is public (design/functions.md §1). */

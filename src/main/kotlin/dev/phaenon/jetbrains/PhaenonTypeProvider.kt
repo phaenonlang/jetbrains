@@ -58,7 +58,7 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
 
     private fun declared(element: PhpNamedElement, text: String): PhpType? {
         if (text.isEmpty()) return null
-        return PhaenonTypeText(element, PhaenonErasedTypes.typeParametersInScope(element)).parse(text)
+        return PhaenonTypeText(element, PhaenonErasedTypes.typeParameterBounds(element)).parse(text)
     }
 
     // ---------------------------------------------------------------- string receivers

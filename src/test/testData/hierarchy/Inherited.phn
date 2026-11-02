@@ -1,0 +1,56 @@
+namespace App;
+
+/** mongodb-odm's normalizers: a child that writes the parent's erasure natively inherits its types. */
+interface Normalizer<PhpType of object, DbType of mixed>
+{
+    fun normalize(PhpType $value): DbType;
+
+    fun denormalize(DbType $value, class<PhpType> $phpType): PhpType;
+}
+
+final class Level
+{
+}
+
+final readonly class LevelNormalizer implements Normalizer<Level, string|int>
+{
+    fun normalize(object $value): mixed
+    {
+        return 1;
+    }
+
+    fun denormalize(mixed $value, string $phpType): object
+    {
+        return new Level();
+    }
+}
+
+/** tequila/core's buses: `Command<TResult>` erases to `Command`, type argument and all. */
+interface Command<TResult>
+{
+}
+
+interface CommandBus
+{
+    fun dispatch<TResult>(Command<TResult> $command, string|map<string, mixed> ...$options): TResult;
+}
+
+final class DefaultCommandBus implements CommandBus
+{
+    fun dispatch(Command $command, string|array ...$options): mixed
+    {
+        return null;
+    }
+}
+
+interface Store<T of object>
+{
+    fun insertMany(iterable<T> $documents, map<string, mixed> $options = []): void;
+}
+
+abstract class DocumentStore<T of object> implements Store<T>
+{
+    fun insertMany(iterable $documents, array $options = []): void
+    {
+    }
+}

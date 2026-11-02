@@ -14,6 +14,13 @@
              .php compiled from a .phn is not "another declaration" of its classes. -->
         <daemon.highlightInfoFilter implementation="dev.phaenon.jetbrains.PhaenonHighlightFilter"/>
 
+        <!-- Overrides involving an erased type, which PhpStorm's hierarchy check reads as untyped: judged
+             with the types the compiler writes, the parent's type parameters substituted (the filter
+             drops PhpStorm's own finding on such a pair). -->
+        <localInspection language="PHP" shortName="PhaenonHierarchyChecks" displayName="Phaenon override compatibility"
+                         groupPath="PHP" groupName="Phaenon" enabledByDefault="true" level="ERROR"
+                         implementationClass="dev.phaenon.jetbrains.PhaenonHierarchyInspection"/>
+
         <!-- Optimize Imports in .phn files: PhpStorm's optimizer, but an import an erased construct uses
              (`list<DomainEvent>`) stays. First: the platform takes the first optimizer that supports a file. -->
         <lang.importOptimizer language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonImportOptimizer"/>

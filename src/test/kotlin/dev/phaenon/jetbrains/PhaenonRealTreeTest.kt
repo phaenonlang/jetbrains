@@ -13,6 +13,7 @@ import com.jetbrains.php.lang.PhpFileType
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.Function
+import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
@@ -142,6 +143,33 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
         }
         println(report)
         assertEmpty("erased declarations without their pseudo-class:\n" + failures.take(LISTING_CAP).joinToString("\n"), failures)
+    }
+
+    /**
+     * [PhaenonHierarchyInspection] on real hierarchies: every method of the trees against the
+     * methods it overrides. The trees pass `phn check`, which reports an incompatible override
+     * (`P2502`), so every finding is the plugin misreading an erased signature or a substitution.
+     * Classes from `vendor` are not loaded; overrides of them are not checked.
+     */
+    fun testNoOverrideInRealTreesIsReportedIncompatible() {
+        val trees = loadTrees() ?: return
+        val report = StringBuilder()
+        val findings = ArrayList<String>()
+        for (tree in trees) {
+            var judged = 0
+            for (loaded in tree.files) {
+                for (method in PsiTreeUtil.collectElementsOfType(loaded.file, Method::class.java)) {
+                    if (!PhaenonHierarchyInspection.owns(method)) continue
+                    judged++
+                    for ((element, message) in PhaenonHierarchyInspection.problems(method)) {
+                        findings.add("${loaded.relative}:${line(loaded.text, element.textOffset)}: $message")
+                    }
+                }
+            }
+            report.append("${tree.root.path}: $judged methods with an erased override judged\n")
+        }
+        println(report)
+        assertEmpty("overrides reported incompatible in real Phaenon trees:\n" + findings.take(LISTING_CAP).joinToString("\n"), findings)
     }
 
     // ---------------------------------------------------------------- loading

@@ -1,0 +1,29 @@
+namespace App;
+
+/**
+ * tequila/core's AbstractEventSourcedRepository as it reads today: `save()` spells the parent's
+ * erased type, `Aggregate`, and keeps `T` in the docblock.
+ */
+abstract readonly class AbstractEventSourcedRepository<Id of AggregateId, T of EventSourcedAggregate> implements AggregateRepository<Id, T>
+{
+    abstract protected static fun aggregateClass(): class<T>;
+
+    fun get(Id $id): ?T
+    {
+        $class = static::aggregateClass();
+
+        return $class::rebuildFromHistory($id, []);
+    }
+
+    fun load(Id $id): T
+    {
+        return $this->get($id) ?? throw new \LogicException();
+    }
+
+    /**
+     * @param T $aggregate
+     */
+    fun save(Aggregate $aggregate): void
+    {
+    }
+}

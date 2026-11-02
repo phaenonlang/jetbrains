@@ -1,0 +1,12 @@
+<html>
+<body>
+Reports a method that is not compatible with a method it overrides or implements, when either side
+has a type the Phaenon compiler erases: a type parameter, <code>list&lt;T&gt;</code>,
+<code>map&lt;K, V&gt;</code>, <code>class&lt;T&gt;</code>, a tuple or a closure type.
+<p>PhpStorm's own hierarchy check sees no declared type where Phaenon erased one, so it would read
+<code>save(T $aggregate)</code> as <code>save(mixed $aggregate)</code>. This check reads the parent's
+signature as the child sees it, with the type arguments written on its <code>extends</code> and
+<code>implements</code> clauses, and compares parameters and return types as PHP and the Phaenon
+checker do.</p>
+</body>
+</html>

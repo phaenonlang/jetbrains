@@ -1,0 +1,26 @@
+namespace App;
+
+/**
+ * The same repository once the compiler lets `save()` say what it means: `T`, bound to
+ * `EventSourcedAggregate` here, implementing the interface's `save(T)`, bound to `Aggregate`. The
+ * compiler writes `save(Aggregate $aggregate)` on both sides.
+ */
+abstract readonly class CompanionRepository<Id of AggregateId, T of EventSourcedAggregate> implements AggregateRepository<Id, T>
+{
+    abstract protected static fun aggregateClass(): class<T>;
+
+    fun get(Id $id): ?T
+    {
+        return null;
+    }
+
+    fun load(Id $id): T
+    {
+        return $this->get($id) ?? throw new \LogicException();
+    }
+
+    fun save(T $aggregate): void
+    {
+        $aggregate->getUncommittedEvents();
+    }
+}

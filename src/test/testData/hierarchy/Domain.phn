@@ -1,0 +1,18 @@
+namespace App;
+
+interface Aggregate
+{
+}
+
+interface AggregateId
+{
+}
+
+interface EventSourcedAggregate extends Aggregate
+{
+    const VERSION = 1;
+
+    static fun rebuildFromHistory(AggregateId $id, iterable $events): static;
+
+    fun getUncommittedEvents(): list<object>;
+}

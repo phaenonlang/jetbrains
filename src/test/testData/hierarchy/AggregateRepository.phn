@@ -1,0 +1,10 @@
+namespace App;
+
+interface AggregateRepository<Id of AggregateId, T of Aggregate>
+{
+    fun get(Id $id): ?T;
+
+    fun load(Id $id): T;
+
+    fun save(T $aggregate): void;
+}

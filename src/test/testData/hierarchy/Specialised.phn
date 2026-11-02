@@ -1,0 +1,48 @@
+namespace App;
+
+class Box<T>
+{
+    fun accept(T $value): void
+    {
+    }
+
+    fun get(): T
+    {
+        throw new \LogicException();
+    }
+}
+
+final class IntBox extends Box<int>
+{
+    fun accept(int $value): void
+    {
+    }
+
+    fun get(): int
+    {
+        return 1;
+    }
+}
+
+final class StringBox extends Box<int>
+{
+    fun accept(string $value): void
+    {
+    }
+
+    fun get(): string
+    {
+        return '';
+    }
+}
+
+class Middle<U> extends Box<list<U>>
+{
+}
+
+final class Bottom extends Middle<string>
+{
+    fun accept(array $value): void
+    {
+    }
+}

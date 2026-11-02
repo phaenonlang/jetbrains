@@ -31,9 +31,15 @@ object PhaenonErasedTypes {
      * declaration had no Phaenon-only type. Native members of a union (`Foo|list<int>`) stay in
      * the PSI as a type declaration and are skipped here: PhpStorm types them itself.
      */
-    fun beforeName(declaration: PhpNamedElement): String {
-        if (declaration !is Parameter && declaration !is Field) return ""
-        val name = declaration.nameIdentifier ?: return ""
+    fun beforeName(declaration: PhpNamedElement): String = join(beforeNameParts(declaration))
+
+    /**
+     * The erased leaves of a parameter's or property's type, in order, each as written: `<T>` after
+     * a native `Command<T>` is one of them, `list<int>|` in front of a native `null` another.
+     */
+    fun beforeNameParts(declaration: PhpNamedElement): List<String> {
+        if (declaration !is Parameter && declaration !is Field) return emptyList()
+        val name = declaration.nameIdentifier ?: return emptyList()
         val parts = ArrayList<String>()
         var leaf: PsiElement? = PsiTreeUtil.prevLeaf(name, true)
         while (leaf != null) {
@@ -48,7 +54,7 @@ object PhaenonErasedTypes {
             leaf = PsiTreeUtil.prevLeaf(leaf, true)
         }
         parts.reverse()
-        return join(parts)
+        return parts
     }
 
     /**
@@ -56,10 +62,13 @@ object PhaenonErasedTypes {
      * return type erased whole took its `:` with it (`: list<User>`); the colon is the function's
      * and is not part of the text.
      */
-    fun returnType(function: Function): String {
+    fun returnType(function: Function): String = join(returnTypeParts(function))
+
+    /** The erased leaves of a return type, in order, each as written; see [beforeNameParts]. */
+    fun returnTypeParts(function: Function): List<String> {
         // The body, the `;` of an abstract method, or the expression of an arrow function.
-        val tail = function.lastChild ?: return ""
-        if (tail.node.elementType === PhpTokenTypes.chRPAREN) return ""
+        val tail = function.lastChild ?: return emptyList()
+        if (tail.node.elementType === PhpTokenTypes.chRPAREN) return emptyList()
         val parts = ArrayList<String>()
         var leaf: PsiElement? = PsiTreeUtil.prevLeaf(tail, true)
         while (leaf != null) {
@@ -74,7 +83,46 @@ object PhaenonErasedTypes {
             leaf = PsiTreeUtil.prevLeaf(leaf, true)
         }
         parts.reverse()
-        return join(parts)
+        return parts
+    }
+
+    /** The first erased leaf of a parameter's or property's type, where a finding about the declaration starts; null when none was erased. */
+    fun typeLeaf(declaration: PhpNamedElement): PsiElement? {
+        val name = declaration.nameIdentifier ?: return null
+        var first: PsiElement? = null
+        var leaf: PsiElement? = PsiTreeUtil.prevLeaf(name, true)
+        while (leaf != null) {
+            val type = PsiUtilCore.getElementType(leaf)
+            when {
+                PhaenonTokenTypes.isErased(leaf) -> first = leaf
+                leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
+                type === PhpTokenTypes.opBIT_AND || type === PhpTokenTypes.opVARIADIC -> Unit
+                PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> Unit
+                else -> break
+            }
+            leaf = PsiTreeUtil.prevLeaf(leaf, true)
+        }
+        return first
+    }
+
+    /** The first erased leaf of [function]'s return type, where a finding about it belongs; null when none was erased. */
+    fun returnTypeLeaf(function: Function): PsiElement? {
+        val tail = function.lastChild ?: return null
+        if (tail.node.elementType === PhpTokenTypes.chRPAREN) return null
+        var first: PsiElement? = null
+        var leaf: PsiElement? = PsiTreeUtil.prevLeaf(tail, true)
+        while (leaf != null) {
+            val type = PsiUtilCore.getElementType(leaf)
+            when {
+                PhaenonTokenTypes.isErased(leaf) -> first = leaf
+                leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
+                type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opHASH_ARRAY -> Unit
+                PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> Unit
+                else -> break
+            }
+            leaf = PsiTreeUtil.prevLeaf(leaf, true)
+        }
+        return first
     }
 
     /**
@@ -90,6 +138,28 @@ object PhaenonErasedTypes {
             scope = scope.parent
         }
         return names
+    }
+
+    /** A type parameter in scope: its name, its bound (null when it has none) and the function or class declaring it. */
+    class TypeParameterInScope(val name: String, val bound: PhaenonType?, val owner: PsiElement)
+
+    /**
+     * The type parameters in scope at [element], innermost first, with their bounds: a method's
+     * `<T>` hides its class's `T`, as in the compiler.
+     */
+    fun typeParameterBounds(element: PsiElement): Map<String, TypeParameterInScope> {
+        val result = LinkedHashMap<String, TypeParameterInScope>()
+        var scope: PsiElement? = element
+        while (scope != null) {
+            val owner = scope
+            declarationList(owner)?.let { list ->
+                for (parameter in PhaenonType.typeParameters(list.text)) {
+                    result.putIfAbsent(parameter.name, TypeParameterInScope(parameter.name, parameter.bound, owner))
+                }
+            }
+            scope = scope.parent
+        }
+        return result
     }
 
     /**
