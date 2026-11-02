@@ -1,0 +1,6 @@
+namespace App;
+
+final class Note
+{
+    fun text(): string => 'note';
+}

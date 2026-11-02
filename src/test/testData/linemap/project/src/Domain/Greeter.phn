@@ -1,0 +1,16 @@
+namespace App\Domain;
+
+final class Greeter
+{
+    /** The greeting for a name. */
+    fun greet(string $name): string => 'Hello, ' . $this->upper($name) . '!';
+
+    fun upper(string $s): string => strtoupper($s);
+
+    fun twice(string $name): string {
+        $a = $this->greet($name);
+        return $a . ' ' . $a;
+    }
+
+    fun log(string $m): void => error_log($m, 4);
+}
