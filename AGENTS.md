@@ -16,6 +16,7 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 
 PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper:~/labs/tequila/reflector:~/labs/tequila/tq-cli-phaenon-dogfood \
   ./gradlew test --tests '*RealTree*'   # parse every .phn of the dogfood trees; skipped when unset
+PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'   # the line map against a real Xdebug over DBGp; skipped when unset
 ```
 
 - JDK 21; Gradle provisions one if none is installed. `./gradlew test` is a no-op when nothing
@@ -46,8 +47,18 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   are the closures they compile to, their keywords split into PHP tokens (`PhaenonBlocks`; fixtures
   `testData/concurrency/`); D18's `throws` clause is erased (`PhaenonThrows` answers the exception
   findings it covers) and an expression body is the block it compiles to, opened by the lexer and
-  closed by `PhaenonPsiBuilder`; `.phn` is formatted in the canonical layout, braces of declarations
-  on their line (fixtures `testData/d18/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  closed by `PhaenonPsiBuilder`; `.phn` is formatted in the canonical layout, the braces of functions
+  and methods on their line and of class-likes on a line of their own (fixtures `testData/d18/`);
+  D19's line map (design/line-map.md) is read by `PhaenonLineMap` / `PhaenonLineMaps` (tested
+  against `src/test/resources/linemap/vectors.json`, a verbatim copy of the compiler's
+  `internal/linemap/testdata/vectors.json` that its freshness test compares: refresh by copying,
+  never edit), and positions in compiled files reach the `.phn` through `PhaenonCompiledLinkFilter`
+  (console links), `PhaenonCompiledEditorProvider` (any navigation to a position in a compiled file)
+  and, in the debugger, `PhaenonDebugPathMapper` (PhpStorm's template debugging, the mechanism of Twig
+  and Blade; frames forward, breakpoints reverse, gated to the breakpoint handler's question about a
+  `.phn`) with `PhaenonSourceStepping` (a step that stays on a source line through holds is
+  repeated); fixtures `testData/linemap/` are compiled by hand as the spec lays them out, so keep
+  them in step when the compiled layout changes; `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
@@ -72,7 +83,9 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   element-array unions, a partial application is also its callee's result to PhpStorm, a block
   used as a value and a spawn are closures to it (their values typed on the variables); the
   implied `strict_types` is not modelled; editor colouring uses the
-  internal extension point `com.jetbrains.php.baseLexerProvider`. Code a feature inserts is laid out
+  internal extension point `com.jetbrains.php.baseLexerProvider`, and debugging the internal
+  `PhpTemplateLanguagePathMapper` (`com.intellij.php.debug.templateLanguage`); the Frames list labels
+  a compiled frame with the compiled name and line. Code a feature inserts is laid out
   by PhpStorm's formatter, as in PHP: insert it unformatted and let the reformatting that follows
   the command do it. Behaviour of a newer PhpStorm (the PHP 8.5 pipe and its inspection) is tested
   with `-PtestIdePath`; on 2025.1 those tests return early.
