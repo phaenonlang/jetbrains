@@ -14,6 +14,10 @@
              A custom builder: the platform asks it only for the contexts it claims, so .php keeps PhpStorm's. -->
         <lang.formatter language="PHP" order="last" implementationClass="dev.phaenon.jetbrains.PhaenonFormattingModelBuilder"/>
 
+        <!-- Implement / Override Methods in a .phn class: `fun`, the parent's declared types, its type parameters substituted. -->
+        <codeInsight.implementMethod language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonImplementMethodsHandler"/>
+        <codeInsight.overrideMethod language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonOverrideMethodsHandler"/>
+
         <!-- `/**` + Enter: PhpStorm's stub without the @param/@return tags a declared (or erased) type makes redundant. -->
         <enterHandlerDelegate implementation="dev.phaenon.jetbrains.PhaenonDocCommentEnterHandler" order="before phpEnterHandler"/>
 
@@ -27,7 +31,9 @@
 
         <!-- Class names inside erased constructs (`list<User>`) are references, complete, and are not prose. -->
         <psi.referenceContributor language="PHP" implementation="dev.phaenon.jetbrains.PhaenonErasedReferenceContributor"/>
-        <completion.contributor language="PHP" order="first"
+        <!-- Before the live-template contributor, which wraps every contributor after it: in .phn files this one drops
+             PhpStorm's `fun` live template (a second `fun`, expanding to `function`) and makes override items Phaenon's. -->
+        <completion.contributor language="PHP" order="first, before liveTemplates"
                                 implementationClass="dev.phaenon.jetbrains.PhaenonErasedCompletionContributor"/>
         <spellchecker.support language="PHP" order="first"
                               implementationClass="dev.phaenon.jetbrains.PhaenonSpellcheckingStrategy"/>

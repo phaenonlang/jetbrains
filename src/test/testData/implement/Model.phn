@@ -1,0 +1,41 @@
+namespace App\Domain\Aggregate;
+
+interface AggregateId
+{
+}
+
+interface Aggregate
+{
+}
+
+namespace App\EventSourcing\Aggregate;
+
+abstract class EventSourcedAggregate implements \App\Domain\Aggregate\Aggregate
+{
+}
+
+namespace App\EventSourcing\EventStore;
+
+interface EventStore
+{
+}
+
+final class EventStoreFactory
+{
+}
+
+namespace App\EventSourcing\Event;
+
+interface DomainEvent
+{
+}
+
+namespace App\User;
+
+final readonly class UserId implements \App\Domain\Aggregate\AggregateId
+{
+}
+
+final class User extends \App\EventSourcing\Aggregate\EventSourcedAggregate
+{
+}

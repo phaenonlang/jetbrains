@@ -7,6 +7,7 @@ import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.completion.CompletionProvider
 import com.intellij.codeInsight.completion.CompletionResultSet
 import com.intellij.codeInsight.completion.CompletionType
+import com.intellij.codeInsight.completion.CompletionUtil
 import com.intellij.codeInsight.completion.InsertHandler
 import com.intellij.codeInsight.completion.InsertionContext
 import com.intellij.codeInsight.completion.PlainPrefixMatcher
@@ -22,6 +23,7 @@ import com.intellij.util.ProcessingContext
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.codeInsight.PhpCodeInsightUtil
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
+import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamespace
 import com.jetbrains.php.refactoring.PhpAliasImporter
@@ -34,12 +36,34 @@ import com.jetbrains.php.refactoring.PhpAliasImporter
  * `\App\Event\Dom`) the members of that namespace are offered, written as qualified.
  *
  * PhpStorm sees the construct as a comment, so its own completion offers nothing there.
+ *
+ * In a `.phn` file the contributor also offers `fun` where a declaration may start, and it sees
+ * the items of the contributors after it: PhpStorm's override and implement items become
+ * Phaenon's ([PhaenonOverrides.decorate]), and PhpStorm's bundled `fun` live template, which
+ * would be a second `fun` in the list and expands to `function`, is left out.
  */
 class PhaenonErasedCompletionContributor : CompletionContributor() {
 
     init {
         extend(CompletionType.BASIC, PlatformPatterns.psiElement(PhaenonTokenTypes.ERASED), Provider)
         extend(CompletionType.BASIC, PlatformPatterns.psiElement(), FunProvider)
+    }
+
+    override fun fillCompletionVariants(parameters: CompletionParameters, result: CompletionResultSet) {
+        super.fillCompletionVariants(parameters, result)
+        if (result.isStopped || !PhaenonFiles.isPhaenonFile(parameters.originalFile.viewProvider.virtualFile)) return
+        val position = parameters.position
+        val klass = PsiTreeUtil.getParentOfType(position, PhpClass::class.java)?.let { CompletionUtil.getOriginalOrSelf(it) }
+        // A whole declaration is being written in a class body; after `fun` (a method head) only its name.
+        val declarationStarts = position.parent is PhpClass
+        val nameOnly = position.parent is Method
+        result.runRemainingContributors(parameters) { completion ->
+            val element = completion.lookupElement
+            // A second `fun` that names nothing — PhpStorm's live template — goes; a PHP function called `fun` stays.
+            if (element.lookupString == "fun" && element.psiElement == null) return@runRemainingContributors
+            val decorated = if (klass != null && (declarationStarts || nameOnly)) PhaenonOverrides.decorate(element, klass, declarationStarts) else element
+            result.passResult(if (decorated === element) completion else completion.withLookupElement(decorated))
+        }
     }
 
     override fun beforeCompletion(context: CompletionInitializationContext) {
