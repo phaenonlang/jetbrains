@@ -28,6 +28,9 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpTypeProvider4
  * - A function or method whose return type was erased, likewise.
  * - The receiver of a `->` access whose type is `string`, or a class implementing `\Stringable`
  *   that lacks the member: it gets `\Phaenon\Internal\StrMethods`, so `$name->upper()` resolves.
+ *   A `class<T>` is a string to the language too (`$class->length()` compiles to
+ *   `Str::length($class)`), so it gets them as well; a `::` access never does: on a class-string
+ *   it names a member of the class.
  *   `list`, `map` and `bytes` need no such step: their pseudo-class travels with the declared
  *   type. Strings cannot carry it everywhere — every PHP string would turn into an object — so
  *   they get it only where a member is accessed on them.
@@ -67,6 +70,10 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         // A field reference as well: while completing `$s->`, there are no parentheses yet.
         val access = element.parent as? MemberReference ?: return null
         if (access.classReference !== element) return null
+        // `$class::make()` on a class-string is a static access to the class it names: Str has
+        // nothing to offer there, and an extra receiver type would make PhpStorm look for the
+        // member on it too ("not found in class-string|StrMethods").
+        if (access.isStatic) return null
         val member = access.name ?: return null
         val base = PhpTypeAnalyserVisitor().getTypeFromAST(element)
         if (base.isEmpty || base.types.any { it == PhaenonTypeText.BYTES_METHODS }) return null

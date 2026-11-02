@@ -165,7 +165,7 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
         assertEquals(listOf("\\Phaenon\\Internal\\ListMethods<mixed>", "\\array", "\\null"), types["maybe"])
         assertEquals(listOf("\\Phaenon\\Internal\\BytesMethods", "\\string"), types["raw"])
         assertEquals(listOf("\\int[]", "\\string[]"), types["pair"])
-        assertEquals(listOf("\\class-string<\\App\\User>"), types["userClass"])
+        assertEquals(listOf("\\class-string<\\App\\User>", "\\string"), types["userClass"])
         assertEquals(listOf("\\Closure"), types["pred"])
         assertEquals(listOf("\\Closure"), types["log"])
         assertEquals(listOf("\\Closure"), types["kubectl"])

@@ -1,0 +1,35 @@
+namespace App;
+
+final class User
+{
+    const TABLE = 'users';
+
+    fun __construct(public string $name = '')
+    {
+    }
+
+    static fun named(string $name): static
+    {
+        return new static($name);
+    }
+}
+
+final class Factory<T of EventSourcedAggregate>
+{
+    fun __construct(private class<T> $aggregateClass, private class<User> $userClass)
+    {
+    }
+
+    fun make(class<User> $users, AggregateId $id): void
+    {
+        $user = $users::named('a');
+        $fresh = new $users('b');
+        $table = $users::TABLE;
+        $name = $users::class;
+        $length = $users->length();
+        $other = $this->userClass::named('c');
+        $class = $this->aggregateClass;
+        $rebuilt = $class::rebuildFromHistory($id, []);
+        $version = $class::VERSION;
+    }
+}

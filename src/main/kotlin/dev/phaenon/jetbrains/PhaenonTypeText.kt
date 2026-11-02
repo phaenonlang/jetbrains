@@ -19,7 +19,7 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * | `map<K, V>` | `V[]` and `\Phaenon\Internal\MapMethods<K, V>` |
  * | `bytes` | `string` and `\Phaenon\Internal\BytesMethods` |
  * | `(A, B)` | `A[]|B[]` — the positional shape as PhpStorm can hold it |
- * | `class<T>` | `class-string<T>` |
+ * | `class<T>` | `class-string<T>` and `string`, as PhpStorm reads `@return class-string<T>` |
  * | `Closure(A): R` | `\Closure` |
  * | a type parameter | its bound, `mixed` without one — what the compiler writes for it |
  * | `Foo<T>` | `\Ns\Foo` — type arguments of user classes are erased |
@@ -69,7 +69,7 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
                 "list" -> return collection(LIST_METHODS, arguments.takeLast(1), arguments.lastOrNull())
                 "map" -> return collection(MAP_METHODS, arguments, arguments.lastOrNull())
                 "bytes" -> return PhpType().add(PhpType.STRING).add(BYTES_METHODS)
-                "class" -> return PhpType().add(PhpType.createParametrizedType("\\class-string", arguments.map { it.toString() }))
+                "class" -> return classString(arguments.firstOrNull())
                 "iterable" -> return PhpType.ITERABLE
             }
             PRIMITIVES[node.simple.lowercase()]?.let { return it }
@@ -90,6 +90,20 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         }
     }
 
+    /**
+     * `class<T>` is PHPStan's `class-string<T>`: PhpStorm's own reading of that docblock type is
+     * `string` plus `\class-string<\Ns\T>`, on which `$c::m()`, `new $c`, `$c::CONST` resolve
+     * against the class. A type parameter stands for its bound; bare `class` and an unbounded
+     * parameter leave the class open.
+     */
+    private fun classString(argument: PhpType?): PhpType {
+        val result = PhpType().add(PhpType.STRING)
+        val classes = argument?.types?.filter { isClassName(it) }.orEmpty()
+        if (classes.isEmpty()) return result.add(PhpType.CLASS_STRING)
+        classes.forEach { result.add(PhpType.createParametrizedType(PhpType._CLASS_STRING, listOf(it))) }
+        return result
+    }
+
     private fun collection(pseudoClass: String, parameters: List<PhpType>, element: PhpType?): PhpType {
         val result = PhpType()
         result.add(element?.pluralise() ?: PhpType.ARRAY)
@@ -105,6 +119,8 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         return if (namespace.isEmpty()) "\\$name" else "$namespace\\$name"
     }
 
+    private fun isClassName(type: String): Boolean =
+        type.startsWith("\\") && !PhpType.isPrimitiveType(type) && !PhpType.isPluralType(type) && !PhpType.hasParameterizedPart(type)
 
     companion object {
         const val LIST_METHODS = "\\Phaenon\\Internal\\ListMethods"
