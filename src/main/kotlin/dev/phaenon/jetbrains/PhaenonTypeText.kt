@@ -124,9 +124,7 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         return PhpType().add(PhpType.CLOSURE).add(PhpType.createParametrizedType(PhpType._CLOSURE, parts + serialized(returnType)))
     }
 
-    /** A union inside a closure signature is one part: its members joined as PhpStorm joins them, in a stable order. */
-    private fun serialized(type: PhpType): String =
-        type.typesWithParametrisedParts.sorted().joinToString(PhpExpressionImpl.CALLABLE_PARAMS_TYPES_SEPARATOR)
+    private fun serialized(type: PhpType): String = Companion.serialized(type)
 
     private fun collection(pseudoClass: String, parameters: List<PhpType>, element: PhpType?): PhpType {
         val result = PhpType()
@@ -147,6 +145,16 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         type.startsWith("\\") && !PhpType.isPrimitiveType(type) && !PhpType.isPluralType(type) && !PhpType.hasParameterizedPart(type)
 
     companion object {
+        /** A union inside a closure signature is one part: its members joined as PhpStorm joins them, in a stable order. */
+        fun serialized(type: PhpType): String =
+            type.typesWithParametrisedParts.sorted().joinToString(PhpExpressionImpl.CALLABLE_PARAMS_TYPES_SEPARATOR)
+
+        /** `\Closure` with the signature PhpStorm reads from the docblock `\Closure(A, B): R`, from types it holds. */
+        fun closureType(parameters: List<PhpType>, returnType: PhpType): PhpType {
+            val parts = parameters.map { PhpExpressionImpl.serializeAdvancedClosureParameter("", serialized(it)) }
+            return PhpType().add(PhpType.CLOSURE).add(PhpType.createParametrizedType(PhpType._CLOSURE, parts + serialized(returnType)))
+        }
+
         const val LIST_METHODS = "\\Phaenon\\Internal\\ListMethods"
         const val MAP_METHODS = "\\Phaenon\\Internal\\MapMethods"
         const val STR_METHODS = "\\Phaenon\\Internal\\StrMethods"

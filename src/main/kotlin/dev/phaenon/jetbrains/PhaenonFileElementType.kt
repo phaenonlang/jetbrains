@@ -37,7 +37,7 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
      * declaration: PhpStorm stores that answer with the declaration's stub, so an old index would
      * keep the old type (3: type parameters read as their bounds, `class<T>` as
      * `class-string<Bound>`, closure types with their signature; 4: `class<T>` without a `string`
-     * member).
+     * member, PHP 8.6 placeholders in argument lists).
      *
      * The stub trees PhpStorm stores for `.phn` files are versioned by the PHP file type (the
      * platform asks the language's parser definition, never the file's content element type), so

@@ -5,9 +5,15 @@ import com.intellij.codeInsight.daemon.impl.HighlightInfoFilter
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
+import java.util.Locale
+import java.util.MissingResourceException
+import java.util.ResourceBundle
 import com.jetbrains.php.PhpBundle
 import com.jetbrains.php.PhpIndex
+import com.jetbrains.php.lang.psi.elements.PhpClassFieldsList
+import com.jetbrains.php.lang.psi.elements.ConstantReference
 import com.jetbrains.php.lang.psi.elements.Field
+import com.jetbrains.php.lang.psi.elements.FieldReference
 import com.jetbrains.php.lang.inspections.type.PhpParamsInspection
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.parser.PhpElementTypes
@@ -17,7 +23,10 @@ import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.ParameterList
 import com.jetbrains.php.lang.psi.elements.ParenthesizedExpression
+import com.jetbrains.php.lang.psi.elements.PhpAttribute
+import com.jetbrains.php.lang.psi.elements.PhpAttributesList
 import com.jetbrains.php.lang.psi.elements.PhpClass
+import com.jetbrains.php.lang.psi.elements.PhpEnumCase
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpReference
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
@@ -60,6 +69,21 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
  * "Other declarations of class 'X' exist at X.php" is PhpStorm seeing the `.php` the compiler
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
  * some other declaration is hand-written.
+ *
+ * PHP 8.6 (design/php-versions.md §4), which PhpStorm 2025.1 and 2026.2 do not know — their
+ * language levels stop at 8.4 and 8.5:
+ *
+ * - a partial application's `?` is a constant to PhpStorm ([PhaenonLexer]), "undefined", and its
+ *   trailing `...` "a spread without an expression"; in a constant expression it is "not allowed",
+ *   and as a pipe stage "not a valid callable" (PhpStorm types it as the callee's result). The
+ *   compiler emits it as written for 8.6 and lowers it for 8.5, so these go on either target;
+ * - `#[\Override]` on a class constant or an enum case "cannot be applied" by the attribute's
+ *   targets in PhpStorm's stubs; PHP 8.6 allows it, and for 8.5 the compiler checks it and drops
+ *   the attribute, so this goes on either target too;
+ * - "readonly property cannot have default value", "Enum may not include '__debugInfo'" and
+ *   "Can't use temporary expression in write context" on `CONFIG->prop = $v` go when the file's
+ *   target ([PhaenonTarget]) is 8.6. On an 8.5 target they stay: the compiler refuses them there,
+ *   "… needs PHP 8.6 (target 8.5)".
  */
 class PhaenonHighlightFilter : HighlightInfoFilter {
 
@@ -70,7 +94,14 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (!PhaenonFiles.isPhaenonFile(file.viewProvider.virtualFile)) return true
         if (description.startsWith(OTHER_DECLARATIONS_PREFIX)) return otherDeclarationIsHandWritten(info, file)
         if (description == PSR_MISSING_VISIBILITY) return !visibilityIsImplied(info, file)
-        if (description in INVALID_CONSTANT_EXPRESSION) return !closureInConstantExpression(info, file)
+        if (description in INVALID_CONSTANT_EXPRESSION) return !closureInConstantExpression(info, file) && !partialApplicationAt(info, file)
+        if (UNDEFINED_CONSTANT.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
+            return !PhaenonPartialApplication.isPlaceholder(file.findElementAt(info.startOffset)?.parent)
+        }
+        if (description == SPREAD_WITHOUT_EXPRESSION) return !PhaenonPartialApplication.isVariadicPlaceholder(file.findElementAt(info.startOffset))
+        if (NOT_A_VALID_CALLABLE.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) return !partialApplicationAt(info, file)
+        if (description.startsWith(ATTRIBUTE_TARGET.first) && description.endsWith(ATTRIBUTE_TARGET.second)) return !overrideOnConstant(info, file)
+        if (description in PHP86_ONLY) return !php86Construct(info, file, description)
         if (UNDEFINED_CLASS.let { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
             return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf)
@@ -158,6 +189,38 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         return function.isClosure
     }
 
+    /** A partial application where the finding starts: `f(?, 1)` as a constant or a pipe stage. */
+    private fun partialApplicationAt(info: HighlightInfo, file: PsiFile): Boolean {
+        val leaf = file.findElementAt(info.startOffset) ?: return false
+        val call = PsiTreeUtil.getParentOfType(leaf, FunctionReference::class.java, false) ?: return false
+        return PhaenonPartialApplication.of(call) != null
+    }
+
+    /** `#[\Override]` on a class constant or an enum case, which PHP 8.6 allows and the compiler drops for 8.5. */
+    private fun overrideOnConstant(info: HighlightInfo, file: PsiFile): Boolean {
+        val leaf = file.findElementAt(info.startOffset) ?: return false
+        val attribute = PsiTreeUtil.getParentOfType(leaf, PhpAttribute::class.java, false) ?: return false
+        if (attribute.fqn != "\\Override") return false
+        val owner = PsiTreeUtil.getParentOfType(attribute, PhpAttributesList::class.java)?.parent ?: return false
+        return owner is PhpEnumCase || owner is Field && owner.isConstant ||
+            owner is PhpClassFieldsList && owner.fields.any { it.isConstant }
+    }
+
+    /** The PHP 8.6 construct a finding is about, on an 8.6 target: a readonly default, an enum's `__debugInfo()`, a write through a constant. */
+    private fun php86Construct(info: HighlightInfo, file: PsiFile, description: String): Boolean {
+        if (!PhaenonTarget.isPhp86(file)) return false
+        val leaf = file.findElementAt(info.startOffset) ?: return false
+        return when (description) {
+            READONLY_DEFAULT -> PsiTreeUtil.getParentOfType(leaf, Field::class.java) != null
+            ENUM_DEBUG_INFO -> PsiTreeUtil.getParentOfType(leaf, Method::class.java)?.containingClass?.isEnum == true
+            TEMPORARY_IN_WRITE -> {
+                val write = PsiTreeUtil.getParentOfType(leaf, FieldReference::class.java, false) ?: return false
+                write.classReference is ConstantReference
+            }
+            else -> false
+        }
+    }
+
     /** `use App\Event\DomainEvent;` is used by `list<DomainEvent>`, which PhpStorm cannot see. */
     private fun importIsUsedInAnErasedType(info: HighlightInfo, file: PsiFile): Boolean {
         val leaf = file.findElementAt(info.startOffset) ?: return false
@@ -213,6 +276,40 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val UNUSED_IMPORT: List<Pair<String, String>> = listOf("inspection.php.unused.alias.description", "inspection.php.unused.alias.description2")
             .map { PhpBundle.message(it) }
             .map { it.substringBefore("#ref") to it.substringAfter("#ref") }
+
+        /** "Undefined constant '#ref'", "Constant '#ref' is probably undefined": a placeholder `?` to PhpStorm. */
+        val UNDEFINED_CONSTANT: List<Pair<String, String>> = listOf("inspection.undefined.constant.problem1", "inspection.undefined.constant.problem2")
+            .map { PhpBundle.message(it) }
+            .map { it.substringBefore("#ref") to it.substringAfter("#ref") }
+
+        val SPREAD_WITHOUT_EXPRESSION: String = PhpBundle.message("expected.expression.after.spread.operator")
+
+        /** What PhpStorm 2026.2 says of a pipe stage it does not take for a callable; absent from 2025.1, which has no pipe. */
+        val NOT_A_VALID_CALLABLE: List<Pair<String, String>> = listOf(
+            "php.annotator.pipe.expression.value.of.type.is.not.valid.callable",
+            "php.annotator.pipe.expression.not.valid.callable",
+        ).mapNotNull { phpMessage(it, "\u0000") }.map { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
+
+        /** "Attribute cannot be applied to a {0} because it does not contain the '{1}' flag", around what is filled in. */
+        val ATTRIBUTE_TARGET: Pair<String, String> =
+            PhpBundle.message("inspection.message.attribute.can.t.be.applied.to.because.it.doest.contains", "\u0000", "\u0000")
+                .let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
+
+        val READONLY_DEFAULT: String = PhpBundle.message("readonly.property.cannot.have.default.value")
+        val ENUM_DEBUG_INFO: String = PhpBundle.message("enum.may.not.include.0", "__debugInfo")
+        val TEMPORARY_IN_WRITE: String = PhpBundle.message("cant.use.temporary.expression.in.write.context")
+        val PHP86_ONLY: Set<String> = setOf(READONLY_DEFAULT, ENUM_DEBUG_INFO, TEMPORARY_IN_WRITE)
+
+        /** A message of PhpStorm's bundle, or null when this PhpStorm does not have the key. */
+        private fun phpMessage(key: String, vararg arguments: Any): String? {
+            val bundle = try {
+                ResourceBundle.getBundle("messages.PhpBundle", Locale.ROOT, PhpBundle::class.java.classLoader)
+            } catch (e: MissingResourceException) {
+                return null
+            }
+            if (!bundle.containsKey(key)) return null
+            return PhpBundle.message(key, *arguments)
+        }
 
         /** The message up to the class name, which the inspection fills in for `#ref`. */
         val OTHER_DECLARATIONS_PREFIX: String =

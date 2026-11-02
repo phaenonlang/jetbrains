@@ -3,11 +3,14 @@ package dev.phaenon.jetbrains
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.jetbrains.php.PhpIndex
+import com.jetbrains.php.lang.psi.elements.BinaryExpression
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.Function
+import com.jetbrains.php.lang.psi.elements.FunctionReference
 import com.jetbrains.php.lang.psi.elements.MemberReference
 import com.jetbrains.php.lang.psi.elements.MethodReference
 import com.jetbrains.php.lang.psi.elements.Parameter
+import com.jetbrains.php.lang.psi.elements.ParenthesizedExpression
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
@@ -40,10 +43,20 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpTypeProvider4
  *   receiver's type arguments and, for `map`, `keyBy` and `groupBy`, from the closure's return
  *   type.
  *
+ * - A partial application, PHP 8.6's `f(?, 1)`, `$o->m(b: ?)`, `C::m(1, ...)`: the closure it
+ *   creates (design/php-versions.md §5.2), its parameters the ones the placeholders stand for —
+ *   positional ones first, then named ones in the order written, then what `...` leaves — and its
+ *   return type the callee's. PhpStorm, which parses the call as a call ([PhaenonLexer] hands it
+ *   `?` as a constant), adds the callee's return type itself; the extension point cannot take a
+ *   type away, so `$g = f(?, 1)` is the callee's return type and the closure, and a call of `$g`
+ *   is checked against the closure's signature.
+ * - A pipe whose stage is a partial application, `$x |> $o->m(1, ?)`: the call it becomes. PhpStorm
+ *   types a pipe by the function its right side names, which for a method call is no function.
+ *
  * A receiver's or closure's type may be a signature that only an index lookup can decode (a
  * property of another class, say). Those cases are deferred the way the extension point intends:
  * [getType] returns a signature under this provider's key and [complete] resolves it when the
- * indices are available.
+ * indices are available. A partial application always is: its callee is found through the index.
  */
 class PhaenonTypeProvider : PhpTypeProvider4 {
 
@@ -54,9 +67,48 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         return when (element) {
             is Parameter, is Field -> declared(element as PhpNamedElement, PhaenonErasedTypes.beforeName(element))
             is Function -> declared(element, PhaenonErasedTypes.returnType(element))
-            is MethodReference -> chain(element)
+            is MethodReference -> partial(element) ?: chain(element)
+            is FunctionReference -> partial(element) ?: receiver(element)
+            is BinaryExpression -> pipe(element) ?: receiver(element)
             else -> receiver(element)
         }
+    }
+
+    // ---------------------------------------------------------------- partial application
+
+    /** The closure a partial application creates, deferred to [complete]: the callee is an index lookup. */
+    private fun partial(call: FunctionReference): PhpType? {
+        val shape = PhaenonPartialApplication.of(call) ?: return null
+        val callee = call.signature.takeIf { it.isNotEmpty() } ?: return null
+        return PhpType().add(signature(PARTIAL, shape.encode(), PhpType().add(callee)))
+    }
+
+    /** `$x |> $o->m(1, ?)`: the type of the call the stage becomes, the callee's return type. */
+    private fun pipe(expression: BinaryExpression): PhpType? {
+        if (expression.operation?.text != "|>") return null
+        var right = expression.rightOperand
+        while (right is ParenthesizedExpression) right = right.argument
+        val call = right as? FunctionReference ?: return null
+        if (PhaenonPartialApplication.of(call) == null) return null
+        return call.signature.takeIf { it.isNotEmpty() }?.let { PhpType().add(it) }
+    }
+
+    private fun completePartial(shapeText: String, callee: PhpType, project: Project): PhpType {
+        val shape = PhaenonPartialApplication.decode(shapeText) ?: return PhpType.EMPTY
+        val index = PhpIndex.getInstance(project)
+        val result = PhpType()
+        for (signature in callee.types) {
+            for (function in index.getBySignature(signature).filterIsInstance<Function>()) {
+                val parameters = shape.closureParameters(function.parameters) ?: continue
+                val types = parameters.map { parameter ->
+                    val declared = parameter.declaredType.takeIf { !it.isEmpty } ?: parameter.type
+                    val type = declared.global(project)
+                    if (parameter.isVariadic) PhpType().also { t -> type.typesWithParametrisedParts.forEach { t.add(if (PhpType.isPluralType(it)) PhpType.unpluralize(it) else it) } } else type
+                }
+                result.add(PhaenonTypeText.closureType(types, function.type.global(project)))
+            }
+        }
+        return result
     }
 
     private fun declared(element: PhpNamedElement, text: String): PhpType? {
@@ -190,10 +242,11 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         val fields = payload.substring(1).split(SEPARATOR)
         val member = fields.getOrNull(0) ?: return null
         val receiver = decode(fields.getOrNull(1)) ?: return null
-        val resolved = receiver.global(project)
+        val resolved = if (kind == PARTIAL) receiver else receiver.global(project)
         return when (kind) {
             STRINGABLE -> completeStringable(member, resolved, project)
             CHAIN -> completeChain(member, resolved, decode(fields.getOrNull(2))?.global(project))
+            PARTIAL -> completePartial(member, receiver, project)
             else -> null
         }
     }
@@ -224,6 +277,7 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         const val KEY = 'Φ'
         const val STRINGABLE = 'S'
         const val CHAIN = 'C'
+        const val PARTIAL = 'P'
         const val SEPARATOR = '¦'
         const val PIPE = '¶'
         val STR: PhpType = PhpType().add(PhaenonTypeText.STR_METHODS)

@@ -38,6 +38,12 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  *   expression degrades to its operand.
  * - `type Name = …;` aliases are erased whole.
  * - `(bytes)` is re-typed as a `(string)` cast: one token spanning the parentheses.
+ * - PHP 8.6's argument placeholders (`f(?, 1)`, `f(b: ?)`, `$o->m(?)`, design/php-versions.md
+ *   §5): a `?` that stands alone as an argument is handed over as an identifier, its text kept,
+ *   so the call parses as a call with a constant for an argument and the bound arguments stay
+ *   PSI. PhpStorm's levels stop at PHP 8.5 and read `?` there as a syntax error.
+ *   [PhaenonTypeProvider] types the call as the closure it creates. The variadic placeholder
+ *   `f(1, ...)` is left to PhpStorm, which parses it as a spread without an operand.
  *
  * The decision to read `Name<` as a type-argument list is the compiler's: PHP's relational
  * operators are non-associative, so `A < B > C` has no PHP reading, and a `<…>` that scans as a
@@ -56,6 +62,8 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     private val pending = ArrayList<Tok>()
     private var prevSig: IElementType? = null
     private var prevSigText: String = ""
+    /** The significant token before [prevSig], to tell a named argument's `name:` from other colons. */
+    private var prevPrevSig: IElementType? = null
     private val typeParams = HashSet<String>()
     private var buffer: CharSequence = ""
 
@@ -64,6 +72,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         pending.clear()
         prevSig = null
         prevSigText = ""
+        prevPrevSig = null
         typeParams.clear()
         super.start(buffer, startOffset, endOffset, initialState)
     }
@@ -80,6 +89,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             return
         }
         val plan = tryFun(c)
+            ?: tryPlaceholder(c)
             ?: tryConcurrently(c)
             ?: trySpawn(c)
             ?: tryIs(c)
@@ -167,6 +177,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             }
             addToken(end, type)
             if (type !in SKIPPABLE) {
+                prevPrevSig = prevSig
                 prevSig = type
                 prevSigText = if (type == PhpTokenTypes.IDENTIFIER) buffer.subSequence(pending[i].start, end).toString() else ""
             }
@@ -189,6 +200,23 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         val t = typeAt(next) ?: return null
         if (t != PhpTokenTypes.IDENTIFIER && t !in PhpTokenTypes.tsKEYWORDS) return null
         return Plan(1).replace(0, PhpTokenTypes.kwFUNCTION)
+    }
+
+    /**
+     * `?` standing alone as an argument — after `(`, `,` or a named argument's `name:`, before `,`
+     * or `)` — is PHP 8.6's placeholder: an identifier to the parser, so that the call stays a call.
+     * Nowhere else in PHP does a lone `?` sit between those tokens: a nullable type is followed by
+     * its type, a ternary's `?` by its operand.
+     */
+    private fun tryPlaceholder(c: Tok): Plan? {
+        if (c.type != PhpTokenTypes.opQUEST) return null
+        val opens = prevSig == PhpTokenTypes.chLPAREN || prevSig == PhpTokenTypes.opCOMMA ||
+            // A named argument's name may be a reserved word: `f(array: ?)`.
+            prevSig == PhpTokenTypes.opCOLON && (prevPrevSig == PhpTokenTypes.IDENTIFIER || prevPrevSig in PhpTokenTypes.tsKEYWORDS)
+        if (!opens) return null
+        val next = typeAt(sig(1))
+        if (next != PhpTokenTypes.opCOMMA && next != PhpTokenTypes.chRPAREN) return null
+        return Plan(1).replace(0, PhpTokenTypes.IDENTIFIER)
     }
 
     /**

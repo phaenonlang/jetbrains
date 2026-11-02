@@ -1,0 +1,44 @@
+namespace App;
+
+class Settings
+{
+    public int $level = 0;
+}
+
+const CONFIG = new Settings();
+
+class Base
+{
+    const LIMIT = 10;
+}
+
+interface HasName
+{
+    const NAME = 'base';
+}
+
+final class Derived extends Base
+{
+    #[\Override]
+    const LIMIT = 20;
+
+    public readonly string $name = 'derived';
+}
+
+enum Level: int implements HasName
+{
+    #[\Override]
+    const NAME = 'level';
+
+    case Low = 1;
+
+    public fun __debugInfo(): array
+    {
+        return ['level' => $this->value];
+    }
+}
+
+fun configure(int $level): void
+{
+    CONFIG->level = $level;
+}
