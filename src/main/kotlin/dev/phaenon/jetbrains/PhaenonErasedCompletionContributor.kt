@@ -26,6 +26,7 @@ import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamespace
+import com.jetbrains.php.lang.psi.resolve.types.PhpType
 import com.jetbrains.php.refactoring.PhpAliasImporter
 
 /**
@@ -35,7 +36,8 @@ import com.jetbrains.php.refactoring.PhpAliasImporter
  * `use` statement on insertion, as it would in PHP code. After a qualifier (`Event\Dom`,
  * `\App\Event\Dom`) the members of that namespace are offered, written as qualified.
  *
- * PhpStorm sees the construct as a comment, so its own completion offers nothing there.
+ * After `throws` only the Throwables are offered, with the type parameters and `self`, `static`,
+ * `parent`. PhpStorm sees the construct as a comment, so its own completion offers nothing there.
  *
  * In a `.phn` file the contributor also offers `fun` where a declaration may start, and it sees
  * the items of the contributors after it: PhpStorm's override and implement items become
@@ -95,6 +97,11 @@ class PhaenonErasedCompletionContributor : CompletionContributor() {
 
     private object Provider : CompletionProvider<CompletionParameters>() {
 
+        private const val THROWABLE = "\\Throwable"
+
+        /** What a `throws` clause may name besides classes and type parameters. */
+        private val THROWS_KEYWORDS: List<String> = listOf("self", "static", "parent")
+
         private val KEYWORDS: List<String> = listOf(
             "int", "float", "string", "bool", "mixed", "null", "void", "never", "object", "array", "callable", "iterable",
             "bytes", "list", "map", "class", "self", "static", "true", "false",
@@ -118,21 +125,25 @@ class PhaenonErasedCompletionContributor : CompletionContributor() {
                 return
             }
 
+            // After `throws` (design/functions.md §4): Throwables, and type parameters, which may be bounded by one.
+            val throwsClause = PhaenonErasedTypes.isThrowsClause(leaf)
             for (name in PhaenonErasedTypes.typeParametersInScope(leaf)) {
                 out.addElement(LookupElementBuilder.create(name).bold().withTypeText("type parameter", true))
             }
-            for (word in KEYWORDS) {
+            for (word in if (throwsClause) THROWS_KEYWORDS else KEYWORDS) {
                 out.addElement(LookupElementBuilder.create(word).bold())
             }
             val index = PhpIndex.getInstance(leaf.project)
+            val throwable = PhpType().add(THROWABLE).takeIf { throwsClause && index.getAnyByFQN(THROWABLE).isNotEmpty() }
             val names = LinkedHashSet<String>()
             names.addAll(index.getAllClassNames(matcher))
             names.addAll(index.allInterfaceNames.filter(matcher::prefixMatches))
-            names.addAll(index.allTraitNames.filter(matcher::prefixMatches))
+            if (!throwsClause) names.addAll(index.allTraitNames.filter(matcher::prefixMatches))
             for (name in names) {
-                val classes = index.getClassesByName(name) + index.getInterfacesByName(name) + index.getTraitsByName(name)
+                val classes = index.getClassesByName(name) + index.getInterfacesByName(name) + if (throwsClause) emptyList() else index.getTraitsByName(name)
                 for (klass in classes) {
                     if (PhaenonFiles.isGeneratedOutput(klass.containingFile)) continue
+                    if (throwable != null && !throwable.isConvertibleFrom(PhpType().add(klass.fqn), index)) continue
                     out.addElement(
                         LookupElementBuilder.create(klass, klass.name)
                             .withIcon(klass.getIcon(0))

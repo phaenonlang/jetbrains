@@ -1,16 +1,24 @@
 package dev.phaenon.jetbrains
 
 import com.intellij.application.options.CodeStyle
+import com.intellij.codeInsight.actions.OptimizeImportsProcessor
 import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.jetbrains.php.PhpBundle
+import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.PhpLanguage
 import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
 import com.jetbrains.php.lang.inspections.PhpInconsistentReturnPointsInspection
+import com.jetbrains.php.lang.inspections.PhpUnusedAliasInspection
 import com.jetbrains.php.lang.inspections.controlFlow.PhpNeverTypedFunctionReturnViolationInspection
+import com.jetbrains.php.lang.inspections.phpdoc.PhpDocMissingThrowsInspection
+import com.jetbrains.php.lang.inspections.probablyBug.PhpUnhandledExceptionInspection
 import com.jetbrains.php.lang.inspections.type.PhpIncompatibleReturnTypeInspection
 import com.jetbrains.php.lang.psi.elements.FieldReference
 import com.jetbrains.php.lang.psi.elements.Function
@@ -97,6 +105,133 @@ class PhaenonD18Test : BasePlatformTestCase() {
         val items = myFixture.completeBasic()?.map { it.lookupString }
         assertTrue(items.toString(), items == null || "total" in items)
         if (items == null) assertTrue(myFixture.editor.document.text.contains("\$this->total;"))
+    }
+
+    fun testThrowsNamesAreReferencesThatRenameAndKeepTheirImports() {
+        myFixture.enableInspections(PhpUnusedAliasInspection::class.java)
+        bodies()
+
+        val target = PhpIndex.getInstance(project).getClassesByFQN("\\App\\Errors\\NotFound").single()
+        val usages = myFixture.findUsages(target).map { it.element?.text }
+        assertTrue(usages.toString(), usages.count { it != null && it.startsWith("throws") } >= 3)
+        assertEmpty(findings().filter { it.startsWith("Import") })
+
+        WriteCommandAction.runWriteCommandAction(project) { OptimizeImportsProcessor(project, myFixture.file).runWithoutProgress() }
+        assertTrue(myFixture.file.text.contains("use App\\Errors\\NotFound;\nuse App\\Errors\\Unavailable;\n"))
+
+        myFixture.renameElement(target, "Missing")
+        assertTrue(myFixture.file.text, myFixture.file.text.contains("fun find(int \$id): ?string throws Missing;"))
+        assertTrue(myFixture.file.text, myFixture.file.text.contains("fun first(): string throws Missing|Unavailable =>"))
+    }
+
+    fun testCompletionAfterThrowsOffersThrowables() {
+        myFixture.configureByText("T.phn", "namespace App\\Errors;\n\nfinal class Plain {\n}\n\nfun f(): void throws <caret> {\n}\n")
+
+        val items = myFixture.completeBasic().orEmpty().map { it.lookupString }
+        assertTrue(items.toString(), "NotFound" in items && "Unavailable" in items)
+        assertFalse(items.toString(), "Plain" in items)
+        assertFalse(items.toString(), "int" in items)
+    }
+
+    fun testUnhandledExceptionsTheClauseNamesAreHandled() {
+        myFixture.enableInspections(PhpUnhandledExceptionInspection::class.java)
+        myFixture.addFileToProject(
+            "risky.php",
+            "<?php\nnamespace App;\n\n/**\n * @throws Errors\\NotFound\n * @throws Errors\\Unavailable\n */\nfunction risky(): void {\n}\n",
+        )
+        myFixture.configureByText(
+            "U.phn",
+            """
+            namespace App;
+
+            use App\Errors\NotFound;
+            use App\Errors\Unavailable;
+
+            interface Finder {
+                fun find(int ${'$'}id): string throws NotFound;
+            }
+
+            final class U implements Finder {
+                fun declared(): void throws NotFound {
+                    throw new NotFound(1);
+                }
+
+                fun parent(): void throws \Exception {
+                    throw new Unavailable();
+                }
+
+                fun other(): void throws NotFound {
+                    throw new Unavailable();
+                }
+
+                fun both(): void throws NotFound|Unavailable {
+                    risky();
+                }
+
+                fun half(): void throws NotFound {
+                    risky();
+                }
+
+                fun closure(): \Closure throws NotFound {
+                    return function (): void {
+                        throw new NotFound(2);
+                    };
+                }
+
+                fun find(int ${'$'}id): string => throw new NotFound(${'$'}id);
+            }
+
+            final class Documented implements Finder {
+                /** Finds nothing. */
+                fun find(int ${'$'}id): string => throw new NotFound(${'$'}id);
+            }
+            """.trimIndent() + "\n",
+        )
+
+        // PhpStorm reads `@throws` tags only; the clause the compiler writes as one is read by the
+        // filter: a closure's exceptions against the enclosing function's clause, a method without a
+        // docblock against the clause of the method it implements, as PhpStorm reads tags. A call
+        // reported for two exceptions stays unless the clause names both; a method with a docblock
+        // of its own does not inherit.
+        assertEquals(
+            listOf("Unhandled Errors\\Unavailable @'throw'", "Unhandled exceptions @'risky'", "Unhandled Errors\\NotFound @'throw'"),
+            findings(),
+        )
+    }
+
+    fun testAMissingThrowsTagTheClauseNamesIsNotReported() {
+        myFixture.enableInspections(PhpDocMissingThrowsInspection().apply { SKIP_ON_EMPTY_PHPDOC = false })
+        myFixture.configureByText(
+            "M.phn",
+            """
+            namespace App;
+
+            use App\Errors\NotFound;
+            use App\Errors\Unavailable;
+
+            final class M {
+                /** Declared. */
+                fun declared(): void throws NotFound {
+                    throw new NotFound(1);
+                }
+
+                /** Not declared. */
+                fun other(): void throws NotFound {
+                    throw new Unavailable();
+                }
+            }
+            """.trimIndent() + "\n",
+        )
+
+        val missing = myFixture.doHighlighting().filter { it.description == PhpBundle.message("inspection.doc.throws.problem") }
+        val document = myFixture.editor.document
+        assertEquals(listOf("    /** Not declared. */"), missing.map { document.getText(TextRange(document.getLineStartOffset(document.getLineNumber(it.startOffset)), document.getLineEndOffset(document.getLineNumber(it.startOffset)))) }.distinct())
+    }
+
+    fun testQuickDocumentationShowsTheClause() {
+        bodies()
+
+        assertEquals("fun first(): string throws NotFound|Unavailable", myFixture.hint("fun first", 5))
     }
 
     fun testAPhpFileKeepsItsSyntaxErrors() {

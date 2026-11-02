@@ -14,6 +14,7 @@ import com.jetbrains.php.lang.psi.elements.PhpClassFieldsList
 import com.jetbrains.php.lang.psi.elements.ConstantReference
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.FieldReference
+import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocComment
 import com.jetbrains.php.lang.inspections.type.PhpParamsInspection
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.parser.PhpElementTypes
@@ -94,6 +95,11 @@ import com.jetbrains.php.lang.psi.elements.Variable
  * function reads after it, and a parameter or variable used only on the other side of a block
  * boundary is not "unused". What PhpStorm says of the closure itself it says at the keyword
  * (`spawn $mailer->send($m);` is an expression whose result "is not used"): that goes too.
+ *
+ * A function's `throws A|B` clause is what its compiled `@throws` tag says, but PhpStorm's exception
+ * analysis reads only docblocks: "Unhandled X" (or "Unhandled exceptions") goes where the clauses
+ * in effect name X or a parent of it, as does "PHPDoc comment doesn't contain all the necessary
+ * @throws tags" where they name what the docblock lacks ([PhaenonThrows] says which clauses those are).
  */
 class PhaenonHighlightFilter : HighlightInfoFilter {
 
@@ -113,6 +119,16 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (description.startsWith(ATTRIBUTE_TARGET.first) && description.endsWith(ATTRIBUTE_TARGET.second)) return !overrideOnConstant(info, file)
         if (description in PHP86_ONLY) return !php86Construct(info, file, description)
         if (PhaenonBlocks.isKeywordAt(file, info.startOffset)) return false
+        if (description == UNHANDLED_SEVERAL || description.startsWith(UNHANDLED.first) && description.endsWith(UNHANDLED.second)) {
+            return !PhaenonThrows.answersUnhandled(file.findElementAt(info.startOffset) ?: return true)
+        }
+        if (description == MISSING_THROWS_TAGS) {
+            // The finding marks the docblock.
+            val leaf = file.findElementAt(info.startOffset)
+            val function = PsiTreeUtil.getParentOfType(leaf, PhpDocComment::class.java, false)?.owner as? Function
+                ?: PsiTreeUtil.getParentOfType(leaf, Function::class.java, false) ?: return true
+            return !PhaenonThrows.answersMissingTags(function)
+        }
         if (UNDEFINED_VARIABLE.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             val variable = PsiTreeUtil.getParentOfType(file.findElementAt(info.startOffset), Variable::class.java, false) ?: return true
             return !PhaenonBlocks.isKnownAcrossBlocks(variable)
@@ -306,6 +322,11 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val UNUSED_IMPORT: List<Pair<String, String>> = listOf("inspection.php.unused.alias.description", "inspection.php.unused.alias.description2")
             .map { PhpBundle.message(it) }
             .map { it.substringBefore("#ref") to it.substringAfter("#ref") }
+
+        /** "Unhandled {0}", around the exception's name. */
+        val UNHANDLED: Pair<String, String> = PhpBundle.message("unhandled.0", "\u0000").let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
+        val UNHANDLED_SEVERAL: String = PhpBundle.message("unhandled.exceptions")
+        val MISSING_THROWS_TAGS: String = PhpBundle.message("inspection.doc.throws.problem")
 
         /** "Undefined variable '#ref'", "Variable '#ref' is probably undefined". */
         val UNDEFINED_VARIABLE: List<Pair<String, String>> = listOf("inspection.undefined.variable.problem1", "inspection.undefined.variable.problem2")

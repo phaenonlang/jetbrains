@@ -36,8 +36,8 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * docblock sections, the source file:
  *
  * - a function or method declared in a `.phn` with an erased part in its signature (a type
- *   parameter list, a parameter type, the return type): the signature as written,
- *   `abstract protected static fun aggregateClass(): class<T>`;
+ *   parameter list, a parameter type, the return type, a `throws` clause): the signature as written,
+ *   `abstract protected static fun aggregateClass(): class<T>`, `fun load(Id $id): T throws NotFound`;
  * - a parameter or property declared with an erased type: `$users: class<User>`, the type as
  *   written;
  * - a variable in a `.phn` file whose type holds a class-string, a pseudo-class or a closure
@@ -125,6 +125,7 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
         val parameters = function.parameters
         val erased = PhaenonErasedTypes.writtenTypeParameters(function) != null ||
             PhaenonErasedTypes.returnTypeLeaf(function) != null ||
+            PhaenonErasedTypes.throwsClause(function) != null ||
             parameters.any { PhaenonErasedTypes.typeLeaf(it) != null }
         if (!erased) return null
         val out = StringBuilder()
@@ -168,6 +169,13 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
                 out.append(": ")
                 type(out, inferred)
             }
+        }
+        val throws = PhaenonErasedTypes.throwsNames(function)
+        if (throws.isNotEmpty()) {
+            out.append(' ')
+            styled(out, "throws", PhpHighlightingData.KEYWORD)
+            out.append(' ')
+            styled(out, throws.joinToString("|"), PhpHighlightingData.PRIMITIVE_TYPE_HINT)
         }
         return out.toString()
     }
