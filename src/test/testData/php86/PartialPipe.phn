@@ -1,27 +1,21 @@
 namespace App;
 
-fun label(string $prefix, string $value): string
-{
+fun label(string $prefix, string $value): string {
     return $prefix . $value;
 }
 
-final class Style
-{
-    public static fun line(string $s): string
-    {
+final class Style {
+    public static fun line(string $s): string {
         return $s;
     }
 
-    public static fun width(int $indent, string $s): int
-    {
+    public static fun width(int $indent, string $s): int {
         return $indent;
     }
 }
 
-final class Piped
-{
-    fun run(string $ns): void
-    {
+final class Piped {
+    fun run(string $ns): void {
         $line = $ns |> label('✓ ', ?) |> Style::line(...);
         $width = $ns |> Style::width(2, ?);
         $chained = $ns |> label('✓ ', ?) |> Style::width(4, ?);

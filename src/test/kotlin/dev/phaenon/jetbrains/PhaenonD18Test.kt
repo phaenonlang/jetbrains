@@ -6,6 +6,7 @@ import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiErrorElement
+import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.PhpBundle
@@ -25,6 +26,7 @@ import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.GroupStatement
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpReturn
+import java.io.File
 
 /**
  * D18 in `.phn` files (design/functions.md §3–§5): expression bodies `=> expr;`, `throws A|B`, and
@@ -226,6 +228,38 @@ class PhaenonD18Test : BasePlatformTestCase() {
         val missing = myFixture.doHighlighting().filter { it.description == PhpBundle.message("inspection.doc.throws.problem") }
         val document = myFixture.editor.document
         assertEquals(listOf("    /** Not declared. */"), missing.map { document.getText(TextRange(document.getLineStartOffset(document.getLineNumber(it.startOffset)), document.getLineEndOffset(document.getLineNumber(it.startOffset)))) }.distinct())
+    }
+
+    fun testExpressionBodiesKeepTheirLayout() {
+        val source = File(testDataPath, "d18/Bodies.phn").readText()
+        val cases = mapOf(
+            "as written" to source,
+            "lost indentation" to source.lines().joinToString("\n") { it.trimStart() },
+            "PSR-12 braces" to source.replace(" {\n", "\n{\n"),
+        )
+        for ((label, text) in cases) {
+            val file = myFixture.configureByText("Layout.phn", text)
+            WriteCommandAction.runWriteCommandAction(project) { CodeStyleManager.getInstance(project).reformat(file) }
+            assertEquals(label, source, myFixture.editor.document.text)
+        }
+    }
+
+    fun testEnterBeforeTheArrowWrapsItOneLevelIn() {
+        myFixture.configureByText("W.phn", "namespace App;\n\nfinal class W {\n    fun name(): string<caret> => 'w';\n}\n")
+
+        myFixture.type("\n")
+
+        val document = myFixture.editor.document.text
+        val caret = myFixture.editor.caretModel.offset
+        assertEquals("namespace App;\n\nfinal class W {\n    fun name(): string\n        <caret>=> 'w';\n}\n", document.substring(0, caret) + "<caret>" + document.substring(caret).trimStart(' '))
+    }
+
+    fun testCompleteStatementOpensTheBodyOnTheDeclarationsLine() {
+        myFixture.configureByText("S.phn", "namespace App;\n\nfinal class S {\n    fun name(): string<caret>\n}\n")
+
+        myFixture.performEditorAction("EditorCompleteStatement")
+
+        assertTrue(myFixture.editor.document.text, myFixture.editor.document.text.startsWith("namespace App;\n\nfinal class S {\n    fun name(): string {\n"))
     }
 
     fun testQuickDocumentationShowsTheClause() {

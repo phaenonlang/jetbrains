@@ -63,8 +63,8 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         myFixture.performEditorAction("ImplementMethods")
 
         val text = myFixture.editor.document.text
-        assertTrue(text, text.contains("    protected static fun aggregateClass(): class<T>\n"))
-        assertTrue(text, text.contains("    fun load(Id \$id): T\n"))
+        assertTrue(text, text.contains("    protected static fun aggregateClass(): class<T> {\n"))
+        assertTrue(text, text.contains("    fun load(Id \$id): T {\n"))
     }
 
     fun testCompletionOffersOverridesSpelledAsPhaenon() {
@@ -86,7 +86,7 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         myFixture.finishLookup('\n')
 
         val text = myFixture.editor.document.text
-        assertTrue(text, text.contains("{\n    fun load(UserId \$id): User\n    {\n        // TODO: Implement load() method.\n    }\n}"))
+        assertTrue(text, text.contains("{\n    fun load(UserId \$id): User {\n        // TODO: Implement load() method.\n    }\n}"))
     }
 
     fun testCompletingTheNameAfterFunKeepsWhatWasWritten() {
@@ -99,7 +99,7 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         myFixture.completeBasic()?.let { items -> myFixture.lookup.currentItem = items.first { it.lookupString == "get" }; myFixture.finishLookup('\n') }
 
         val text = myFixture.editor.document.text
-        assertTrue(text, text.contains("    fun get(UserId \$id): ?User\n    {\n        return parent::get(\$id);"))
+        assertTrue(text, text.contains("    fun get(UserId \$id): ?User {\n        return parent::get(\$id);"))
     }
 
     fun testFunIsOfferedOnceInAPhnFile() {

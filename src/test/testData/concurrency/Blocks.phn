@@ -2,35 +2,28 @@ namespace App;
 
 use Phaenon\Concurrent\Scope;
 
-final class ApiException extends \Exception
-{
+final class ApiException extends \Exception {
 }
 
-final class User
-{
+final class User {
     public string $name = '';
 }
 
-final class Users
-{
-    fun find(int $id): User
-    {
+final class Users {
+    fun find(int $id): User {
         $user = new User();
         $user->name = 'user ' . $id;
 
         return $user;
     }
 
-    fun exists(string $name): bool
-    {
+    fun exists(string $name): bool {
         return $name !== '';
     }
 }
 
-final class Blocks
-{
-    fun __construct(private Users $users)
-    {
+final class Blocks {
+    fun __construct(private Users $users) {
     }
 
     /**
@@ -39,8 +32,7 @@ final class Blocks
      * @param list<string> $names
      * @return list<string>
      */
-    fun existing(array $names, string $org): array
-    {
+    fun existing(array $names, string $org): array {
         $exists = concurrently {
             $tasks = [];
             foreach ($names as $name) {
@@ -63,8 +55,7 @@ final class Blocks
         return array_values(array_filter($names, static fn(string $name): bool => $exists[$name]));
     }
 
-    fun profile(int $id): User
-    {
+    fun profile(int $id): User {
         return concurrently (timeout: 5) {
             $user = spawn $this->users->find($id);
             $found = $user->await();
@@ -73,8 +64,7 @@ final class Blocks
         };
     }
 
-    fun names(int $first, int $second): int
-    {
+    fun names(int $first, int $second): int {
         $count = 0;
         concurrently (timeout: 1.5) {
             spawn $this->users->find($first);

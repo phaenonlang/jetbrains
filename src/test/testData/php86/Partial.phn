@@ -1,33 +1,26 @@
 namespace App;
 
-fun format(int $count, string $unit = 'items', string ...$tags): string
-{
+fun format(int $count, string $unit = 'items', string ...$tags): string {
     return $count . $unit;
 }
 
-final class Calc
-{
+final class Calc {
     const ROUNDED = Calc::round(?, 2);
 
-    public static fun round(float $value, int $precision): float
-    {
+    public static fun round(float $value, int $precision): float {
         return $value;
     }
 
-    fun scale(int $by, float $value): float
-    {
+    fun scale(int $by, float $value): float {
         return $value * $by;
     }
 }
 
-final class Partials
-{
-    fun __construct(private \Closure $formatter = format(?, 'pcs'))
-    {
+final class Partials {
+    fun __construct(private \Closure $formatter = format(?, 'pcs')) {
     }
 
-    fun run(Calc $calc): void
-    {
+    fun run(Calc $calc): void {
         $positional = format(?, 'kg');
         $rest = format(3, ...);
         $named = format(unit: ?, count: 1);

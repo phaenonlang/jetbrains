@@ -13,11 +13,14 @@ import com.intellij.formatting.Spacing
 import com.intellij.formatting.Wrap
 import com.intellij.lang.ASTNode
 import com.intellij.lang.Language
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.TokenType
 import com.intellij.psi.codeStyle.CodeStyleSettings
+import com.intellij.psi.codeStyle.CodeStyleSettingsManager
+import com.intellij.psi.codeStyle.CommonCodeStyleSettings
 import com.intellij.psi.formatter.DocumentBasedFormattingModel
 import com.intellij.psi.formatter.FormattingDocumentModelImpl
 import com.intellij.psi.formatter.common.ExtraRangesProvider
@@ -59,6 +62,12 @@ import com.jetbrains.php.lang.psi.elements.Parameter
  *
  * `createTemplateFormattingModel` is a public method of PhpStorm's PHP formatter; the formatter's
  * blocks are used as PhpStorm builds them and only wrapped, never subclassed.
+ *
+ * The PHP code style is the project's, with one change for `.phn` files: Phaenon's canonical layout
+ * (design/functions.md §5) puts the opening brace of a class-like, a function, a method and a
+ * closure on the declaration's line. PhpStorm's formatter is handed a copy of the settings whose
+ * brace placement for those says so; Reformat Code, the indent of Enter and the code an action
+ * generates follow it, and a brace is never moved back to a line of its own in a `.phn`.
  */
 class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
 
@@ -69,13 +78,27 @@ class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
 
     override fun createModel(formattingContext: FormattingContext): FormattingModel {
         val file = formattingContext.containingFile
-        val settings = formattingContext.codeStyleSettings
+        val settings = canonical(formattingContext.codeStyleSettings, file.project)
         val policy = HtmlPolicy(settings, FormattingDocumentModelImpl.createOn(file))
         val topLevel = file.node.getChildren(null).filter { it.elementType !== TokenType.WHITE_SPACE && it.textLength > 0 }.map { it.psi }
         val model = php.createTemplateFormattingModel(file, settings, policy, topLevel, Indent.getNoneIndent())
             ?: return SimpleTemplateLanguageFormattingModelBuilder().createModel(formattingContext)
         val root = PhaenonFormattingBlock.of(model.rootBlock, ErasedSpacing(file, settings))
         return DocumentBasedFormattingModel(root, file.project, settings, file.fileType, file)
+    }
+
+    /** [settings] with the opening braces of class-likes, functions, methods and closures on the declaration's line. */
+    private fun canonical(settings: CodeStyleSettings, project: Project): CodeStyleSettings {
+        val php = settings.getCommonSettings(PhpLanguage.INSTANCE)
+        val endOfLine = CommonCodeStyleSettings.END_OF_LINE
+        if (php.CLASS_BRACE_STYLE == endOfLine && php.METHOD_BRACE_STYLE == endOfLine && php.LAMBDA_BRACE_STYLE == endOfLine) return settings
+        val copy = CodeStyleSettingsManager.getInstance(project).cloneSettings(settings)
+        copy.getCommonSettings(PhpLanguage.INSTANCE).apply {
+            CLASS_BRACE_STYLE = endOfLine
+            METHOD_BRACE_STYLE = endOfLine
+            LAMBDA_BRACE_STYLE = endOfLine
+        }
+        return copy
     }
 }
 
@@ -101,6 +124,9 @@ internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSetti
     /** One space, or the line breaks there were: what stands between a PHP token and a construct apart from it. */
     private val apart: Spacing = Spacing.createSpacing(1, 1, 0, true, settings.getCommonSettings(PhpLanguage.INSTANCE).KEEP_BLANK_LINES_IN_CODE)
 
+    /** Before an expression body's arrow: one space, or the line break there was, no blank line. */
+    val arrow: Spacing = Spacing.createSpacing(1, 1, 0, true, 0)
+
     fun isErased(block: Block): Boolean = (block as? ASTBlock)?.node?.elementType === PhaenonTokenTypes.ERASED
 
     /** The erased leaf a block starts with, if it does. */
@@ -116,9 +142,12 @@ internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSetti
         // Two blocks that meet inside a word are one Phaenon keyword handed to the parser as several
         // PHP tokens (`concurrently` as `function ( )`, `spawn` as `fn ( ) =>`): nothing goes between.
         // PHP tokens never meet so — they would have been lexed as one word.
+        // So are the two halves of an expression body's arrow, `{` and `return` to the parser.
         val meet = left.textRange.endOffset
-        if (meet == right.textRange.startOffset && meet > 0 && meet < text.length && text[meet - 1].isLetterOrDigit() && text[meet].isLetterOrDigit()) {
-            return GLUED
+        if (meet == right.textRange.startOffset && meet > 0 && meet < text.length) {
+            val a = text[meet - 1]
+            val b = text[meet]
+            if (a.isLetterOrDigit() && b.isLetterOrDigit() || a == '=' && b == '>') return GLUED
         }
         val after = lastErased(left)
         val before = firstErased(right)
@@ -217,8 +246,23 @@ internal open class PhaenonFormattingBlock protected constructor(
 
     private fun Block.nodeText(): String = (this as? ASTBlock)?.node?.text.orEmpty()
 
+    /**
+     * An expression body, `=> expr;`: to PhpStorm a block whose `{` is the arrow's first character.
+     * It stays where it was written — one space after the signature, or on a line of its own one
+     * level in, the arrow starting the continuation line — whatever the brace placement says.
+     */
+    private fun isExpressionBody(block: Block): Boolean {
+        val node = (block as? ASTBlock)?.node ?: return false
+        if (node.elementType !in PhpElementTypes.ANY_GROUP_STATEMENT) return false
+        val brace = node.firstChildNode ?: return false
+        return brace.elementType === PhpTokenTypes.chLBRACE && brace.textLength == 1 && brace.text == "="
+    }
+
     private val children: List<Block> by lazy {
-        val blocks = wrapChildren(delegate.subBlocks)
+        val blocks = wrapChildren(delegate.subBlocks).map { block ->
+            if (block is PhaenonFormattingBlock && isExpressionBody(block.delegate)) of(block.delegate, spacing, block.wrap, block.alignment, Indent.getNormalIndent())
+            else block
+        }
         val out = ArrayList<Block>(blocks.size)
         var i = 0
         while (i < blocks.size) {
@@ -290,6 +334,7 @@ internal open class PhaenonFormattingBlock protected constructor(
         val left = ((child1 as? StatementBlock)?.body ?: child1).let { (it as? PhaenonFormattingBlock)?.delegate ?: it }
         val right = ((child2 as? StatementBlock)?.keyword ?: child2).let { (it as? PhaenonFormattingBlock)?.delegate ?: it }
         if (left == null) return delegate.getSpacing(null, right)
+        if (isExpressionBody(right)) return spacing.arrow
         return spacing.between(left, right) { delegate.getSpacing(left, right) } ?: delegate.getSpacing(left, right)
     }
 

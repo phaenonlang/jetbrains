@@ -7,20 +7,24 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiErrorElement
-import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiFileFactory
+import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
-import com.jetbrains.php.lang.PhpFileType
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
+import com.jetbrains.php.lang.PhpFileType
 import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
+import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.Function
+import com.jetbrains.php.lang.psi.elements.GroupStatement
 import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.Parameter
+import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import java.io.File
@@ -185,6 +189,12 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
      * and breaks no file that parsed. Files a second pass changes again are listed, not counted:
      * PhpStorm's PHP formatter re-indents the arguments of a call it wrapped on the first pass in
      * `.php` files as well (the compiled `SitesApi.php` of tq-cli does it as its `.phn` does).
+     *
+     * The canonical layout (design/functions.md §5) holds afterwards: the opening brace of every
+     * class-like, function and method stands on the line of the code before it (unless a comment
+     * stands between them), and an expression body's arrow stays where it was written — after the
+     * signature, or starting a line of its own one level in from the declaration. The braces the
+     * pass moved up are counted: none in a tree `phn migrate` laid out.
      */
     fun testRealTreesReformatAroundErasedConstructsAndNeverInsideThem() {
         val trees = loadTrees() ?: return
@@ -193,15 +203,34 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
         val failures = ArrayList<String>()
         for (tree in trees) {
             var changed = 0
+            var bracesMoved = 0
+            var arrows = 0
             val unsettled = ArrayList<String>()
             for (loaded in tree.files) {
                 val file = loaded.file
                 val erasedBefore = erasedTexts(file)
+                val bodiesBefore = bodyStarts(file)
                 val errorsBefore = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java).size
                 reformat(file)
                 val once = file.text
                 if (once != loaded.text) changed++
                 if (erasedTexts(file) != erasedBefore) failures.add("${loaded.relative}: an erased construct changed")
+                val bodiesAfter = bodyStarts(file)
+                if (bodiesAfter.size != bodiesBefore.size) {
+                    failures.add("${loaded.relative}: ${bodiesBefore.size} declarations' bodies before reformatting, ${bodiesAfter.size} after")
+                } else {
+                    for ((before, after) in bodiesBefore.zip(bodiesAfter)) {
+                        val where = "${loaded.relative}:${line(once, after.offset)}"
+                        if (after.arrow) {
+                            arrows++
+                            if (after.joined != before.joined) failures.add("$where: the arrow of `${after.name}` moved ${if (after.joined) "up" else "down"}")
+                            if (!after.joined && after.indent != after.declarationIndent + INDENT) failures.add("$where: the wrapped arrow of `${after.name}` is not one level in")
+                        } else {
+                            if (!after.joined && !after.commentBefore) failures.add("$where: the brace of `${after.name}` is on a line of its own")
+                            if (after.joined != before.joined) bracesMoved++
+                        }
+                    }
+                }
                 val errorsAfter = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java)
                 if (errorsAfter.size > errorsBefore) failures.add("${loaded.relative}:${line(once, errorsAfter.first().textOffset)}: syntax error after reformatting (near '${near(once, errorsAfter.first().textOffset)}')")
                 for (leaf in PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }) {
@@ -214,12 +243,61 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
                 reformat(file)
                 if (file.text != once) unsettled.add(loaded.relative)
             }
-            report.append("${tree.root.path}: ${tree.files.size} files reformatted, $changed changed")
+            report.append("${tree.root.path}: ${tree.files.size} files reformatted, $changed changed, $bracesMoved braces moved onto their declaration's line, $arrows expression bodies kept")
             if (unsettled.isNotEmpty()) report.append(", ${unsettled.size} changed again by a second pass: ${unsettled.joinToString()}")
             report.append('\n')
         }
         println(report)
         assertEmpty("reformatting real Phaenon trees:\n" + failures.take(LISTING_CAP).joinToString("\n"), failures)
+    }
+
+    /** Where a declaration's body begins, `{` or `=>`, and whether it stands on the line of the code before it. */
+    private class BodyStart(
+        val name: String,
+        val offset: Int,
+        val arrow: Boolean,
+        val joined: Boolean,
+        val commentBefore: Boolean,
+        val indent: Int,
+        val declarationIndent: Int,
+    )
+
+    /** The body starts of every class-like and named function of [file], in order. */
+    private fun bodyStarts(file: PsiFile): List<BodyStart> {
+        val text = file.text
+        val out = ArrayList<BodyStart>()
+        for (element in PsiTreeUtil.findChildrenOfAnyType<PhpNamedElement>(file, PhpClass::class.java, Function::class.java)) {
+            val (brace, keyword) = when (element) {
+                is PhpClass -> element.node.findChildByType(PhpTokenTypes.chLBRACE)?.psi to element.nameIdentifier
+                is Function -> {
+                    if (element.isClosure) continue
+                    PsiTreeUtil.getChildOfType(element, GroupStatement::class.java)?.firstChild to element.node.findChildByType(PhpTokenTypes.kwFUNCTION)?.psi
+                }
+                else -> continue
+            }
+            if (brace == null || keyword == null) continue
+            var before = PsiTreeUtil.prevLeaf(brace, true)
+            while (before is PsiWhiteSpace) before = PsiTreeUtil.prevLeaf(before, true)
+            val offset = brace.textRange.startOffset
+            out.add(
+                BodyStart(
+                    name = (element as PhpNamedElement).name,
+                    offset = offset,
+                    arrow = brace.text == "=",
+                    joined = before != null && !text.substring(before.textRange.endOffset, offset).contains('\n'),
+                    commentBefore = before is PsiComment && !PhaenonTokenTypes.isErased(before),
+                    indent = indentAt(text, offset),
+                    declarationIndent = indentAt(text, keyword.textRange.startOffset),
+                ),
+            )
+        }
+        return out
+    }
+
+    /** The indentation of the line [offset] is on. */
+    private fun indentAt(text: String, offset: Int): Int {
+        val start = text.lastIndexOf('\n', offset - 1) + 1
+        return text.substring(start).takeWhile { it == ' ' }.length
     }
 
     private fun erasedTexts(file: PsiFile): List<String> =
@@ -294,6 +372,8 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
 
     private companion object {
         const val LISTING_CAP = 200
+        /** The indentation of one level in PSR-12, the style the reformatting test applies. */
+        const val INDENT = 4
         const val SAMPLE_CAP = 500
         val LIST = Regex("^\\??list<.*")
         val MAP = Regex("^\\??map<.*")

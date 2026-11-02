@@ -8,21 +8,18 @@ final class Repo implements AggregateRepository<UserId, User>
     /**
      * The aggregate, or null when there is none.
      */
-    fun get(UserId $id): ?User
-    {
+    fun get(UserId $id): ?User {
         // TODO: Implement get() method.
     }
 
     /**
      * @throws AggregateNotFound
      */
-    fun load(UserId $id): User
-    {
+    fun load(UserId $id): User {
         // TODO: Implement load() method.
     }
 
-    fun save(User $aggregate): void
-    {
+    fun save(User $aggregate): void {
         // TODO: Implement save() method.
     }
 
