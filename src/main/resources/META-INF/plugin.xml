@@ -22,6 +22,14 @@
 
         <!-- The output directories of phaenon.json hold compiled copies of the .phn declarations: not indexed. -->
         <directoryIndexExcludePolicy implementation="dev.phaenon.jetbrains.PhaenonExcludePolicy"/>
+
+        <!-- A position in a compiled file is the .phn's, through the file's line map: console links (first, so
+             that their link replaces PhpStorm's on the same text), Analyze Stack Trace, every navigation that
+             opens a compiled file at a position, and a banner on the compiled file itself. -->
+        <consoleFilterProvider implementation="dev.phaenon.jetbrains.PhaenonCompiledLinkFilterProvider" order="first"/>
+        <analyzeStacktraceFilter implementation="dev.phaenon.jetbrains.PhaenonCompiledLinkFilter"/>
+        <fileEditorProvider implementation="dev.phaenon.jetbrains.PhaenonCompiledEditorProvider"/>
+        <editorNotificationProvider implementation="dev.phaenon.jetbrains.PhaenonCompiledNotificationProvider"/>
     </extensions>
 
     <projectListeners>
