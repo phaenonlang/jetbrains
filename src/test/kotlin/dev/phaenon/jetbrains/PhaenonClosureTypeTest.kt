@@ -1,5 +1,7 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.codeInsight.daemon.impl.HighlightInfo
+import com.intellij.codeInsight.daemon.impl.HighlightInfoType
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.psi.PsiComment
@@ -8,10 +10,13 @@ import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.jetbrains.php.PhpBundle
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.inspections.PhpUndefinedClassInspection
+import com.jetbrains.php.lang.inspections.type.PhpParamsInspection
+import com.jetbrains.php.psalm.lang.inspections.PsalmAdvanceCallableParamsInspection
 import com.jetbrains.php.lang.inspections.PhpUnusedAliasInspection
 import com.jetbrains.php.lang.inspections.type.PhpMissingFieldTypeInspection
 import com.jetbrains.php.lang.inspections.type.PhpMissingParamTypeInspection
@@ -23,6 +28,8 @@ import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpTypeDeclarationOwner
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
+import com.jetbrains.php.lang.psi.elements.Variable
+import com.jetbrains.php.lang.psi.elements.impl.PhpExpressionImpl
 import com.jetbrains.php.lang.psi.resolve.types.PhpType
 import java.io.File
 
@@ -66,12 +73,15 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
 
         val types = types(myFixture.file) { (it as PhpTypedElement).type }
 
-        assertEquals("promoted parameter", listOf("\\Closure"), types["__construct(\$accept)"])
-        assertEquals("nullable parameter", listOf("\\Closure", "\\null"), types["__construct(\$kubectl)"])
-        assertEquals("parameter", listOf("\\Closure"), types["line(\$kubectl)"])
-        assertEquals("union member", listOf("\\Closure", "\\int"), types["either(\$test)"])
-        assertEquals("return type without a body", listOf("\\Closure"), types["runner()"])
-        assertEquals("the promoted property, read to call it", listOf("\\Closure"), types["->accept"])
+        // The signature travels as PhpStorm encodes a docblock `\Closure(…): …`; a tuple result is
+        // the plugin's tuple, the union of its element arrays.
+        val kubectl = closure(listOf("\\string"), "\\int[]", "\\string[]")
+        assertEquals("promoted parameter", listOf("\\Closure", closure(listOf("\\string"), "\\bool")), types["__construct(\$accept)"])
+        assertEquals("nullable parameter", listOf("\\Closure", kubectl, "\\null"), types["__construct(\$kubectl)"])
+        assertEquals("parameter", listOf("\\Closure", kubectl), types["line(\$kubectl)"])
+        assertEquals("union member", listOf("\\Closure", closure(listOf("\\int"), "\\bool"), "\\int"), types["either(\$test)"])
+        assertEquals("return type without a body", listOf("\\Closure", kubectl), types["runner()"])
+        assertEquals("the promoted property, read to call it", listOf("\\Closure", closure(listOf("\\string"), "\\bool")), types["->accept"])
         // An erased declaration has no type of its own to PhpStorm, which adds what it infers from
         // the assignments and the body (README § Limitations): the closure's own `\Closure<…>`,
         // and `mixed` through `$kubectl ?? …` on a parameter it sees as untyped.
@@ -131,6 +141,79 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
         assertEquals(listOf("\\Tequila\\Tq\\Dev\\Closure"), parameter.type.global(project).types.sorted())
         assertEmpty(PsiTreeUtil.collectElementsOfType(myFixture.file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) })
     }
+
+    fun testAClosureTypeCarriesTheSignaturePhpStormReadsFromItsDocblockSpelling() {
+        // `\Closure(string, int=): void` in a docblock is what the compiler writes for the Phaenon
+        // type; PhpStorm's reading of it is the reference. A variadic is its element type there, and
+        // an optional parameter is a plain one: PhpStorm has no marker for either.
+        myFixture.configureByFiles("closure/Docblock.php")
+        val docblock = signatures()
+        myFixture.configureByFiles("closure/Spelled.phn")
+        val spelled = signatures()
+
+        assertEquals(setOf("log", "accept", "find"), docblock.keys)
+        assertEquals(docblock, spelled)
+    }
+
+    fun testACallOnAVariadicClosureTypeIsCheckedPerArgument() {
+        // PhpStorm holds its own encoding of the assigned literal, `fn (string ...$args)`, beside the
+        // declared signature, with the variadic as `string[]`, and may check the call against that:
+        // "Parameter type 'string' is not compatible with 'string[]'". The arguments that fit the
+        // declared parameter are not reported; the ones that do not still are.
+        myFixture.enableInspections(PsalmAdvanceCallableParamsInspection::class.java, PhpParamsInspection::class.java)
+        myFixture.configureByFiles("closure/DevUp.phn")
+
+        val findings = myFixture.doHighlighting()
+            .filter { it.severity.myVal >= HighlightSeverity.WEAK_WARNING.myVal }
+            .map { it.text to myFixture.editor.document.getLineNumber(it.startOffset) + 1 }
+
+        assertEquals(listOf("[]" to 41, "[]" to 42), findings)
+        val kubectl = PsiTreeUtil.findChildrenOfType(myFixture.file, Field::class.java).single { it.name == "kubectl" }
+        val held = kubectl.type.global(project).typesWithParametrisedParts.filter { it.startsWith("\\Closure<") }
+        assertTrue("PhpStorm's own encoding of the literal is there too: $held", held.any { "\\string[]" in it })
+    }
+
+    fun testAFindingAgainstPhpStormsOwnEncodingGoesWhereTheArgumentFitsTheDeclaration() {
+        // Which `\Closure<…>` of a property PhpStorm checks a call against depends on the order of its
+        // type set; PhpStorm 2026 also encodes a first-class callable's variadic as an array. The filter
+        // decides on the declared signature whichever one was picked.
+        myFixture.configureByFiles("closure/DevUp.phn")
+        val text = myFixture.editor.document.text
+        fun finding(argument: String, declared: String): HighlightInfo {
+            val start = text.indexOf(argument)
+            return HighlightInfo.newHighlightInfo(HighlightInfoType.WARNING)
+                .range(start, start + argument.length)
+                .descriptionAndTooltip(PhpBundle.message("parameter.type.is.not.compatible.with.declaration", "string", declared))
+                .createUnconditionally()
+        }
+
+        val filter = PhaenonHighlightFilter()
+        assertFalse("a string for `string...`", filter.accept(finding("'get', 'namespace', \$ns", "string[]"), myFixture.file))
+        assertFalse("the second string for `string...`", filter.accept(finding("'namespace', \$ns", "string[]"), myFixture.file))
+        assertFalse("the variadic after a first parameter", filter.accept(finding("'apply', '-f'", "string[]"), myFixture.file))
+        assertTrue("an array for `string...`", filter.accept(finding("[]);", "string[]"), myFixture.file))
+    }
+
+    fun testADestructuredClosureResultIsTypedByTheTupleElements() {
+        // `(int, string)` is the union of its element arrays to the editor (README § Limitations), so
+        // `[$status]` is `int|string`: no `mixed` and no `string[]`. PhpStorm keeps positions only
+        // for docblock shapes it reads from the PSI; its own reading of the compiled
+        // `@var \Closure(string...): array{int, string}` types `$status` as `mixed`.
+        myFixture.configureByFiles("closure/DevUp.phn")
+
+        val status = PsiTreeUtil.findChildrenOfType(myFixture.file, Variable::class.java).first { it.name == "status" }
+
+        assertEquals(listOf("\\int", "\\string"), status.type.global(project).types.filter { it != "?" }.sorted())
+    }
+
+    /** The decoded closure signature of each property in the file: one set of types per parameter, then the return. */
+    private fun signatures(): Map<String, List<Set<String>>> =
+        PsiTreeUtil.findChildrenOfType(myFixture.file, Field::class.java).associate { field ->
+            val encoded = field.type.global(project).typesWithParametrisedParts.single { it.startsWith("\\Closure<") }
+            field.name to PhpType.getParametrizedParts(encoded).map { part ->
+                PhpExpressionImpl.getTypeFromSerializedClosureParameter(part).second.types.toSet()
+            }
+        }
 
     /** `closure/Kubectl.phn` with every closure type written `\Closure(…)`, in a namespace of its own. */
     private fun qualifiedCopy(): String =

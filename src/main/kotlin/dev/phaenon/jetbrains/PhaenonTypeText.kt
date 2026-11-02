@@ -5,6 +5,7 @@ import com.jetbrains.php.codeInsight.PhpCodeInsightUtil
 import com.jetbrains.php.lang.psi.PhpPsiUtil
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamespace
+import com.jetbrains.php.lang.psi.elements.impl.PhpExpressionImpl
 import com.jetbrains.php.lang.psi.resolve.types.PhpType
 
 /**
@@ -20,7 +21,7 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * | `bytes` | `string` and `\Phaenon\Internal\BytesMethods` |
  * | `(A, B)` | `A[]|B[]` — the positional shape as PhpStorm can hold it |
  * | `class<T>` | `class-string<T>` and `string`, as PhpStorm reads `@return class-string<T>` |
- * | `Closure(A): R` | `\Closure` |
+ * | `Closure(A, B=, C...): R` | `\Closure` and the signature as PhpStorm encodes a docblock `\Closure(A, B, C): R` |
  * | a type parameter | its bound, `mixed` without one — what the compiler writes for it |
  * | `Foo<T>` | `\Ns\Foo` — type arguments of user classes are erased |
  *
@@ -58,7 +59,7 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         is PhaenonType.Intersection -> PhpType().also { t -> node.members.forEach { t.add(type(it)) } }
         // A tuple is a positional array.
         is PhaenonType.Tuple -> PhpType().also { t -> node.elements.forEach { t.add(type(it).pluralise()) } }
-        is PhaenonType.Closure -> PhpType.CLOSURE
+        is PhaenonType.Closure -> closure(node)
         is PhaenonType.Named -> named(node)
     }
 
@@ -103,6 +104,23 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         classes.forEach { result.add(PhpType.createParametrizedType(PhpType._CLASS_STRING, listOf(it))) }
         return result
     }
+
+    /**
+     * `Closure(A, B=, C...): R` is `\Closure` plus the signature, encoded as PhpStorm encodes the
+     * docblock type `\Closure(A, B, C): R` (`\Closure<#ᤓᤓ\A,…,\R>`), which its call checks and
+     * call typing read. The variadic parameter is its element type, as PhpStorm's docblock
+     * reading has it; the optional marker has no encoding and needs none: PhpStorm checks the
+     * arguments that are there against the parameters that are, and never asks for a missing one.
+     */
+    private fun closure(node: PhaenonType.Closure): PhpType {
+        val parts = node.parameters.map { PhpExpressionImpl.serializeAdvancedClosureParameter("", serialized(type(it.type))) }
+        val returnType = node.returnType?.let(::type) ?: PhpType.MIXED
+        return PhpType().add(PhpType.CLOSURE).add(PhpType.createParametrizedType(PhpType._CLOSURE, parts + serialized(returnType)))
+    }
+
+    /** A union inside a closure signature is one part: its members joined as PhpStorm joins them, in a stable order. */
+    private fun serialized(type: PhpType): String =
+        type.typesWithParametrisedParts.sorted().joinToString(PhpExpressionImpl.CALLABLE_PARAMS_TYPES_SEPARATOR)
 
     private fun collection(pseudoClass: String, parameters: List<PhpType>, element: PhpType?): PhpType {
         val result = PhpType()

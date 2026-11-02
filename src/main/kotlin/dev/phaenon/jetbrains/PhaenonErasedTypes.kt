@@ -45,7 +45,7 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                PhaenonTokenTypes.isErased(leaf) -> parts.add(leaf.text.trim())
+                PhaenonTokenTypes.isErased(leaf) -> parts.add(withClosureName(leaf, leaf.text.trim()))
                 leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opBIT_AND || type === PhpTokenTypes.opVARIADIC -> Unit
                 PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> Unit
@@ -74,7 +74,7 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                PhaenonTokenTypes.isErased(leaf) -> parts.add(leaf.text.trim().removePrefix(":").trimStart())
+                PhaenonTokenTypes.isErased(leaf) -> parts.add(withClosureName(leaf, leaf.text.trim().removePrefix(":").trimStart()))
                 leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opHASH_ARRAY -> Unit
                 PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> Unit
@@ -84,6 +84,20 @@ object PhaenonErasedTypes {
         }
         parts.reverse()
         return parts
+    }
+
+    /**
+     * `\Closure(string): bool` keeps its native `\Closure` and erases the signature alone: the
+     * erased `(string): bool` is read with the name in front of it, so both spellings of a closure
+     * type give the same type.
+     */
+    private fun withClosureName(leaf: PsiElement, text: String): String {
+        if (!text.startsWith("(")) return text
+        var previous = PsiTreeUtil.prevLeaf(leaf, true)
+        while (previous is PsiWhiteSpace) previous = PsiTreeUtil.prevLeaf(previous, true)
+        if (previous == null || !previous.text.equals("Closure", ignoreCase = true)) return text
+        if (PsiTreeUtil.getParentOfType(previous, PhpTypeDeclaration::class.java) == null) return text
+        return "\\Closure$text"
     }
 
     /** The first erased leaf of a parameter's or property's type, where a finding about the declaration starts; null when none was erased. */

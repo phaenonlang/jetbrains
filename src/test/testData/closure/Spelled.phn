@@ -1,0 +1,10 @@
+namespace Tequila\Tq\Docs;
+
+final class Spelled
+{
+    private Closure(string, int=): void $log;
+
+    private Closure(string...): bool $accept;
+
+    private Closure(int|string): Docblock $find;
+}

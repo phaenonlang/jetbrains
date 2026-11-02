@@ -8,13 +8,19 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.jetbrains.php.PhpBundle
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.lang.psi.elements.Field
+import com.jetbrains.php.lang.inspections.type.PhpParamsInspection
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.parser.PhpElementTypes
 import com.jetbrains.php.lang.psi.elements.Function
+import com.jetbrains.php.lang.psi.elements.FunctionReference
 import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.Parameter
+import com.jetbrains.php.lang.psi.elements.ParameterList
+import com.jetbrains.php.lang.psi.elements.ParenthesizedExpression
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
+import com.jetbrains.php.lang.psi.elements.PhpReference
+import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import com.jetbrains.php.lang.psi.elements.PhpUse
 
 /**
@@ -41,7 +47,12 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
  * narrows it. On an override where either side has an erased type, in a `.phn` or in a `.php`
  * implementing a Phaenon interface, PhpStorm's finding goes and [PhaenonHierarchyInspection]
  * judges the pair with the types the compiler writes; it reports the real incompatibilities.
-
+ *
+ * PhpStorm encodes a closure literal's or a first-class callable's variadic parameter as an array
+ * (`fn (string ...$args)` is `\Closure<string[]>` to it), and that encoding, inferred from an
+ * assignment, sits beside the signature a `Closure(string...): …` declaration gives the property.
+ * When PhpStorm checks a call against its own encoding ("Parameter type 'string' is not compatible
+ * with 'string[]'"), the finding goes where the argument fits the declared Phaenon signature.
  *
  * A docblock type naming a type parameter in scope, `@var T $x`, is "Undefined class 'T'" to
  * PhpStorm, which has no `@template` to read it from; the name is declared in the erased list.
@@ -67,6 +78,7 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (UNUSED_IMPORT.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             return !importIsUsedInAnErasedType(info, file)
         }
+        if (description.startsWith(CLOSURE_ARGUMENT.first) && description.endsWith(CLOSURE_ARGUMENT.second)) return !argumentFitsPhaenonClosure(info, file)
         if (description == RETURN_TYPE_MISSING) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
             val function = PsiTreeUtil.getParentOfType(leaf, Function::class.java) ?: return true
@@ -87,6 +99,47 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val leaf = file.findElementAt(info.startOffset) ?: return false
         val method = PsiTreeUtil.getParentOfType(leaf, Method::class.java) ?: return false
         return PhaenonHierarchyInspection.owns(method)
+    }
+
+    /**
+     * Whether the argument PhpStorm flagged fits the parameter a Phaenon closure type declares for
+     * it: `($this->kubectl)('get')` with `Closure(string...): (int, string) $kubectl`.
+     */
+    private fun argumentFitsPhaenonClosure(info: HighlightInfo, file: PsiFile): Boolean {
+        val leaf = file.findElementAt(info.startOffset) ?: return false
+        val arguments = PsiTreeUtil.getParentOfType(leaf, ParameterList::class.java) ?: return false
+        val call = arguments.parent as? FunctionReference ?: return false
+        val index = arguments.parameters.indexOfFirst { PsiTreeUtil.isAncestor(it, leaf, false) }
+        if (index < 0) return false
+        val argument = arguments.parameters[index] as? PhpTypedElement ?: return false
+        val declaration = closureDeclaration(call.firstPsiChild) ?: return false
+        val closures = PhaenonType.parse(PhaenonErasedTypes.beforeName(declaration)).closures()
+        if (closures.isEmpty()) return false
+        val project = file.project
+        val given = argument.type.global(project)
+        val text = PhaenonTypeText(declaration, PhaenonErasedTypes.typeParameterBounds(declaration))
+        return closures.any { closure ->
+            val variadic = closure.parameters.indexOfFirst { it.variadic }
+            val parameter = closure.parameters.getOrNull(index) ?: closure.parameters.getOrNull(variadic).takeIf { variadic in 0..index }
+            // The convertibility PhpStorm's own closure-signature check applies, strict as a Phaenon file is.
+            parameter != null && PhpParamsInspection.isCallTypeConvertibleFromDeclaredType(text.type(parameter.type).global(project), given, PhpIndex.getInstance(project))
+        }
+    }
+
+    /** The property or parameter a called expression reads: `($this->kubectl)`, `$kubectl`. */
+    private fun closureDeclaration(callee: PsiElement?): PhpNamedElement? {
+        var expression = callee
+        while (expression is ParenthesizedExpression) expression = expression.argument
+        val reference = expression as? PhpReference ?: return null
+        val target = reference.resolve()
+        return (target as? Field ?: target as? Parameter)?.takeIf { PhaenonErasedTypes.isPhaenon(it) }
+    }
+
+    /** The closure types a declared type spells: the type itself, or the members of a union. */
+    private fun PhaenonType?.closures(): List<PhaenonType.Closure> = when (this) {
+        is PhaenonType.Closure -> listOf(this)
+        is PhaenonType.Union -> members.filterIsInstance<PhaenonType.Closure>()
+        else -> emptyList()
     }
 
     /** A `fun` method, a class constant, or a property or parameter with an asymmetric visibility and no main one, is public (design/functions.md §1). */
@@ -147,6 +200,10 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
             PhpBundle.message("declaration.must.be.compatible.with.super"),
             PhpBundle.message("return.type.declaration.must.be.compatible.with.super"),
         ).map { it.substringBefore('\u0000') }
+
+        /** What PhpStorm says of an argument its closure-signature check rejects, split around the two types. */
+        val CLOSURE_ARGUMENT: Pair<String, String> =
+            PhpBundle.message("parameter.type.is.not.compatible.with.declaration", "\u0000", "\u0000").let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
 
         /** "Undefined class '#ref'", split around the name: `T` in a docblock type is a type parameter, not a class. */
         val UNDEFINED_CLASS: Pair<String, String> =
