@@ -1,22 +1,15 @@
 package dev.phaenon.jetbrains
 
-import com.intellij.application.options.CodeStyle
 import com.intellij.lang.ImportOptimizer
 import com.intellij.lang.LanguageImportStatements
 import com.intellij.openapi.util.EmptyRunnable
-import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiParserFacade
-import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.SmartPsiElementPointer
-import com.intellij.psi.impl.source.tree.LeafElement
-import com.intellij.psi.util.PsiTreeUtil
 import com.jetbrains.php.PhpBundle
 import com.jetbrains.php.codeInsight.PhpCodeInsightUtil
 import com.jetbrains.php.codeInsight.PhpImportOptimizer
 import com.jetbrains.php.lang.PhpLanguage
-import com.jetbrains.php.lang.formatter.PhpCodeStyleSettings
 import com.jetbrains.php.lang.psi.PhpFile
 import com.jetbrains.php.lang.psi.PhpGroupUseElement
 import com.jetbrains.php.lang.psi.PhpPsiElementFactory
@@ -26,7 +19,7 @@ import com.jetbrains.php.refactoring.PhpAliasImporter
 
 /**
  * Optimize Imports in a `.phn` file: PhpStorm's optimizer, without removing the imports that only
- * erased constructs use, and with one import per line.
+ * erased constructs use.
  *
  * PhpStorm's optimizer keeps an import when PHP's own references use it: class, function and
  * constant references, namespace references, docblock types (`PhpUnusedAliasInspection.filterUnused`).
@@ -45,11 +38,9 @@ import com.jetbrains.php.refactoring.PhpAliasImporter
  * import of a class in the file's own namespace that only an erased construct names is put back
  * too, although PHP needs none: the inspection does not flag it either.
  *
- * The block is laid out here because nothing else does it in a `.phn` file: PhpStorm's PHP
- * formatter is organised around the `<?php` tags a Phaenon file does not have and changes nothing
- * in one, so the statements the optimizer inserts would stay on one line. Each import goes on a
- * line of its own, class, function and constant imports keep the blank lines between them, and
- * the whitespace before and after the block stays what it was.
+ * The block is laid out by the PHP code style, as in a `.php` file: the statements the optimizer
+ * and this class insert are reformatted at the end of the command by PhpStorm's formatter, which
+ * runs on `.phn` files through [PhaenonFormattingModelBuilder].
  */
 class PhaenonImportOptimizer : ImportOptimizer {
 
@@ -60,25 +51,11 @@ class PhaenonImportOptimizer : ImportOptimizer {
             .firstOrNull { it !is PhaenonImportOptimizer && it.supports(file) }
             ?: return EmptyRunnable.getInstance()
         val phpFile = file as PhpFile
-        return Optimizing(phpFile, php.processFile(file), importsUsedByErasedConstructs(phpFile), layouts(phpFile), countImports(phpFile))
+        return Optimizing(phpFile, php.processFile(file), importsUsedByErasedConstructs(phpFile), countImports(phpFile))
     }
 
     /** An import as PhpStorm writes it back, and the scope it belongs to. */
     private data class Import(val scope: SmartPsiElementPointer<PhpPsiElement>, val keyword: String?, val fqn: String, val alias: String?)
-
-    /**
-     * A scope's import block before the optimizer ran: its first statement, which the optimizer
-     * replaces when it rebuilds the block, the whitespace around the block, the leaf before it, and
-     * the blank lines it had where class, function and constant imports meet (null: nowhere).
-     */
-    private class Layout(
-        val scope: SmartPsiElementPointer<PhpPsiElement>,
-        val first: PhpUseList,
-        val before: String,
-        val after: String,
-        val anchor: SmartPsiElementPointer<PsiElement>?,
-        val blankLinesBetweenKinds: Int?,
-    )
 
     private fun importsUsedByErasedConstructs(file: PhpFile): List<Import> {
         val pointers = SmartPointerManager.getInstance(file.project)
@@ -95,34 +72,11 @@ class PhaenonImportOptimizer : ImportOptimizer {
         return used.toList()
     }
 
-    private fun layouts(file: PhpFile): List<Layout> {
-        val pointers = SmartPointerManager.getInstance(file.project)
-        return scopes(file).mapNotNull { scope ->
-            val lists = ordered(scope)
-            if (lists.isEmpty()) return@mapNotNull null
-            val before = PsiTreeUtil.prevLeaf(lists.first())
-            val after = PsiTreeUtil.nextLeaf(lists.last())
-            val anchor = PsiTreeUtil.prevLeaf(lists.first(), true)?.let { if (it is PsiWhiteSpace) PsiTreeUtil.prevLeaf(it, true) else it }
-            val blankLinesBetweenKinds = lists.zipWithNext().firstOrNull { (a, b) -> kind(a) != kind(b) }?.let { (a, _) ->
-                ((PsiTreeUtil.nextLeaf(a) as? PsiWhiteSpace)?.text.orEmpty().count { it == '\n' } - 1).coerceAtLeast(0)
-            }
-            Layout(
-                pointers.createSmartPsiElementPointer(scope),
-                lists.first(),
-                (before as? PsiWhiteSpace)?.text.orEmpty(),
-                (after as? PsiWhiteSpace)?.text.orEmpty(),
-                anchor?.let(pointers::createSmartPsiElementPointer),
-                blankLinesBetweenKinds,
-            )
-        }
-    }
-
-    /** Runs PhpStorm's optimizer, inserts again what it removed of [used], and lays out the blocks it rebuilt. */
+    /** Runs PhpStorm's optimizer and inserts again what it removed of [used]. */
     private class Optimizing(
         private val file: PhpFile,
         private val optimize: Runnable,
         private val used: List<Import>,
-        private val layouts: List<Layout>,
         private val before: Int,
     ) : ImportOptimizer.CollectingInfoRunnable {
 
@@ -133,10 +87,6 @@ class PhaenonImportOptimizer : ImportOptimizer {
             for (import in used) {
                 val scope = import.scope.element ?: continue
                 if (!isPresent(scope, import)) insert(scope, import)
-            }
-            for (layout in layouts) {
-                // A first statement still in place means the optimizer left the block alone.
-                if (!layout.first.isValid) lay(layout)
             }
             removed = before - countImports(file)
         }
@@ -167,55 +117,11 @@ class PhaenonImportOptimizer : ImportOptimizer {
             val next = element?.let { lists.firstOrNull { list -> PhpAliasImporter.getGroupUseElement(list)?.let { order.compare(element, it) < 0 } == true } }
             if (next != null) next.parent.addBefore(statement, next) else lists.last().let { it.parent.addAfter(statement, it) }
         }
-
-        /**
-         * One import per line, indented as the first was; where class, function and constant
-         * imports meet (PSR-12's import blocks) the blank lines the block had there, else the PHP
-         * code style's; the block's surroundings as they were.
-         */
-        private fun lay(layout: Layout) {
-            val scope = layout.scope.element ?: return
-            val lists = ordered(scope)
-            if (lists.isEmpty()) {
-                // The whole block went: what separated it from its neighbours separates them now.
-                val anchor = layout.anchor?.element ?: return
-                (PsiTreeUtil.nextLeaf(anchor) as? PsiWhiteSpace)?.let { setText(it, layout.after) }
-                return
-            }
-            val indent = if ('\n' in layout.before) layout.before.substringAfterLast('\n') else ""
-            val blankLines = layout.blankLinesBetweenKinds
-                ?: CodeStyle.getCustomSettings(file, PhpCodeStyleSettings::class.java).BLANK_LINES_BETWEEN_IMPORTS.coerceAtLeast(0)
-            for ((previous, next) in lists.zipWithNext()) {
-                val newKind = kind(previous) != kind(next)
-                val text = "\n".repeat(if (newKind) blankLines + 1 else 1) + indent
-                val between = PsiTreeUtil.nextLeaf(previous)
-                when {
-                    between is PsiWhiteSpace && PsiTreeUtil.nextLeaf(between)?.let { PsiTreeUtil.isAncestor(next, it, false) } == true -> setText(between, text)
-                    between != null && PsiTreeUtil.isAncestor(next, between, false) && previous.parent == next.parent ->
-                        previous.parent.addAfter(whitespace(scope, text), previous)
-                }
-            }
-            (PsiTreeUtil.prevLeaf(lists.first()) as? PsiWhiteSpace)?.let { setText(it, layout.before) }
-            val after = PsiTreeUtil.nextLeaf(lists.last())
-            when {
-                after is PsiWhiteSpace -> setText(after, layout.after)
-                layout.after.isNotEmpty() -> lists.last().parent.addAfter(whitespace(scope, layout.after), lists.last())
-            }
-        }
-
-        private fun setText(whitespace: PsiWhiteSpace, text: String) {
-            if (text.isNotEmpty() && whitespace.text != text) (whitespace.node as LeafElement).replaceWithText(text)
-        }
-
-        private fun whitespace(context: PsiElement, text: String): PsiElement = PsiParserFacade.getInstance(context.project).createWhiteSpaceFromText(text)
     }
 
     private companion object {
         /** Where imports live, as PhpStorm's optimizer walks them: the file, then each namespace. */
         fun scopes(file: PhpFile): List<PhpPsiElement> = listOf<PhpPsiElement>(file) + PhpCodeInsightUtil.collectNamespaces(file)
-
-        /** Whether a statement imports classes, functions or constants: `null`, `function`, `const` as PhpStorm spells it. */
-        fun kind(list: PhpUseList): String? = PhpAliasImporter.getGroupUseElement(list)?.keyword
 
         /** The import statements of [scope] in document order. */
         fun ordered(scope: PhpPsiElement): List<PhpUseList> = PhpCodeInsightUtil.collectImports(scope).sortedBy { it.textRange.startOffset }

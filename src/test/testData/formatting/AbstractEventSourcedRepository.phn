@@ -1,0 +1,62 @@
+namespace Tequila\Core\EventSourcing\Repository;
+
+use Tequila\Core\Domain\Aggregate\Aggregate;
+use Tequila\Core\Domain\Aggregate\AggregateId;
+use Tequila\Core\Domain\Repository\AggregateNotFound;
+use Tequila\Core\Domain\Repository\AggregateRepository;
+use Tequila\Core\EventSourcing\Aggregate\EventSourcedAggregate;
+use Tequila\Core\EventSourcing\EventStore\EventStore;
+use Tequila\Core\EventSourcing\EventStore\EventStoreFactory;
+
+abstract readonly class AbstractEventSourcedRepository<Id of AggregateId, T of EventSourcedAggregate> implements AggregateRepository<Id, T>
+{
+    abstract protected static fun aggregateClass(): class<T>;
+
+    fun __construct(private EventStoreFactory $eventStoreFactory)
+    {
+    }
+
+    fun get(Id $id): ?T
+    {
+        $events = $this->eventStore()->load($id);
+        if (!is_array($events) && !$events instanceof \Countable) {
+            $events = iterator_to_array($events);
+        }
+        if (0 === count($events)) {
+            return null;
+        }
+        $class = static::aggregateClass();
+
+        return $class::rebuildFromHistory($id, $events);
+    }
+
+    /**
+     * @throws AggregateNotFound
+     */
+    fun load(Id $id): T
+    {
+        return $this->get($id) ?? throw new AggregateNotFound(static::aggregateClass(), $id);
+    }
+
+    fun save(T $aggregate): void
+    {
+        $aggregateClass = static::aggregateClass();
+        if (!$aggregate instanceof $aggregateClass) {
+            throw new \InvalidArgumentException(sprintf('This repository only works with "%s" instances, "%s given".', $aggregateClass, $aggregate::class));
+        }
+        $events = $aggregate->getUncommittedEvents();
+        if ([] === $events) {
+            // Nothing happened: a command that found the aggregate already in the state it asked
+            // for is idempotent, not an error — the event store's "at least one event" guard is
+            // for callers that append, and a save of no change appends nothing.
+            return;
+        }
+        $this->eventStore()->appendAfter($aggregate->chainHead(), ...$events);
+        $aggregate->clearUncommittedEvents();
+    }
+
+    protected fun eventStore(): EventStore
+    {
+        return $this->eventStoreFactory->get(static::aggregateClass());
+    }
+}

@@ -1,0 +1,19 @@
+namespace App\Domain\Repository;
+
+use App\Domain\Aggregate\Aggregate;
+use App\Domain\Aggregate\AggregateId;
+
+interface AggregateRepository<Id of AggregateId, T of Aggregate>
+{
+    /**
+     * The aggregate, or null when there is none.
+     */
+    fun get(Id $id): ?T;
+
+    /**
+     * @throws AggregateNotFound
+     */
+    fun load(Id $id): T;
+
+    fun save(T $aggregate): void;
+}

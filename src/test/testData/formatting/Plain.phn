@@ -1,0 +1,75 @@
+namespace Tequila\Core\EventSourcing\Repository;
+
+use Tequila\Core\Domain\Aggregate\Aggregate;
+use Tequila\Core\Domain\Aggregate\AggregateId;
+use Tequila\Core\Domain\Repository\AggregateNotFound;
+use Tequila\Core\Domain\Repository\AggregateRepository;
+use Tequila\Core\EventSourcing\Aggregate\EventSourcedAggregate;
+use Tequila\Core\EventSourcing\EventStore\EventStore;
+use Tequila\Core\EventSourcing\EventStore\EventStoreFactory;
+
+/**
+* @template Id of AggregateId
+* @template T of EventSourcedAggregate
+* @implements AggregateRepository<Id, T>
+*/
+abstract readonly class AbstractEventSourcedRepository implements AggregateRepository
+{
+/** @return class-string<T> */
+abstract protected static function aggregateClass(): string;
+
+public function __construct(private EventStoreFactory $eventStoreFactory)
+{
+}
+
+/**
+* @param Id $id
+* @return ?T
+*/
+public function get(AggregateId $id): ?EventSourcedAggregate
+{
+$events = $this->eventStore()->load($id);
+if(!is_array($events) && !$events instanceof \Countable){
+$events = iterator_to_array($events);
+}
+if(0 === count($events)){
+return null;
+}
+$class = static::aggregateClass();
+
+return $class::rebuildFromHistory($id, $events);
+}
+
+/**
+* @param Id $id
+* @return T
+* @throws AggregateNotFound
+*/
+public function load(AggregateId $id): EventSourcedAggregate
+{
+return $this->get($id) ?? throw new AggregateNotFound(static::aggregateClass(), $id);
+}
+
+/** @param T $aggregate */
+public function save(Aggregate $aggregate): void
+{
+$aggregateClass = static::aggregateClass();
+if(!$aggregate instanceof $aggregateClass){
+throw new \InvalidArgumentException(sprintf('This repository only works with "%s" instances, "%s given".', $aggregateClass, $aggregate::class));
+}
+$events = $aggregate->getUncommittedEvents();
+if([] === $events){
+// Nothing happened: a command that found the aggregate already in the state it asked
+// for is idempotent, not an error — the event store's "at least one event" guard is
+// for callers that append, and a save of no change appends nothing.
+return;
+}
+$this->eventStore()->appendAfter($aggregate->chainHead(), ...$events);
+$aggregate->clearUncommittedEvents();
+}
+
+protected function eventStore(): EventStore
+{
+return $this->eventStoreFactory->get(static::aggregateClass());
+}
+}

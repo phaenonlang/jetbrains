@@ -31,7 +31,11 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        phpstorm(providers.gradleProperty("platformVersion"))
+        // `-PtestIdePath=/Applications/PhpStorm.app/Contents` builds and tests against an installed IDE
+        // instead, for behaviour only a newer PhpStorm has (the PHP 8.5 pipe operator and its
+        // inspections). The plugin itself is built against platformVersion: that is what it supports.
+        val testIde = providers.gradleProperty("testIdePath").orNull
+        if (testIde != null) local(testIde) else phpstorm(providers.gradleProperty("platformVersion"))
         // The PHP plugin provides the lexer, parser and PSI we reuse; the TextMate plugin
         // hosts the highlighting-only fallback. Both are optional at runtime (see plugin.xml).
         bundledPlugins("com.jetbrains.php", "org.jetbrains.plugins.textmate")

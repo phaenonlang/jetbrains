@@ -1,0 +1,8 @@
+namespace App\User;
+
+use App\EventSourcing\Repository\AbstractEventSourcedRepository;
+
+final readonly class UserRepository extends AbstractEventSourcedRepository<UserId, User>
+{
+    <caret>
+}

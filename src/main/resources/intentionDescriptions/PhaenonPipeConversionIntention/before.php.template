@@ -1,0 +1,2 @@
+<?php
+$this->output->writeln(Style::line(sprintf('namespace %s', $ns)));

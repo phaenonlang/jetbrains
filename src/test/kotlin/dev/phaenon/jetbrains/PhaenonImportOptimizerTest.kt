@@ -1,5 +1,6 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.application.options.CodeStyle
 import com.intellij.codeInsight.CodeInsightWorkspaceSettings
 import com.intellij.codeInsight.actions.OptimizeImportsProcessor
 import com.intellij.lang.ImportOptimizer
@@ -12,13 +13,14 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.codeInsight.PhpImportOptimizer
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
+import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
 import com.jetbrains.php.lang.psi.elements.PhpUse
 
 /**
  * Optimize Imports in a `.phn` file keeps an import that only an erased construct uses — a type
  * argument, a union member, a return type, a closure signature, an `is` / `as` type — as it keeps
- * one a docblock type uses, still removes one nothing uses, and writes one import per line. The
- * tests run the platform's optimizer, the one every entry point goes through, on the fixtures in
+ * one a docblock type uses, and still removes one nothing uses; the block is laid out by the PHP
+ * code style, as in a `.php` file. The tests run the platform's optimizer, the one every entry point goes through, on the fixtures in
  * `testData/imports/` (`X.phn` → `X.after.phn`); the classes the imports name are in `Model.phn`,
  * since PhpStorm never removes an import of a class it cannot find.
  */
@@ -41,9 +43,22 @@ class PhaenonImportOptimizerTest : BasePlatformTestCase() {
 
     fun testEachImportGetsALineOfItsOwn() = optimize("Layout.phn")
 
+    /** Indented as the namespace body; the blank line before the block is the default style's "before imports". */
     fun testABracedNamespaceKeepsItsIndentation() = optimize("Braced.phn")
 
-    fun testFunctionImportsKeepTheBlankLineBeforeThem() = optimize("Kinds.phn")
+    fun testTheBlockIsLaidOutByThePhpCodeStyle() {
+        // PSR-12 separates class, function and constant imports by a blank line; PhpStorm's PHP
+        // formatter lays the block out after the optimizer rebuilt it, in a .phn as in a .php.
+        PSR12CodeStyle().apply(CodeStyle.getSettings(project))
+        val source = myFixture.copyFileToProject("imports/Kinds.phn").let { String(it.contentsToByteArray()) }
+        optimize("Kinds.phn")
+        val phn = myFixture.file.text
+
+        val php = myFixture.configureByText("Kinds.php", "<?php\n" + source.replace("list<ReturnOnly>", "ReturnOnly").replace("fun of", "public function of"))
+        OptimizeImportsProcessor(project, php).runWithoutProgress()
+
+        assertEquals(phn.substringBefore("final class"), php.text.removePrefix("<?php\n").substringBefore("final class"))
+    }
 
     fun testABlockOfUnusedImportsGoesWithoutLeavingSpace() = optimize("Unused.phn")
 

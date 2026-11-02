@@ -1,0 +1,261 @@
+package dev.phaenon.jetbrains
+
+import com.intellij.formatting.Alignment
+import com.intellij.formatting.ASTBlock
+import com.intellij.formatting.Block
+import com.intellij.formatting.BlockEx
+import com.intellij.formatting.ChildAttributes
+import com.intellij.formatting.CustomFormattingModelBuilder
+import com.intellij.formatting.FormattingContext
+import com.intellij.formatting.FormattingModel
+import com.intellij.formatting.Indent
+import com.intellij.formatting.Spacing
+import com.intellij.formatting.Wrap
+import com.intellij.lang.ASTNode
+import com.intellij.lang.Language
+import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
+import com.intellij.psi.TokenType
+import com.intellij.psi.codeStyle.CodeStyleSettings
+import com.intellij.psi.formatter.DocumentBasedFormattingModel
+import com.intellij.psi.formatter.FormattingDocumentModelImpl
+import com.intellij.psi.formatter.common.ExtraRangesProvider
+import com.intellij.psi.formatter.xml.HtmlPolicy
+import com.intellij.psi.templateLanguages.SimpleTemplateLanguageFormattingModelBuilder
+import com.jetbrains.php.lang.PhpLanguage
+import com.jetbrains.php.lang.formatter.PhpFormattingModelBuilder
+import com.jetbrains.php.lang.psi.elements.Parameter
+
+/**
+ * The formatter of `.phn` files: PhpStorm's own PHP formatter, reached the way PhpStorm reaches it
+ * for the PHP inside a template, without the HTML layer a Phaenon file does not have.
+ *
+ * PhpStorm's `PhpFormattingModelBuilder` is a template formatter. For a `.php` file it builds the
+ * HTML formatting model of the file's template view provider and asks the PHP builder for blocks
+ * wherever the HTML tree holds PHP. A `.phn` file has a single-root view provider (see
+ * [PhaenonFileViewProvider]), so the PHP builder falls through to its base class, which formats a
+ * file of an unknown template structure as one read-only leaf: nothing moved, ever. Reformat Code,
+ * auto-indent, the indent of a new line, the `*` of a docblock and the reformatting that follows
+ * generated code all went through that leaf.
+ *
+ * This builder is a [CustomFormattingModelBuilder] engaged for `.phn` files only (the platform
+ * asks every custom builder of the language before taking the first one, so `.php` files keep
+ * PhpStorm's builder). It hands the top-level PSI of the file to the PHP builder's public
+ * `createTemplateFormattingModel`, the same call the template path makes for each PHP region,
+ * so every block, indent, wrap, alignment and spacing rule is PhpStorm's, with the PHP code style.
+ *
+ * The one thing PhpStorm's rules do not know is an erased construct: to them it is a token of an
+ * unknown kind (it is not one of PHP's comment types either). [PhaenonFormattingBlock] wraps the
+ * block tree and decides the spacing next to an erased leaf; the leaf's own text is a single
+ * block and is never changed. A construct is never split or moved off its line: a `<…>` list, an
+ * erased return type and a union member stay against what they belong to, and an erased type
+ * stays on the line of the parameter it types. Line breaks come only from PhpStorm's rules (brace
+ * placement, wrapping at the right margin), as in a `.php` file, and the compiler keeps the lines
+ * of whatever the formatter wrote, so a formatted `.phn` still maps line for line to its output.
+ *
+ * `createTemplateFormattingModel` is a public method of PhpStorm's PHP formatter; the formatter's
+ * blocks are used as PhpStorm builds them and only wrapped, never subclassed.
+ */
+class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
+
+    private val php = PhpFormattingModelBuilder()
+
+    override fun isEngagedToFormat(context: PsiElement): Boolean =
+        PhaenonFiles.isPhaenonFile(context.containingFile?.viewProvider?.virtualFile)
+
+    override fun createModel(formattingContext: FormattingContext): FormattingModel {
+        val file = formattingContext.containingFile
+        val settings = formattingContext.codeStyleSettings
+        val policy = HtmlPolicy(settings, FormattingDocumentModelImpl.createOn(file))
+        val topLevel = file.node.getChildren(null).filter { it.elementType !== TokenType.WHITE_SPACE && it.textLength > 0 }.map { it.psi }
+        val model = php.createTemplateFormattingModel(file, settings, policy, topLevel, Indent.getNoneIndent())
+            ?: return SimpleTemplateLanguageFormattingModelBuilder().createModel(formattingContext)
+        val root = PhaenonFormattingBlock.of(model.rootBlock, ErasedSpacing(file, settings))
+        return DocumentBasedFormattingModel(root, file.project, settings, file.fileType, file)
+    }
+}
+
+/**
+ * The spacing next to an erased construct, which PhpStorm's rules cannot judge.
+ *
+ * An erased leaf is one of two kinds. Some belong to their neighbour and are written against
+ * it: a list in angle brackets (`Box<T>`, `fun map<U>(`, `new Box<int>(`, `implements I<T>`)
+ * to the name before it and to the `(` of a call after it; a return type erased whole
+ * (`: ?T`, `: list<User>`) to the `)` before it, as a PHP return type is; a union member erased
+ * with its separator (`string|list<int>`, `list<T>|null`) to the member it is joined to.
+ * Every other erased construct stands where a PHP token
+ * would (`list<User> $users`, `$x as T`, `type Name = …;`, `spawn $task`): PhpStorm's rule for that
+ * spot applies, except that it never joins the construct to its neighbour where they were apart,
+ * which would make one word of two (`$x as T` → `$xas T`) or glue a type to its variable. Where
+ * PhpStorm has no rule, a construct apart from its neighbour is one space from it, or the line
+ * breaks it was, and one written against its neighbour stays so.
+ */
+internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSettings) {
+
+    private val text: CharSequence = file.viewProvider.contents
+
+    /** One space, or the line breaks there were: what stands between a PHP token and a construct apart from it. */
+    private val apart: Spacing = Spacing.createSpacing(1, 1, 0, true, settings.getCommonSettings(PhpLanguage.INSTANCE).KEEP_BLANK_LINES_IN_CODE)
+
+    fun isErased(block: Block): Boolean = (block as? ASTBlock)?.node?.elementType === PhaenonTokenTypes.ERASED
+
+    /** The erased leaf a block starts with, if it does. */
+    private fun firstErased(block: Block): PsiElement? =
+        file.findElementAt(block.textRange.startOffset)?.takeIf { PhaenonTokenTypes.isErased(it) }
+
+    /** The erased leaf a block ends with, if it does. */
+    private fun lastErased(block: Block): PsiElement? =
+        block.textRange.endOffset.takeIf { it > 0 }?.let { file.findElementAt(it - 1) }?.takeIf { PhaenonTokenTypes.isErased(it) }
+
+    /** The spacing between [left] and [right] when either side is an erased construct; null to leave it to PhpStorm. */
+    fun between(left: Block, right: Block, phpStorm: () -> Spacing?): Spacing? {
+        val after = lastErased(left)
+        val before = firstErased(right)
+        if (after == null && before == null) return null
+        val gap = text.subSequence(left.textRange.endOffset, right.textRange.startOffset)
+        val rightText = text.subSequence(right.textRange.startOffset, right.textRange.endOffset)
+
+        if (before != null && attachesLeft(before)) return GLUED
+        if (after != null && attachesRight(after, rightText)) return GLUED
+
+        val spacing = phpStorm()
+        // No rule for a token of unknown kind: as written when written together, else one space.
+        if (spacing == null) return if (gap.isEmpty()) GLUED else apart
+        if (gap.isEmpty()) return spacing
+        // Apart, and both sides word-like (`$x as T`, `list<User> $users`, `spawn $task`): a rule meant
+        // for other tokens could join them, so they stay one space or their line breaks apart. Elsewhere
+        // (punctuation on either side, a body's brace) PhpStorm's rule holds.
+        val leftChar = text[left.textRange.endOffset - 1]
+        val rightChar = rightText.firstOrNull() ?: return spacing
+        val wordLikeLeft = leftChar.isLetterOrDigit() || leftChar in "_$\\>)]"
+        val wordLikeRight = rightChar.isLetterOrDigit() || rightChar in "_$\\&.?("
+        return if (wordLikeLeft && wordLikeRight) apart else spacing
+    }
+
+    /** `<…>` after a name, `: T` after `)`, `|T` after a union member. */
+    private fun attachesLeft(leaf: PsiElement): Boolean = leaf.text.firstOrNull().let { it == '<' || it == ':' || it == '|' }
+
+    /** `T|` before a union member, `<…>` before the `(` of a call. */
+    private fun attachesRight(leaf: PsiElement, right: CharSequence): Boolean {
+        val text = leaf.text
+        return text.endsWith("|") || (text.startsWith("<") && right.startsWith("("))
+    }
+
+    private companion object {
+        val GLUED: Spacing = Spacing.createSpacing(0, 0, 0, false, 0)
+    }
+}
+
+/**
+ * A block of PhpStorm's PHP formatter seen through the erased-construct rules of [ErasedSpacing]:
+ * everything is the wrapped block's (its indent, wrap, alignment, children's attributes for a new
+ * line) but the spacing next to an erased leaf.
+ *
+ * Wrapping, rather than subclassing PhpStorm's blocks, keeps every block type of the PHP formatter
+ * (`PhpBlock`, its chained-call and synthetic blocks) under the same rules without depending on
+ * their constructors. PhpStorm's blocks keep working on their own children; the formatter engine
+ * works on the wrappers, which hand the unwrapped children back to PhpStorm's spacing rules.
+ *
+ * An erased type before a parameter (`list<User> $users`) is a block of the parameter list beside
+ * the parameter's block, where PhpStorm's parser would have made it part of the parameter. So that
+ * a wrapped or aligned parameter list moves the pair together, the erased block takes over the
+ * wrap and the alignment PhpStorm gave the parameter, and the parameter keeps neither. Inside a
+ * promoted parameter (`private readonly list<User> $users`) the erased type is where PhpStorm
+ * looks for the parameter's name, the first child after the modifiers and the native type, to
+ * align names in columns; that alignment goes to the name.
+ */
+internal open class PhaenonFormattingBlock protected constructor(
+    val delegate: Block,
+    private val spacing: ErasedSpacing,
+    private val ownWrap: Wrap?,
+    private val ownAlignment: Alignment?,
+) : BlockEx, ExtraRangesProvider {
+
+    /** A block of the AST is one to the engine too: it checks the node of every [ASTBlock] it is given. */
+    private class OfNode(delegate: ASTBlock, spacing: ErasedSpacing, wrap: Wrap?, alignment: Alignment?) :
+        PhaenonFormattingBlock(delegate, spacing, wrap, alignment), ASTBlock {
+        override fun getNode(): ASTNode? = (delegate as ASTBlock).node
+    }
+
+    companion object {
+        fun of(delegate: Block, spacing: ErasedSpacing, wrap: Wrap? = delegate.wrap, alignment: Alignment? = delegate.alignment): PhaenonFormattingBlock =
+            if (delegate is ASTBlock && delegate.node != null) OfNode(delegate, spacing, wrap, alignment)
+            else PhaenonFormattingBlock(delegate, spacing, wrap, alignment)
+    }
+
+    private val delegateNode: ASTNode? get() = (delegate as? ASTBlock)?.node
+
+    private val children: List<Block> by lazy { wrapChildren(delegate.subBlocks) }
+
+    private fun wrapChildren(blocks: List<Block>): List<Block> {
+        val insideParameter = delegateNode?.psi is Parameter
+        val out = ArrayList<Block>(blocks.size)
+        var i = 0
+        while (i < blocks.size) {
+            val block = blocks[i]
+            val next = blocks.getOrNull(i + 1)
+            if (next != null && spacing.isErased(block) && typesTheNext(block, next)) {
+                out.add(of(block, spacing, next.wrap ?: block.wrap, next.alignment ?: block.alignment))
+                out.add(of(next, spacing, null, null))
+                i += 2
+                continue
+            }
+            if (next != null && insideParameter && spacing.isErased(block) && block.alignment != null && next.alignment == null) {
+                // PhpStorm aligns a parameter's first child after its modifiers and native type: the name.
+                out.add(of(block, spacing, block.wrap, null))
+                out.add(of(next, spacing, next.wrap, block.alignment))
+                i += 2
+                continue
+            }
+            out.add(of(block, spacing))
+            i++
+        }
+        return out
+    }
+
+    /**
+     * An erased type written before a parameter on the same line: the parameter's type, outside the
+     * parameter's PSI because the parser never saw it. (Inside a parameter, after its modifiers, the
+     * erased type and the variable are children of the parameter's own block, as PHP's are.)
+     */
+    private fun typesTheNext(erased: Block, next: Block): Boolean {
+        val leaf = (erased as ASTBlock).node ?: return false
+        val parameter = (next as? ASTBlock)?.node ?: return false
+        if (parameter.psi !is Parameter) return false
+        val between = leaf.treeNext
+        return between === parameter || (between?.elementType === TokenType.WHITE_SPACE && !between.textContains('\n') && between.treeNext === parameter)
+    }
+
+    override fun getTextRange(): TextRange = delegate.textRange
+
+    override fun getSubBlocks(): List<Block> = children
+
+    override fun getWrap(): Wrap? = ownWrap
+
+    override fun getIndent(): Indent? = delegate.indent
+
+    override fun getAlignment(): Alignment? = ownAlignment
+
+    override fun getSpacing(child1: Block?, child2: Block): Spacing? {
+        val left = (child1 as? PhaenonFormattingBlock)?.delegate ?: child1
+        val right = (child2 as? PhaenonFormattingBlock)?.delegate ?: child2
+        if (left == null) return delegate.getSpacing(null, right)
+        return spacing.between(left, right) { delegate.getSpacing(left, right) } ?: delegate.getSpacing(left, right)
+    }
+
+    override fun getChildAttributes(newChildIndex: Int): ChildAttributes = delegate.getChildAttributes(newChildIndex)
+
+    override fun isIncomplete(): Boolean = delegate.isIncomplete
+
+    override fun isLeaf(): Boolean = delegate.isLeaf
+
+    override fun getLanguage(): Language? = (delegate as? BlockEx)?.language
+
+    override fun getExtraRangesToFormat(info: com.intellij.formatting.FormattingRangesInfo): List<TextRange>? =
+        (delegate as? ExtraRangesProvider)?.getExtraRangesToFormat(info)
+
+    override fun getDebugName(): String = "Phaenon(" + (delegate.debugName ?: delegate.javaClass.simpleName) + ")"
+
+    override fun toString(): String = getDebugName() + " " + textRange
+}
