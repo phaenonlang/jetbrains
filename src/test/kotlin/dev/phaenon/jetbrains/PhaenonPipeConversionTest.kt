@@ -1,0 +1,109 @@
+package dev.phaenon.jetbrains
+
+import com.intellij.application.options.CodeStyle
+import com.intellij.codeInspection.LocalInspectionTool
+import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.jetbrains.php.config.PhpLanguageLevel
+import com.jetbrains.php.config.PhpProjectConfigurationFacade
+import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
+
+/**
+ * Nested calls to a pipe expression ([PhaenonPipeConversionIntention], [PhaenonPipeQuickFixFilter]).
+ *
+ * PhpStorm's inspection and quick-fix come with its PHP 8.5 support (2026.2 has them); on the 2025.1 the
+ * plugin is built against, only the first test runs. The others run against a newer installed
+ * IDE: `./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents --tests '*PipeConversion*'`.
+ */
+class PhaenonPipeConversionTest : BasePlatformTestCase() {
+
+    private val body = """
+        namespace App;
+
+        final class Style
+        {
+            public static function line(string ${'$'}s): string
+            {
+                return ${'$'}s;
+            }
+        }
+
+        final class Out
+        {
+            public function writeln(string ${'$'}s): void
+            {
+            }
+        }
+
+        final class DevUp
+        {
+            public function __construct(private Out ${'$'}output)
+            {
+            }
+
+            public function run(string ${'$'}ns): void
+            {
+                ${'$'}this->output->writeln(Style::line(sprin<caret>tf('✓ namespace %s', ${'$'}ns)));
+            }
+        }
+    """.trimIndent() + "\n"
+
+    override fun setUp() {
+        super.setUp()
+        PhpProjectConfigurationFacade.getInstance(project).languageLevel = PhpLanguageLevel.values().last()
+        PSR12CodeStyle().apply(CodeStyle.getSettings(project))
+    }
+
+    private fun pipesExist(): Boolean = PhpLanguageLevel.values().last().versionString.let { it >= "8.5" }
+
+    private fun phpStormsInspection(): LocalInspectionTool? =
+        runCatching { Class.forName("com.jetbrains.php.lang.inspections.PhpPipeOperatorCanBeUsedInspection") }.getOrNull()
+            ?.getDeclaredConstructor()?.newInstance() as? LocalInspectionTool
+
+    private fun conversions(): List<String> = myFixture.availableIntentions.map { it.text }.filter { it == "Convert nested function calls to a pipe expression" }
+
+    fun testThereIsNoConversionWhereTheLanguageLevelHasNoPipe() {
+        myFixture.configureByText("Low.phn", body)
+        PhpProjectConfigurationFacade.getInstance(project).languageLevel = PhpLanguageLevel.PHP840
+
+        assertEmpty(conversions())
+    }
+
+    fun testPhpStormsFixTurnsMethodCallsIntoTheirQualifiersInAPhpFile() {
+        val inspection = phpStormsInspection() ?: return
+        myFixture.enableInspections(inspection)
+        myFixture.configureByText("DevUp.php", "<?php\n$body")
+
+        myFixture.launchAction(myFixture.availableIntentions.single { it.text == "Convert nested function calls to a pipe expression" })
+
+        // PhpStorm's own result, recorded: when it writes `Style::line(...)` here, the plugin's
+        // replacement in .phn files can go.
+        val text = myFixture.editor.document.text
+        assertTrue(text, text.contains("|> Style(...)") && text.contains("|> \$this->output(...)"))
+    }
+
+    fun testAPhnFileGetsTheConversionThatKeepsTheMethods() {
+        if (!pipesExist()) return
+        phpStormsInspection()?.let { myFixture.enableInspections(it) }
+        myFixture.configureByText("DevUp.phn", body.replace("public function", "fun"))
+
+        assertEquals("PhpStorm's fix is replaced, not doubled", 1, conversions().size)
+        myFixture.launchAction(myFixture.availableIntentions.single { it.text == "Convert nested function calls to a pipe expression" })
+
+        val text = myFixture.editor.document.text
+        val pipe = text.substringAfter("fun run(string \$ns): void\n    {\n").substringBefore("\n    }")
+        assertEquals("sprintf('✓ namespace %s', \$ns) |> Style::line(...) |> \$this->output->writeln(...);", pipe.trim().replace(Regex("\\s*\\n\\s*"), " "))
+    }
+
+    fun testFunctionsBecomeCallablesAndACallWithMoreArgumentsAnArrowFunction() {
+        if (!pipesExist()) return
+        myFixture.configureByText(
+            "Calls.phn",
+            "namespace App;\n\nfun f(string \$x): string\n{\n    return str_pad(tr<caret>im(strval(\$x)), 10);\n}\n",
+        )
+
+        myFixture.launchAction(myFixture.availableIntentions.single { it.text == "Convert nested function calls to a pipe expression" })
+
+        val text = myFixture.editor.document.text.substringAfter("return ").substringBefore(";").replace(Regex("\\s*\\n\\s*"), " ")
+        assertEquals("\$x |> strval(...) |> trim(...) |> (fn(\$x1) => str_pad(\$x1, 10))", text)
+    }
+}

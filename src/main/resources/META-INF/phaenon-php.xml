@@ -18,6 +18,15 @@
         <codeInsight.implementMethod language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonImplementMethodsHandler"/>
         <codeInsight.overrideMethod language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonOverrideMethodsHandler"/>
 
+        <!-- PhpStorm's nested-calls-to-pipe fix writes `Style(...)` for `Style::line(...)`: in .phn files a correct conversion
+             replaces it (the fix comes with PHP 8.5 support, not in 2025.1, and is matched by class name). -->
+        <intentionAction>
+            <language>PHP</language>
+            <className>dev.phaenon.jetbrains.PhaenonPipeConversionIntention</className>
+            <category>Phaenon</category>
+        </intentionAction>
+        <daemon.intentionActionFilter implementation="dev.phaenon.jetbrains.PhaenonPipeQuickFixFilter"/>
+
         <!-- `/**` + Enter: PhpStorm's stub without the @param/@return tags a declared (or erased) type makes redundant. -->
         <enterHandlerDelegate implementation="dev.phaenon.jetbrains.PhaenonDocCommentEnterHandler" order="before phpEnterHandler"/>
 
