@@ -2,9 +2,7 @@ namespace App;
 
 use Phaenon\Concurrent\Scope;
 
-final class ApiException extends \Exception
-{
-}
+final class ApiException extends \Exception {}
 
 final class User
 {

@@ -78,12 +78,12 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         val phn = reformatted(
             "Braces.phn",
             "namespace App;\n\nfinal class A\n{\n    fun f(): void\n    {\n        \$g = function ()\n        {\n            return 1;\n        };\n    }\n}\n\n" +
-                "interface I {\n}\n\ntrait T {\n}\n\nenum E: int {\n    case One = 1;\n}\n\nfun g(): object\n{\n    return new class {\n    };\n}\n",
+                "interface I {\n    fun i(): void;\n}\n\ntrait T {\n    fun t(): void {}\n}\n\nenum E: int {\n    case One = 1;\n}\n\nfun g(): object\n{\n    return new class {\n    };\n}\n",
         )
 
         assertEquals(
             "namespace App;\n\nfinal class A\n{\n    fun f(): void {\n        \$g = function () {\n            return 1;\n        };\n    }\n}\n\n" +
-                "interface I\n{\n}\n\ntrait T\n{\n}\n\nenum E: int\n{\n    case One = 1;\n}\n\nfun g(): object {\n    return new class {\n    };\n}\n",
+                "interface I\n{\n    fun i(): void;\n}\n\ntrait T\n{\n    fun t(): void {}\n}\n\nenum E: int\n{\n    case One = 1;\n}\n\nfun g(): object {\n    return new class {\n    };\n}\n",
             phn,
         )
         val php = reformatted("Braces.php", "<?php\nnamespace App;\n\nfinal class A {\n    public function f(): void {\n    }\n}\n")
@@ -190,9 +190,7 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
             ${'$'}closure = function () {
             };
 
-            interface Blank
-            {
-            }
+            interface Blank {}
             """.trimIndent() + "\n",
             phn,
         )
@@ -201,11 +199,110 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         assertTrue("a .php file keeps PSR-12's\n$php", php.contains("    public function f(): void\n    {\n    }\n"))
     }
 
-    /** PER-CS's `class A {}` is not the canonical layout: with PhpStorm's PER style, an empty class-like still opens on a line of its own, and an empty closure is PER's. */
-    fun testAnEmptyClassKeepsItsBraceOnALineOfItsOwnUnderPer() {
+    /**
+     * An empty class-like — no member, no comment between its braces — is `{}` on its header's line
+     * (design/functions.md §5.1), whichever line its brace was on: a class with type parameters and
+     * a generic parent, an enum with a backing type, an interface, a trait, an attributed class. One
+     * with a member or a comment keeps its brace on a line of its own, as does one whose brace
+     * follows a line comment; an anonymous class is PhpStorm's.
+     */
+    fun testAnEmptyClassLikeIsTwoBracesOnItsHeadersLine() {
+        val phn = reformatted(
+            "Classes.phn",
+            """
+            namespace App;
+
+            final class AggregateNotFound extends \DomainException
+            {
+            }
+
+            final class Box<T of object = object> extends Base<T> implements Holder<T> {
+            }
+
+            enum Level: int
+            {
+            }
+
+            interface Marker {   }
+
+            trait Nothing
+            {
+
+            }
+
+            #[\Attribute]
+            final class Tag {}
+
+            final class Constants {
+                const ONE = 1;
+            }
+
+            final class Later
+            {
+                // members to come
+            }
+
+            final class Explained // why it is empty
+            {
+            }
+
+            ${'$'}anonymous = new class {
+            };
+            """.trimIndent() + "\n",
+        )
+
+        assertEquals(
+            """
+            namespace App;
+
+            final class AggregateNotFound extends \DomainException {}
+
+            final class Box<T of object = object> extends Base<T> implements Holder<T> {}
+
+            enum Level: int {}
+
+            interface Marker {}
+
+            trait Nothing {}
+
+            #[\Attribute]
+            final class Tag {}
+
+            final class Constants
+            {
+                const ONE = 1;
+            }
+
+            final class Later
+            {
+                // members to come
+            }
+
+            final class Explained // why it is empty
+            {
+            }
+
+            ${'$'}anonymous = new class {
+            };
+            """.trimIndent() + "\n",
+            phn,
+        )
+        assertEquals(phn, reformatted("Again.phn", phn))
+        val php = reformatted("Classes.php", "<?php\nnamespace App;\n\nfinal class A {}\n")
+        assertTrue("a .php file keeps PSR-12's\n$php", php.contains("final class A\n{\n}\n"))
+    }
+
+    /** Under PhpStorm's PER style the empty bodies are the same; a closure and an anonymous class are PER's (`{}` too). */
+    fun testUnderPerStyle() {
         com.jetbrains.php.lang.formatter.ui.predefinedStyle.PERCodeStyle().apply(CodeStyle.getSettings(project))
-        val phn = reformatted("Per.phn", "namespace App;\n\nfinal class A {}\n\nfun f(): void {\n}\n\n\$g = function () {\n};\n")
-        assertEquals("namespace App;\n\nfinal class A\n{\n}\n\nfun f(): void {}\n\n\$g = function () {};\n", phn)
+        val phn = reformatted(
+            "Per.phn",
+            "namespace App;\n\nfinal class A {}\n\nfinal class B\n{\n}\n\nfinal class C\n{\n    const X = 1;\n}\n\nfun f(): void {\n}\n\n\$g = function () {\n};\n\n\$o = new class {\n};\n",
+        )
+        assertEquals(
+            "namespace App;\n\nfinal class A {}\n\nfinal class B {}\n\nfinal class C\n{\n    const X = 1;\n}\n\nfun f(): void {}\n\n\$g = function () {};\n\n\$o = new class {};\n",
+            phn,
+        )
     }
 
     fun testErasedConstructsAreFormattedAroundAndNeverInside() {

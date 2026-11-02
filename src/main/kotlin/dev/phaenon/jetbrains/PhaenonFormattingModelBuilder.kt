@@ -30,13 +30,13 @@ import com.intellij.psi.formatter.xml.HtmlPolicy
 import com.intellij.psi.templateLanguages.SimpleTemplateLanguageFormattingModelBuilder
 import com.intellij.psi.util.PsiTreeUtil
 import com.jetbrains.php.lang.PhpLanguage
-import com.jetbrains.php.lang.formatter.PhpCodeStyleSettings
 import com.jetbrains.php.lang.formatter.PhpFormattingModelBuilder
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.parser.PhpElementTypes
 import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.GroupStatement
 import com.jetbrains.php.lang.psi.elements.Parameter
+import com.jetbrains.php.lang.psi.elements.PhpClass
 
 /**
  * The formatter of `.phn` files: PhpStorm's own PHP formatter, reached the way PhpStorm reaches it
@@ -70,8 +70,8 @@ import com.jetbrains.php.lang.psi.elements.Parameter
  *
  * The PHP code style is the project's, with one change for `.phn` files: Phaenon's canonical layout
  * (design/functions.md §5) puts the opening brace of a function, a method and a closure on the
- * declaration's line, keeps a class-like's on a line of its own, and writes an empty function or
- * method body as `{}`. PhpStorm's formatter is handed a copy of the settings whose brace placement
+ * declaration's line, keeps a class-like's on a line of its own, and writes an empty function,
+ * method or class-like body as `{}`. PhpStorm's formatter is handed a copy of the settings whose brace placement
  * says so, and the wrapped blocks join an empty body ([ErasedSpacing.emptyBody]); Reformat Code,
  * the indent of Enter and the code an action generates follow it.
  */
@@ -95,25 +95,22 @@ class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
 
     /**
      * [settings] with Phaenon's brace placement: a class-like's opening brace on a line of its own,
-     * an empty one's too (PER-CS's `class A {}` is not the canonical layout), a function's, a
-     * method's and a closure's on the declaration's line. An empty function or method body is
-     * written `{}` by [ErasedSpacing.emptyBody]; PhpStorm's option for it would reach closures too.
+     * a function's, a method's and a closure's on the declaration's line. An empty body of a named
+     * function, method or class-like is written `{}` by [ErasedSpacing.emptyBody]; PhpStorm's own
+     * options for empty bodies stay as the project sets them, since they reach closures and
+     * anonymous classes too, which are laid out as in PHP.
      */
     private fun canonical(settings: CodeStyleSettings, project: Project): CodeStyleSettings {
         val php = settings.getCommonSettings(PhpLanguage.INSTANCE)
         val endOfLine = CommonCodeStyleSettings.END_OF_LINE
         val nextLine = CommonCodeStyleSettings.NEXT_LINE
-        val phpOnly = settings.getCustomSettings(PhpCodeStyleSettings::class.java)
-        if (php.CLASS_BRACE_STYLE == nextLine && php.METHOD_BRACE_STYLE == endOfLine && php.LAMBDA_BRACE_STYLE == endOfLine &&
-            !phpOnly.FORCE_EMPTY_CLASSES_IN_ONE_LINE
-        ) return settings
+        if (php.CLASS_BRACE_STYLE == nextLine && php.METHOD_BRACE_STYLE == endOfLine && php.LAMBDA_BRACE_STYLE == endOfLine) return settings
         val copy = CodeStyleSettingsManager.getInstance(project).cloneSettings(settings)
         copy.getCommonSettings(PhpLanguage.INSTANCE).apply {
             CLASS_BRACE_STYLE = nextLine
             METHOD_BRACE_STYLE = endOfLine
             LAMBDA_BRACE_STYLE = endOfLine
         }
-        copy.getCustomSettings(PhpCodeStyleSettings::class.java).FORCE_EMPTY_CLASSES_IN_ONE_LINE = false
         return copy
     }
 }
@@ -146,12 +143,14 @@ internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSetti
     fun isErased(block: Block): Boolean = (block as? ASTBlock)?.node?.elementType === PhaenonTokenTypes.ERASED
 
     /**
-     * The spacing of an empty function or method body (design/functions.md §5.1): `{}` one space
-     * after the declaration — after `)`, a return type or a `throws` clause, a multi-line parameter
-     * list's `)` too — with nothing between the braces. Empty is what PhpStorm's own option means:
-     * only whitespace between the braces; a comment or a statement keeps the body's lines. A
-     * closure's body is left to PhpStorm, and so is a brace after a line comment, which joining
-     * would swallow. Null when [left] and [right] are not such a pair.
+     * The spacing of an empty body (design/functions.md §5.1): `{}` one space after the declaration
+     * with nothing between the braces. That is a function's or method's body — after `)`, a return
+     * type or a `throws` clause, a multi-line parameter list's `)` too — and a class's, interface's,
+     * trait's or enum's, after its header (type parameters, `extends`, `implements`, a backing type),
+     * whichever line its brace was on. Empty is what PhpStorm's own options mean: only whitespace
+     * between the braces; a comment, a statement or a member keeps the body's lines. A closure's and
+     * an anonymous class's body are left to PhpStorm, and so is a brace after a line comment, which
+     * joining would swallow. Null when [left] and [right] are not such a pair.
      */
     fun emptyBody(left: Block, right: Block): Spacing? {
         val before = leafAt(right.textRange.startOffset) ?: return null
@@ -165,19 +164,28 @@ internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSetti
 
     private fun leafAt(offset: Int): PsiElement? = if (offset < 0) null else file.findElementAt(offset)
 
-    /** Whether [brace] belongs to the body of a named function or method with only whitespace between its braces. */
+    /** Whether [brace] belongs to the body of a named function, method or class-like with only whitespace between its braces. */
     private fun emptyNamedBody(brace: PsiElement): Boolean {
-        val group = brace.parent as? GroupStatement ?: return false
-        val function = group.parent as? Function ?: return false
-        if (function.isClosure) return false
-        val first = group.node.firstChildNode ?: return false
-        if (first.elementType !== PhpTokenTypes.chLBRACE || first.text != "{") return false
+        val owner = brace.parent
+        val (first, last) = when (owner) {
+            is GroupStatement -> {
+                val function = owner.parent as? Function ?: return false
+                if (function.isClosure) return false
+                owner.node.firstChildNode to owner.node.lastChildNode
+            }
+            // A class-like's braces are its own children, after its header.
+            is PhpClass -> {
+                if (owner.isAnonymous) return false
+                owner.node.findChildByType(PhpTokenTypes.chLBRACE) to owner.node.lastChildNode
+            }
+            else -> return false
+        }
+        if (first == null || first.elementType !== PhpTokenTypes.chLBRACE || first.text != "{") return false
         // After a line comment the brace cannot join the declaration's line: the body keeps its lines.
         var previous = PsiTreeUtil.prevLeaf(first.psi, true)
         while (previous is PsiWhiteSpace) previous = PsiTreeUtil.prevLeaf(previous, true)
         if (previous is PsiComment && !PhaenonTokenTypes.isErased(previous)) return false
-        val last = group.node.lastChildNode ?: return false
-        if (last === first || last.elementType !== PhpTokenTypes.chRBRACE) return false
+        if (last == null || last === first || last.elementType !== PhpTokenTypes.chRBRACE) return false
         var node = first.treeNext
         while (node != null && node !== last) {
             if (node.elementType !== TokenType.WHITE_SPACE) return false

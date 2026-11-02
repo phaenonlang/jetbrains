@@ -7,6 +7,4 @@ final class NotFound extends \Exception
     }
 }
 
-final class Unavailable extends \Exception
-{
-}
+final class Unavailable extends \Exception {}

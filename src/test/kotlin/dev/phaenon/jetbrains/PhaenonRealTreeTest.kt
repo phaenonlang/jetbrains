@@ -192,7 +192,8 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
      *
      * The canonical layout (design/functions.md §5) holds afterwards: the opening brace of every
      * function and method stands on the line of the code before it (unless a comment stands between
-     * them), a class-like's on a line of its own, and an expression body's arrow stays where it was
+     * them), a class-like's on a line of its own unless the class-like is empty (`{}` on its header's
+     * line), and an expression body's arrow stays where it was
      * written — after the signature, or starting a line of its own one level in from the
      * declaration. The braces the pass moved are counted: none in a tree `phn migrate` laid out.
      */
@@ -226,7 +227,8 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
                             if (after.joined != before.joined) failures.add("$where: the arrow of `${after.name}` moved ${if (after.joined) "up" else "down"}")
                             if (!after.joined && after.indent != after.declarationIndent + INDENT) failures.add("$where: the wrapped arrow of `${after.name}` is not one level in")
                         } else {
-                            if (after.classLike && after.joined) failures.add("$where: the brace of class-like `${after.name}` is on its declaration's line")
+                            if (after.classLike && after.joined && !after.empty) failures.add("$where: the brace of class-like `${after.name}` is on its declaration's line")
+                            if (after.classLike && after.empty && !after.joined && !after.commentBefore) failures.add("$where: the empty class-like `${after.name}` is not `{}` on its header's line")
                             if (!after.classLike && !after.joined && !after.commentBefore) failures.add("$where: the brace of `${after.name}` is on a line of its own")
                             if (after.joined != before.joined) bracesMoved++
                         }
@@ -256,6 +258,8 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
     private class BodyStart(
         val name: String,
         val classLike: Boolean,
+        /** Nothing but whitespace between the braces. */
+        val empty: Boolean,
         val offset: Int,
         val arrow: Boolean,
         val joined: Boolean,
@@ -289,6 +293,7 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
                 BodyStart(
                     name = (element as PhpNamedElement).name,
                     classLike = element is PhpClass,
+                    empty = PsiTreeUtil.nextLeaf(brace, true).let { next -> var n = next; while (n is PsiWhiteSpace) n = PsiTreeUtil.nextLeaf(n, true); n?.node?.elementType === PhpTokenTypes.chRBRACE && n.parent === brace.parent },
                     offset = offset,
                     arrow = brace.text == "=",
                     joined = before != null && !text.substring(before.textRange.endOffset, offset).contains('\n'),
