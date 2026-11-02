@@ -10,6 +10,10 @@
 
         <annotator language="PHP" implementationClass="dev.phaenon.jetbrains.PhaenonPhpTagAnnotator"/>
 
+        <!-- PhpStorm's PHP formatter for .phn files, without the HTML layer its template formatter expects.
+             A custom builder: the platform asks it only for the contexts it claims, so .php keeps PhpStorm's. -->
+        <lang.formatter language="PHP" order="last" implementationClass="dev.phaenon.jetbrains.PhaenonFormattingModelBuilder"/>
+
         <!-- Erased Phaenon types leave `readonly` properties untyped for PhpStorm's annotator; the
              .php compiled from a .phn is not "another declaration" of its classes. -->
         <daemon.highlightInfoFilter implementation="dev.phaenon.jetbrains.PhaenonHighlightFilter"/>

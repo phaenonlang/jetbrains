@@ -1,0 +1,68 @@
+namespace App;
+
+use Closure;
+
+type   UserMap = map<Uuid,User>;
+
+interface Mapper <in TIn, out TOut>
+{
+fun map(TIn $in) : TOut;
+    fun get(Uuid   $id):?TOut;
+}
+
+final class Box  <T of object = object>  implements  \IteratorAggregate<int, T>
+{
+private readonly map<string, list<Event<T>>>   $streams;
+    public list<T>  $items = [];
+  private bytes $digest;
+
+    fun __construct(private readonly class<T>   $itemClass,
+        private readonly (string, int) $pair,
+            private readonly ?list<T> $maybe = null,
+        Closure(T, int): bool  $pred = null,
+        list<T>|null $alt = null,
+        string|list<int> $either = '',
+        T   ...$rest,
+    ){
+        $this->digest = (bytes) random_bytes(16);
+    }
+
+    fun first(list<T> $items) : ?T {
+        return $items[0] ?? null;
+    }
+
+    fun kubectl(Closure(string, int=): void $log):Closure(string, string...): (int, string)
+    {
+        return static fn (string $stdin, string ...$args): array => [0, $stdin];
+    }
+
+    fun check(mixed $x): bool
+    {
+        if ($x is list<int>) {
+            return true;
+        }
+        if ($x   is   User) {
+            return true;
+        }
+        $y = $x   as   map<string, Money>;
+        $z=$x as? Money;
+        $ok = $x is int && $y is string;
+        return $ok || $z === null;
+    }
+
+    public static function of <U>(list<U> $rows): Box<U>
+    {
+        $id = fn <V>(V $v): V => $v;
+        $box = new Box<U> (Repo::class, ['a', 1]);
+        $first = first<User>($rows);
+        $x = $box->get<Address>(Uuid::nil())->map<User>(fn (Address $a): User => $a->user);
+        $y = Collection::of<User>($rows);
+        $task = spawn   $this->load($id);
+        return $box;
+    }
+}
+
+fun first<T>(list<T> $items): ?T
+{
+return $items[0] ?? null;
+}

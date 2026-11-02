@@ -1,16 +1,22 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.application.options.CodeStyle
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.RecursionManager
 import com.intellij.openapi.util.text.StringUtil
+import com.intellij.psi.PsiComment
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiFile
+import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.lang.PhpFileType
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
+import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.Parameter
@@ -142,6 +148,58 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
         }
         println(report)
         assertEmpty("erased declarations without their pseudo-class:\n" + failures.take(LISTING_CAP).joinToString("\n"), failures)
+    }
+
+    /**
+     * Reformat Code on real files, with the PSR-12 style: the formatter works on `.phn`
+     * ([PhaenonFormattingModelBuilder]), leaves every erased construct as it was written, keeps a
+     * construct that belongs to its neighbour against it (`Box<T>`, `): T`, `string|list<int>`),
+     * and breaks no file that parsed. Files a second pass changes again are listed, not counted:
+     * PhpStorm's PHP formatter re-indents the arguments of a call it wrapped on the first pass in
+     * `.php` files as well (the compiled `SitesApi.php` of tq-cli does it as its `.phn` does).
+     */
+    fun testRealTreesReformatAroundErasedConstructsAndNeverInsideThem() {
+        val trees = loadTrees() ?: return
+        PSR12CodeStyle().apply(CodeStyle.getSettings(project))
+        val report = StringBuilder()
+        val failures = ArrayList<String>()
+        for (tree in trees) {
+            var changed = 0
+            val unsettled = ArrayList<String>()
+            for (loaded in tree.files) {
+                val file = loaded.file
+                val erasedBefore = erasedTexts(file)
+                val errorsBefore = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java).size
+                reformat(file)
+                val once = file.text
+                if (once != loaded.text) changed++
+                if (erasedTexts(file) != erasedBefore) failures.add("${loaded.relative}: an erased construct changed")
+                val errorsAfter = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java)
+                if (errorsAfter.size > errorsBefore) failures.add("${loaded.relative}:${line(once, errorsAfter.first().textOffset)}: syntax error after reformatting (near '${near(once, errorsAfter.first().textOffset)}')")
+                for (leaf in PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }) {
+                    val first = leaf.text.first()
+                    val offset = leaf.textRange.startOffset
+                    if ((first == '<' || first == ':' || first == '|') && offset > 0 && once[offset - 1].isWhitespace()) {
+                        failures.add("${loaded.relative}:${line(once, offset)}: '${leaf.text.take(30)}' moved off its neighbour")
+                    }
+                }
+                reformat(file)
+                if (file.text != once) unsettled.add(loaded.relative)
+            }
+            report.append("${tree.root.path}: ${tree.files.size} files reformatted, $changed changed")
+            if (unsettled.isNotEmpty()) report.append(", ${unsettled.size} changed again by a second pass: ${unsettled.joinToString()}")
+            report.append('\n')
+        }
+        println(report)
+        assertEmpty("reformatting real Phaenon trees:\n" + failures.take(LISTING_CAP).joinToString("\n"), failures)
+    }
+
+    private fun erasedTexts(file: PsiFile): List<String> =
+        PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }.map { it.text }
+
+    private fun reformat(file: PsiFile) {
+        WriteCommandAction.runWriteCommandAction(project) { CodeStyleManager.getInstance(project).reformat(file) }
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
     }
 
     // ---------------------------------------------------------------- loading

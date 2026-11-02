@@ -183,15 +183,17 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
         assertEquals(tokens(PhpWithOptionalOpenTagLexer(), php), tokens(PhaenonLexer(), php))
     }
 
-    fun testReformatLeavesErasedSyntaxInPlace() {
+    fun testReformatLeavesErasedSyntaxAsWritten() {
         val file = myFixture.configureByFile("syntax/Constructs.phn")
-        val before = file.text
+        val erased = PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }.map { it.text }
 
         WriteCommandAction.runWriteCommandAction(project) {
             CodeStyleManager.getInstance(project).reformat(file)
         }
 
-        assertEquals(before, file.text)
+        // The formatter runs (PhaenonFormattingTest has what it does); the constructs come out as written.
+        assertEquals(erased, PsiTreeUtil.collectElementsOfType(myFixture.file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }.map { it.text })
+        assertEmpty(PsiTreeUtil.collectElementsOfType(myFixture.file, PsiErrorElement::class.java))
     }
 
     fun testConstructsProduceNoErrorHighlighting() {
