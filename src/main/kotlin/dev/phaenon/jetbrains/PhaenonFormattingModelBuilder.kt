@@ -25,6 +25,9 @@ import com.intellij.psi.formatter.xml.HtmlPolicy
 import com.intellij.psi.templateLanguages.SimpleTemplateLanguageFormattingModelBuilder
 import com.jetbrains.php.lang.PhpLanguage
 import com.jetbrains.php.lang.formatter.PhpFormattingModelBuilder
+import com.jetbrains.php.lang.lexer.PhpTokenTypes
+import com.jetbrains.php.lang.parser.PhpElementTypes
+import com.jetbrains.php.lang.psi.elements.GroupStatement
 import com.jetbrains.php.lang.psi.elements.Parameter
 
 /**
@@ -110,6 +113,13 @@ internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSetti
 
     /** The spacing between [left] and [right] when either side is an erased construct; null to leave it to PhpStorm. */
     fun between(left: Block, right: Block, phpStorm: () -> Spacing?): Spacing? {
+        // Two blocks that meet inside a word are one Phaenon keyword handed to the parser as several
+        // PHP tokens (`concurrently` as `function ( )`, `spawn` as `fn ( ) =>`): nothing goes between.
+        // PHP tokens never meet so — they would have been lexed as one word.
+        val meet = left.textRange.endOffset
+        if (meet == right.textRange.startOffset && meet > 0 && meet < text.length && text[meet - 1].isLetterOrDigit() && text[meet].isLetterOrDigit()) {
+            return GLUED
+        }
         val after = lastErased(left)
         val before = firstErased(right)
         if (after == null && before == null) return null
@@ -170,23 +180,61 @@ internal open class PhaenonFormattingBlock protected constructor(
     private val spacing: ErasedSpacing,
     private val ownWrap: Wrap?,
     private val ownAlignment: Alignment?,
+    private val ownIndent: Indent? = null,
 ) : BlockEx, ExtraRangesProvider {
 
     /** A block of the AST is one to the engine too: it checks the node of every [ASTBlock] it is given. */
-    private class OfNode(delegate: ASTBlock, spacing: ErasedSpacing, wrap: Wrap?, alignment: Alignment?) :
-        PhaenonFormattingBlock(delegate, spacing, wrap, alignment), ASTBlock {
+    private class OfNode(delegate: ASTBlock, spacing: ErasedSpacing, wrap: Wrap?, alignment: Alignment?, indent: Indent?) :
+        PhaenonFormattingBlock(delegate, spacing, wrap, alignment, indent), ASTBlock {
         override fun getNode(): ASTNode? = (delegate as ASTBlock).node
     }
 
     companion object {
-        fun of(delegate: Block, spacing: ErasedSpacing, wrap: Wrap? = delegate.wrap, alignment: Alignment? = delegate.alignment): PhaenonFormattingBlock =
-            if (delegate is ASTBlock && delegate.node != null) OfNode(delegate, spacing, wrap, alignment)
-            else PhaenonFormattingBlock(delegate, spacing, wrap, alignment)
+        fun of(
+            delegate: Block,
+            spacing: ErasedSpacing,
+            wrap: Wrap? = delegate.wrap,
+            alignment: Alignment? = delegate.alignment,
+            indent: Indent? = null,
+        ): PhaenonFormattingBlock =
+            if (delegate is ASTBlock && delegate.node != null) OfNode(delegate, spacing, wrap, alignment, indent)
+            else PhaenonFormattingBlock(delegate, spacing, wrap, alignment, indent)
     }
 
     private val delegateNode: ASTNode? get() = (delegate as? ASTBlock)?.node
 
-    private val children: List<Block> by lazy { wrapChildren(delegate.subBlocks) }
+    /**
+     * A `concurrently` block used as a statement is, to PhpStorm, an erased leaf followed by a bare
+     * block, and PhpStorm indents a bare block's statements no further than the block. The two are
+     * taken together as one statement, the way `if (…) {` is, so the braces stand where the keyword
+     * does and the body is one level further in.
+     */
+    private fun isStatementBlock(erased: Block, next: Block): Boolean {
+        if (!spacing.isErased(erased) || !erased.nodeText().startsWith("concurrently")) return false
+        val node = (next as? ASTBlock)?.node ?: return false
+        return node.elementType in PhpElementTypes.ANY_GROUP_STATEMENT || node.psi is GroupStatement
+    }
+
+    private fun Block.nodeText(): String = (this as? ASTBlock)?.node?.text.orEmpty()
+
+    private val children: List<Block> by lazy {
+        val blocks = wrapChildren(delegate.subBlocks)
+        val out = ArrayList<Block>(blocks.size)
+        var i = 0
+        while (i < blocks.size) {
+            val block = blocks[i]
+            val next = blocks.getOrNull(i + 1)
+            if (next is PhaenonFormattingBlock && block is PhaenonFormattingBlock && isStatementBlock(block.delegate, next.delegate)) {
+                val keyword = of(block.delegate, spacing, null, null, Indent.getNoneIndent())
+                out.add(StatementBlock(keyword, of(next.delegate, spacing, next.wrap, next.alignment, Indent.getNoneIndent()), spacing, block.indent, block.wrap, block.alignment))
+                i += 2
+                continue
+            }
+            out.add(block)
+            i++
+        }
+        out
+    }
 
     private fun wrapChildren(blocks: List<Block>): List<Block> {
         val insideParameter = delegateNode?.psi is Parameter
@@ -233,13 +281,14 @@ internal open class PhaenonFormattingBlock protected constructor(
 
     override fun getWrap(): Wrap? = ownWrap
 
-    override fun getIndent(): Indent? = delegate.indent
+    override fun getIndent(): Indent? = ownIndent ?: delegate.indent
 
     override fun getAlignment(): Alignment? = ownAlignment
 
     override fun getSpacing(child1: Block?, child2: Block): Spacing? {
-        val left = (child1 as? PhaenonFormattingBlock)?.delegate ?: child1
-        val right = (child2 as? PhaenonFormattingBlock)?.delegate ?: child2
+        // A statement block is the plugin's: PhpStorm is asked about the leaf or block at its edge.
+        val left = ((child1 as? StatementBlock)?.body ?: child1).let { (it as? PhaenonFormattingBlock)?.delegate ?: it }
+        val right = ((child2 as? StatementBlock)?.keyword ?: child2).let { (it as? PhaenonFormattingBlock)?.delegate ?: it }
         if (left == null) return delegate.getSpacing(null, right)
         return spacing.between(left, right) { delegate.getSpacing(left, right) } ?: delegate.getSpacing(left, right)
     }
@@ -258,4 +307,40 @@ internal open class PhaenonFormattingBlock protected constructor(
     override fun getDebugName(): String = "Phaenon(" + (delegate.debugName ?: delegate.javaClass.simpleName) + ")"
 
     override fun toString(): String = getDebugName() + " " + textRange
+}
+
+/**
+ * A `concurrently` block used as a statement: its erased keyword and options, and the braces
+ * PhpStorm parses as a bare block, as one block that stands where a statement does — the indent,
+ * wrap and alignment the keyword had — with the body's block inside it unindented, as an `if`'s.
+ */
+internal class StatementBlock(
+    val keyword: PhaenonFormattingBlock,
+    val body: PhaenonFormattingBlock,
+    private val spacing: ErasedSpacing,
+    private val indent: Indent?,
+    private val wrap: Wrap?,
+    private val alignment: Alignment?,
+) : Block {
+
+    override fun getTextRange(): TextRange = TextRange(keyword.textRange.startOffset, body.textRange.endOffset)
+
+    override fun getSubBlocks(): List<Block> = listOf(keyword, body)
+
+    override fun getWrap(): Wrap? = wrap
+
+    override fun getIndent(): Indent? = indent
+
+    override fun getAlignment(): Alignment? = alignment
+
+    override fun getSpacing(child1: Block?, child2: Block): Spacing? {
+        if (child1 == null) return null
+        return spacing.between(keyword.delegate, body.delegate) { null }
+    }
+
+    override fun getChildAttributes(newChildIndex: Int): ChildAttributes = ChildAttributes(Indent.getNoneIndent(), null)
+
+    override fun isIncomplete(): Boolean = body.isIncomplete
+
+    override fun isLeaf(): Boolean = false
 }

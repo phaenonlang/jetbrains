@@ -12,6 +12,7 @@ import com.jetbrains.php.lang.psi.elements.MethodReference
 import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.ParenthesizedExpression
 import com.jetbrains.php.lang.psi.elements.PhpClass
+import com.jetbrains.php.lang.psi.elements.Variable
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import com.jetbrains.php.lang.psi.resolve.types.PhpType
@@ -52,6 +53,9 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpTypeProvider4
  *   is checked against the closure's signature.
  * - A pipe whose stage is a partial application, `$x |> $o->m(1, ?)`: the call it becomes. PhpStorm
  *   types a pipe by the function its right side names, which for a method call is no function.
+ * - A `concurrently` block used as a value and a `spawn`, which reach the parser as the closures
+ *   they compile to ([PhaenonBlocks]): the block is what its body returns, the spawn an
+ *   `Amp\Future` of it. PhpStorm keeps its own `\Closure` beside it, as for a partial application.
  *
  * A receiver's or closure's type may be a signature that only an index lookup can decode (a
  * property of another class, say). Those cases are deferred the way the extension point intends:
@@ -70,8 +74,50 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
             is MethodReference -> partial(element) ?: chain(element)
             is FunctionReference -> partial(element) ?: receiver(element)
             is BinaryExpression -> pipe(element) ?: receiver(element)
+            is Variable -> merge(blockValue(element), receiver(element))
             else -> receiver(element)
         }
+    }
+
+    private fun merge(a: PhpType?, b: PhpType?): PhpType? = when {
+        a == null -> b
+        b == null -> a
+        else -> PhpType().add(a).add(b)
+    }
+
+    // ---------------------------------------------------------------- concurrently and spawn
+
+    /**
+     * A variable that holds the value of a `concurrently` block or a `spawn` handle. PhpStorm types
+     * the closure such an expression reaches it as without asking the type providers, so the type
+     * goes to the variables it is assigned to — `$x = concurrently {…}` what the body returns,
+     * `$f = spawn …` an `Amp\Future` of the task's value, `$tasks[$k] = spawn …` an array of them —
+     * at every occurrence in the function, block bodies included, as the compiled `use` clause
+     * shares them.
+     */
+    private fun blockValue(variable: Variable): PhpType? {
+        val name = variable.name ?: return null
+        val scope: PsiElement = PhaenonBlocks.scopeOf(variable) ?: variable.containingFile ?: return null
+        return PhaenonBlocks.assignedValues(scope)[name]?.let { assigned ->
+            val result = PhpType()
+            for ((function, kind, element) in assigned) {
+                val body = function.type
+                when {
+                    kind == PhaenonBlocks.Kind.CONCURRENTLY -> result.add(body)
+                    !element -> result.add(if (body.isComplete) future(body) else PhpType().add(signature(FUTURE, "", body)))
+                    else -> result.add(if (body.isComplete) future(body).pluralise() else PhpType().add(signature(FUTURES, "", body)))
+                }
+            }
+            result.takeIf { !it.isEmpty }
+        }
+    }
+
+    /** `\Amp\Future<T>`, the handle of a task whose body gives [body]. */
+    private fun future(body: PhpType): PhpType {
+        val members = body.typesWithParametrisedParts.filter { !it.startsWith("#") && it != "?" }.toMutableSet()
+        if (members.remove(PhpType._TRUE) or members.remove(PhpType._FALSE)) members.add(PhpType._BOOL)
+        val argument = members.map(::argument).sorted().joinToString("|").ifEmpty { "mixed" }
+        return PhpType().add(PhpType.createParametrizedType(FUTURE_CLASS, listOf(argument)))
     }
 
     // ---------------------------------------------------------------- partial application
@@ -247,6 +293,8 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
             STRINGABLE -> completeStringable(member, resolved, project)
             CHAIN -> completeChain(member, resolved, decode(fields.getOrNull(2))?.global(project))
             PARTIAL -> completePartial(member, receiver, project)
+            FUTURE -> future(resolved)
+            FUTURES -> future(resolved).pluralise()
             else -> null
         }
     }
@@ -278,6 +326,9 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         const val STRINGABLE = 'S'
         const val CHAIN = 'C'
         const val PARTIAL = 'P'
+        const val FUTURE = 'F'
+        const val FUTURES = 'A'
+        const val FUTURE_CLASS = "\\Amp\\Future"
         const val SEPARATOR = '¦'
         const val PIPE = '¶'
         val STR: PhpType = PhpType().add(PhaenonTypeText.STR_METHODS)

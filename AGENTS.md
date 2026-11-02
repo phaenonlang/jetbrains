@@ -14,7 +14,7 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
 ./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # tests against an installed, newer IDE
 
-PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper \
+PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper:~/labs/tequila/reflector:~/labs/tequila/tq-cli-phaenon-dogfood \
   ./gradlew test --tests '*RealTree*'   # parse every .phn of the dogfood trees; skipped when unset
 ```
 
@@ -42,7 +42,9 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   Phaenon's spelling; fixtures `testData/docs/`, `testData/classstring/`); PHP 8.6 placeholders
   are identifiers to the parser (`PhaenonLexer`), typed as closures (`PhaenonPartialApplication`),
   and PhpStorm's findings on 8.6 code are dropped by target (`PhaenonTarget` reads `phaenon.json` and
-  composer.json; fixtures `testData/php86/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
+  composer.json; fixtures `testData/php86/`); a `concurrently` block used as a value and `spawn`
+  are the closures they compile to, their keywords split into PHP tokens (`PhaenonBlocks`; fixtures
+  `testData/concurrency/`); `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
   (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
   compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
   `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
@@ -64,7 +66,8 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   (README § How it works).
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
-  element-array unions, a partial application is also its callee's result to PhpStorm; the
+  element-array unions, a partial application is also its callee's result to PhpStorm, a block
+  used as a value and a spawn are closures to it (their values typed on the variables); the
   implied `strict_types` is not modelled; editor colouring uses the
   internal extension point `com.jetbrains.php.baseLexerProvider`. Code a feature inserts is laid out
   by PhpStorm's formatter, as in PHP: insert it unformatted and let the reformatting that follows

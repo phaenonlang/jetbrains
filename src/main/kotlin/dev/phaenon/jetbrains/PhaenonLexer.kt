@@ -44,6 +44,10 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  *   PSI. PhpStorm's levels stop at PHP 8.5 and read `?` there as a syntax error.
  *   [PhaenonTypeProvider] types the call as the closure it creates. The variadic placeholder
  *   `f(1, ...)` is left to PhpStorm, which parses it as a spread without an operand.
+ * - `concurrently` and `spawn` (design/concurrency.md §11): a block used as a statement loses
+ *   its keyword and options and parses as a block; a block used as a value, `spawn { … }` and
+ *   `spawn expr` are handed over as the closures they compile to, the keyword's own characters
+ *   split into `function ( )` or `fn ( ) =>` tokens ([PhaenonBlocks]).
  *
  * The decision to read `Name<` as a type-argument list is the compiler's: PHP's relational
  * operators are non-associative, so `A < B > C` has no PHP reading, and a `<…>` that scans as a
@@ -140,6 +144,8 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     private inner class Plan(val count: Int) {
         val types = Array(count) { pending[it].type }
         val joinWithPrev = BooleanArray(count)
+        /** Tokens handed over as several: the end offset and type of each part, in order. */
+        val splits = HashMap<Int, List<Pair<Int, IElementType>>>()
 
         fun erase(range: IntRange): Plan {
             for (i in range) types[i] = PhaenonTokenTypes.ERASED
@@ -156,6 +162,18 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             return this
         }
 
+        /**
+         * Token [i] becomes one token per part, each [lengths] characters long and of its type;
+         * the parts cover the token exactly. A Phaenon keyword spelt as the PHP tokens it stands
+         * for (`concurrently` as `function ( )`), its text unchanged.
+         */
+        fun split(i: Int, vararg parts: Pair<Int, IElementType>): Plan {
+            var end = pending[i].start
+            splits[i] = parts.map { (length, type) -> end += length; end to type }
+            check(end == pending[i].end) { "the parts of a split token must cover it" }
+            return this
+        }
+
         /** Tokens [from]..[to] become one token of [type]. */
         fun merge(from: Int, to: Int, type: IElementType): Plan {
             types[from] = type
@@ -167,6 +185,15 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     private fun emit(plan: Plan) {
         var i = 0
         while (i < plan.count) {
+            val parts = plan.splits[i]
+            if (parts != null) {
+                for ((end, partType) in parts) addToken(end, partType)
+                prevPrevSig = prevSig
+                prevSig = parts.last().second
+                prevSigText = ""
+                i++
+                continue
+            }
             val type = plan.types[i]
             var end = pending[i].end
             var j = i + 1
@@ -220,42 +247,60 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     }
 
     /**
-     * `concurrently (opts) {`: the keyword and its options are erased so that the braces parse as a
-     * block (design/concurrency.md §11). The expression form, `return concurrently {`, stays a
-     * syntax error until a PSI block exists. `Api::concurrently(` and a `concurrently(…)` call with
-     * no brace after it are calls and stay.
+     * `concurrently (opts) { … }` (design/concurrency.md §4.1, §11). As a statement, the keyword
+     * and its options are erased, so that the braces parse as a block: the body shares the
+     * enclosing scope, as it does in the compiled closure through its `use` clause. As an
+     * expression — `$x = concurrently {`, `return concurrently {`, an argument — the keyword is
+     * handed over as `function ( )`, its twelve characters split into those three tokens, and the
+     * options are erased: the block parses as the closure it compiles to, `return` inside it
+     * belongs to it, and [PhaenonTypeProvider] gives it the type of what the body returns.
+     * `Api::concurrently(` and a `concurrently(…)` call with no brace after it are calls and stay.
      */
     private fun tryConcurrently(c: Tok): Plan? {
         if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "concurrently" || afterMemberAccess()) return null
         val next = sig(1)
+        var close = -1
         when (typeAt(next)) {
-            PhpTokenTypes.chLBRACE -> return Plan(1).erase(0..0)
-            PhpTokenTypes.chLPAREN -> {}
+            PhpTokenTypes.chLBRACE -> {}
+            PhpTokenTypes.chLPAREN -> {
+                var depth = 0
+                var i = next
+                while (true) {
+                    when (typeAt(i) ?: return null) {
+                        PhpTokenTypes.chLPAREN -> depth++
+                        PhpTokenTypes.chRPAREN -> if (--depth == 0) break
+                    }
+                    i = sig(i + 1)
+                    if (i < 0) return null
+                }
+                if (typeAt(sig(i + 1)) != PhpTokenTypes.chLBRACE) return null
+                close = i
+            }
             else -> return null
         }
-        var depth = 0
-        var i = next
-        while (true) {
-            when (typeAt(i) ?: return null) {
-                PhpTokenTypes.chLPAREN -> depth++
-                PhpTokenTypes.chRPAREN -> if (--depth == 0) break
-            }
-            i = sig(i + 1)
-            if (i < 0) return null
-        }
-        if (typeAt(sig(i + 1)) != PhpTokenTypes.chLBRACE) return null
-        return Plan(i + 1).erase(0..i)
+        val plan = Plan(if (close < 0) 1 else close + 1)
+        if (prevSig in BLOCK_STATEMENT_PREDECESSORS) return plan.erase(0..plan.count - 1)
+        plan.split(0, 10 to PhpTokenTypes.kwFUNCTION, 1 to PhpTokenTypes.chLPAREN, 1 to PhpTokenTypes.chRPAREN)
+        if (close >= 0) plan.erase(next..close)
+        return plan
     }
 
     /**
-     * `spawn expr`: the keyword is erased and the expression stays, typed as the call it wraps
-     * (design/concurrency.md §11). A member, a function or a constant called spawn is left alone.
+     * `spawn expr` and `spawn { … }` (design/concurrency.md §4.2): the keyword is handed over as
+     * the closure the task compiles to, its five characters split into tokens — `fn ( ) =>` before
+     * an expression, `function ( )` before a block — so `expr` is the body of an arrow function,
+     * captured as the compiler captures it, and a block is a closure's. [PhaenonTypeProvider] types
+     * the spawn as `Amp\Future<T>` of what the body gives. A member, a function or a constant called
+     * spawn is left alone.
      */
     private fun trySpawn(c: Tok): Plan? {
         if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "spawn" || afterMemberAccess() || prevSig == PhpTokenTypes.kwFUNCTION) return null
         val next = typeAt(sig(1)) ?: return null
         if (next == PhpTokenTypes.opASGN || next == PhpTokenTypes.SCOPE_RESOLUTION || next == PhpTokenTypes.opSEMICOLON) return null
-        return Plan(1).erase(0..0)
+        if (next == PhpTokenTypes.chLBRACE) {
+            return Plan(1).split(0, 3 to PhpTokenTypes.kwFUNCTION, 1 to PhpTokenTypes.chLPAREN, 1 to PhpTokenTypes.chRPAREN)
+        }
+        return Plan(1).split(0, 2 to PhpTokenTypes.kwFN, 1 to PhpTokenTypes.chLPAREN, 1 to PhpTokenTypes.chRPAREN, 1 to PhpTokenTypes.opHASH_ARRAY)
     }
 
     private fun afterMemberAccess(): Boolean = prevSig != null && MEMBER_ACCESS.contains(prevSig)
@@ -621,6 +666,12 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         )
 
         val STATEMENT_START: Set<IElementType?> = setOf(null, PhpTokenTypes.opSEMICOLON, PhpTokenTypes.chRBRACE, PhpTokenTypes.chLBRACE)
+
+        /**
+         * What a `concurrently` block used as a statement follows: a statement boundary, or the head of
+         * a control structure (`if (…)`, `else`, `do`). After anything else the block is a value.
+         */
+        val BLOCK_STATEMENT_PREDECESSORS: Set<IElementType?> = STATEMENT_START + setOf(PhpTokenTypes.chRPAREN, PhpTokenTypes.kwELSE, PhpTokenTypes.kwDO)
 
         /** Where a declaration may start: a statement boundary, a modifier, the `]` of an attribute. */
         val FUN_PREDECESSORS: Set<IElementType?> = STATEMENT_START + PhpTokenTypes.tsMODIFIERS.types + PhpTokenTypes.chRBRACKET
