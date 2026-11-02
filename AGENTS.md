@@ -48,8 +48,9 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'   # the line
   `testData/concurrency/`); D18's `throws` clause is erased (`PhaenonThrows` answers the exception
   findings it covers) and an expression body is the block it compiles to, opened by the lexer and
   closed by `PhaenonPsiBuilder`; `.phn` is formatted in the canonical layout, the braces of functions
-  and methods on their line, of class-likes on a line of their own, and an empty function or method
-  body as `{}` (fixtures `testData/d18/`, `PhaenonFormattingTest`);
+  and methods on their line, of class-likes on a line of their own, and an empty body (a function,
+  method or class-like with nothing between its braces) as `{}` (fixtures `testData/d18/`,
+  `PhaenonFormattingTest`);
   D19's line map (design/line-map.md) is read by `PhaenonLineMap` / `PhaenonLineMaps` (tested
   against `src/test/resources/linemap/vectors.json`, a verbatim copy of the compiler's
   `internal/linemap/testdata/vectors.json` that its freshness test compares: refresh by copying,
