@@ -165,7 +165,8 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
         assertEquals(listOf("\\Phaenon\\Internal\\ListMethods<mixed>", "\\array", "\\null"), types["maybe"])
         assertEquals(listOf("\\Phaenon\\Internal\\BytesMethods", "\\string"), types["raw"])
         assertEquals(listOf("\\int[]", "\\string[]"), types["pair"])
-        assertEquals(listOf("\\class-string<\\App\\User>", "\\string"), types["userClass"])
+        // As PhpStorm types a docblock-only `@return class-string<User>`: no `string` beside it, which would print as `string|string`.
+        assertEquals(listOf("\\class-string<\\App\\User>"), types["userClass"])
         assertEquals(listOf("\\Closure", closure(listOf("\\mixed"), "\\bool")), types["pred"])
         assertEquals(listOf("\\Closure", closure(listOf("\\string", "\\int"), "\\void")), types["log"])
         assertEquals(listOf("\\Closure", closure(listOf("\\string", "\\string"), "\\int[]", "\\string[]")), types["kubectl"])

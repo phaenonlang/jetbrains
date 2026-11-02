@@ -20,7 +20,7 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * | `map<K, V>` | `V[]` and `\Phaenon\Internal\MapMethods<K, V>` |
  * | `bytes` | `string` and `\Phaenon\Internal\BytesMethods` |
  * | `(A, B)` | `A[]|B[]` — the positional shape as PhpStorm can hold it |
- * | `class<T>` | `class-string<T>` and `string`, as PhpStorm reads `@return class-string<T>` |
+ * | `class<T>` | `class-string<Bound>`, as PhpStorm reads a docblock `@return class-string<Bound>` |
  * | `Closure(A, B=, C...): R` | `\Closure` and the signature as PhpStorm encodes a docblock `\Closure(A, B, C): R` |
  * | a type parameter | its bound, `mixed` without one — what the compiler writes for it |
  * | `Foo<T>` | `\Ns\Foo` — type arguments of user classes are erased |
@@ -92,17 +92,23 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
     }
 
     /**
-     * `class<T>` is PHPStan's `class-string<T>`: PhpStorm's own reading of that docblock type is
-     * `string` plus `\class-string<\Ns\T>`, on which `$c::m()`, `new $c`, `$c::CONST` resolve
-     * against the class. A type parameter stands for its bound; bare `class` and an unbounded
-     * parameter leave the class open.
+     * `class<T>` is PHPStan's `class-string<T>`, and its type is the one PhpStorm gives a function
+     * whose only return type is the docblock `@return class-string<Foo>`: a single
+     * `\class-string<\Ns\Foo>`, on which `$c::m()`, `new $c`, `$c::CONST` resolve against the
+     * class. A union of classes is one member with several arguments, `\class-string<\A,\B>`, as
+     * PhpStorm reads `class-string<A|B>`. A type parameter stands for its bound; bare `class` and
+     * an unbounded parameter leave the class open (`\class-string`).
+     *
+     * No `string` beside it: PhpStorm treats a class-string as a string wherever a string is
+     * asked for (`PhpType.getTypes()` reads it as `\string`, and a `string` parameter accepts it),
+     * and a second member would print as `string|string`, PhpStorm printing every class-string
+     * as `string`. A `string` member is what PhpStorm adds for a native `string` return type next
+     * to the docblock, which a Phaenon declaration does not have: `class<T>` is erased whole.
      */
     private fun classString(argument: PhpType?): PhpType {
-        val result = PhpType().add(PhpType.STRING)
-        val classes = argument?.types?.filter { isClassName(it) }.orEmpty()
-        if (classes.isEmpty()) return result.add(PhpType.CLASS_STRING)
-        classes.forEach { result.add(PhpType.createParametrizedType(PhpType._CLASS_STRING, listOf(it))) }
-        return result
+        val classes = argument?.types?.filter { isClassName(it) }.orEmpty().sorted()
+        if (classes.isEmpty()) return PhpType().add(PhpType.CLASS_STRING)
+        return PhpType().add(PhpType.createParametrizedType(PhpType._CLASS_STRING, classes))
     }
 
     /**

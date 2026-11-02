@@ -1,0 +1,22 @@
+namespace App;
+
+fun takesString(string $s): int
+{
+    return 0;
+}
+
+final class Uses
+{
+    fun __construct(private class<User> $userClass)
+    {
+    }
+
+    fun run(Factory $factory, AggregateId $id, object $o, class<User> $users): void
+    {
+        $length = takesString($users);
+        $factory->make(User::class, $id);
+        $isUser = $o instanceof $users;
+        $userClass = $this->userClass;
+        $other = new $userClass();
+    }
+}

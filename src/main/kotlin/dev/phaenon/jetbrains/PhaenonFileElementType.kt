@@ -36,7 +36,8 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
      * body no longer lazy. Bump it as well when [PhaenonTypeProvider] answers differently for a
      * declaration: PhpStorm stores that answer with the declaration's stub, so an old index would
      * keep the old type (3: type parameters read as their bounds, `class<T>` as
-     * `class-string<Bound>`, closure types with their signature).
+     * `class-string<Bound>`, closure types with their signature; 4: `class<T>` without a `string`
+     * member).
      *
      * The stub trees PhpStorm stores for `.phn` files are versioned by the PHP file type (the
      * platform asks the language's parser definition, never the file's content element type), so
@@ -45,7 +46,7 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
      * [PhaenonReindexActivity] re-indexes the `.phn` files of a project once this number differs
      * from the one it stored.
      */
-    const val PSI_VERSION: Int = 3
+    const val PSI_VERSION: Int = 4
 
     override fun parseContents(chameleon: ASTNode): ASTNode? {
         val project = chameleon.psi.project

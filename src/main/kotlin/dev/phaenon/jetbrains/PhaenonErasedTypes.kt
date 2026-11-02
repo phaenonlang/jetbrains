@@ -140,6 +140,78 @@ object PhaenonErasedTypes {
     }
 
     /**
+     * The type of a parameter or property as the source spells it, native and erased parts
+     * together (`?list<User>`, `class<T>`, `int|Closure(string): bool`), whitespace runs read as
+     * one space; null when the declaration has no type. What the documentation and parameter
+     * info print for a Phaenon declaration, where PhpStorm would print the erasure.
+     */
+    fun writtenType(declaration: PhpNamedElement): String? {
+        if (declaration !is Parameter && declaration !is Field) return null
+        val name = declaration.nameIdentifier ?: return null
+        var first: PsiElement? = null
+        var leaf: PsiElement? = PsiTreeUtil.prevLeaf(name, true)
+        while (leaf != null) {
+            val type = PsiUtilCore.getElementType(leaf)
+            when {
+                PhaenonTokenTypes.isErased(leaf) -> first = leaf
+                leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
+                type === PhpTokenTypes.opBIT_AND || type === PhpTokenTypes.opVARIADIC -> Unit
+                PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> first = leaf
+                else -> break
+            }
+            leaf = PsiTreeUtil.prevLeaf(leaf, true)
+        }
+        val start = first ?: return null
+        // The type ends where `&`, `...` or the name begins.
+        var end: PsiElement = name
+        var after: PsiElement? = PsiTreeUtil.nextLeaf(start, true)
+        while (after != null && after !== name) {
+            val type = PsiUtilCore.getElementType(after)
+            if (type === PhpTokenTypes.opBIT_AND || type === PhpTokenTypes.opVARIADIC) {
+                end = after
+                break
+            }
+            after = PsiTreeUtil.nextLeaf(after, true)
+        }
+        return written(start, end)
+    }
+
+    /**
+     * The return type of a function or method as the source spells it, without its `:`; null when
+     * none is written. See [writtenType].
+     */
+    fun writtenReturnType(function: Function): String? {
+        val tail = function.lastChild ?: return null
+        if (tail.node.elementType === PhpTokenTypes.chRPAREN) return null
+        var first: PsiElement? = null
+        var leaf: PsiElement? = PsiTreeUtil.prevLeaf(tail, true)
+        while (leaf != null) {
+            val type = PsiUtilCore.getElementType(leaf)
+            when {
+                PhaenonTokenTypes.isErased(leaf) -> first = leaf
+                leaf is PsiWhiteSpace || leaf is PsiComment || type === PhpTokenTypes.opCOLON -> Unit
+                PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> first = leaf
+                else -> break
+            }
+            leaf = PsiTreeUtil.prevLeaf(leaf, true)
+        }
+        val start = first ?: return null
+        val text = written(start, tail)
+        return text.removePrefix(":").trim().ifEmpty { null }
+    }
+
+    /** The `<…>` type parameter list a function or class declares, as written; null when it declares none. */
+    fun writtenTypeParameters(declaration: PsiElement): String? = declarationList(declaration)?.let { normalize(it.text) }
+
+    /** The source text from the start of [first] up to the start of [end], whitespace runs as one space. */
+    private fun written(first: PsiElement, end: PsiElement): String {
+        val text = first.containingFile.viewProvider.contents
+        return normalize(text.subSequence(first.textRange.startOffset, end.textRange.startOffset).toString())
+    }
+
+    private fun normalize(text: String): String = text.trim().replace(Regex("\\s+"), " ")
+
+    /**
      * The names of the type parameters in scope at [element]: those declared on the enclosing
      * functions and classes (`class Box<T>`, `function f<U>`, `fn<V>`), read from the erased
      * `<…>` list that follows the declaration's name.

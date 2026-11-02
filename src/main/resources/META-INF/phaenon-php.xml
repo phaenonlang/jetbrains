@@ -54,6 +54,12 @@
         <spellchecker.support language="PHP" order="first"
                               implementationClass="dev.phaenon.jetbrains.PhaenonSpellcheckingStrategy"/>
 
+        <!-- Quick documentation, the Ctrl+hover hint and parameter info of Phaenon declarations in Phaenon's spelling
+             (`class<T>`, `list<User>`), where PhpStorm prints the erasure. Both come before PhpStorm's and answer only
+             for Phaenon elements. -->
+        <lang.documentationProvider language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonDocumentationProvider"/>
+        <codeInsight.parameterInfo language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonParameterInfoHandler"/>
+
         <!-- A declaration in a .phn wins over its compiled copy; `->map` on a list resolves to a
              bundled pseudo-class and navigation prefers \Phaenon\Seq::map; `@var T` goes to `<T of …>`. -->
         <gotoDeclarationHandler implementation="dev.phaenon.jetbrains.PhaenonGotoDeclarationHandler"/>
