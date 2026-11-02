@@ -20,8 +20,11 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
 - JDK 21; Gradle provisions one if none is installed. `./gradlew test` is a no-op when nothing
   changed (build cache): `--rerun` forces it. The results are in `build/test-results/test/*.xml`.
 - `src/main/kotlin`: `PhaenonLexer` (erasure) and `PhaenonPsiBuilder` (no lazy bodies) feed the
-  parser; `PhaenonErasedTypes` and `PhaenonTypeText` read the erased text back for
-  `PhaenonTypeProvider`; `PhaenonExcludePolicy` keeps the output directories of `phaenon.json`
+  parser; `PhaenonErasedTypes`, `PhaenonTypeSyntax` and `PhaenonTypeText` read the erased text back
+  for `PhaenonTypeProvider` (a type parameter as its bound, `class<T>` as `class-string<Bound>`,
+  closure types with PhpStorm's signature encoding); `PhaenonErasure` and
+  `PhaenonHierarchyInspection` judge overrides with an erased type on either side, whose PhpStorm
+  finding the highlight filter drops (fixtures `testData/hierarchy/`); `PhaenonExcludePolicy` keeps the output directories of `phaenon.json`
   out of the index, and `PhaenonGotoDeclarationHandler` / `PhaenonHighlightFilter` prefer a `.phn`
   declaration over its compiled copy when both are indexed (fixtures `testData/generated/`);
   an erased construct is a `PhaenonErasedLeaf` (token `PhaenonTokenTypes.ERASED`, a comment to
@@ -35,7 +38,7 @@ PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/obje
   parameter — keep them in step when the stdlib changes.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
   `syntax/Constructs.phn` uses every Phaenon construct; `methods/` holds the method-syntax fixtures,
-  `closure/` the closure-type ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).
+  `closure/` the closure-type ones, `classstring/` the `class<T>` ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).
   Tests set the IDE's highest PHP level: the test project defaults to PHP 5.6. It also lacks
   PhpStorm's bundled PHP stubs (they are indexed only for a project with a PHP module), so a test
   that needs `\Closure` and the like copies a stand-in (`closure/stubs/Closure.php`).
