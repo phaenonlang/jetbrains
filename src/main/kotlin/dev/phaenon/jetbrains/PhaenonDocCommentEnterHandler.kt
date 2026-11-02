@@ -37,8 +37,10 @@ import com.jetbrains.php.lang.psi.elements.PhpNamedElement
  * it yet): it hands the Enter to PhpStorm's registered delegate, which writes the stub as it always
  * does, then deletes the line of every `@param` of a parameter with a type, native or erased, the
  * `@return` of a function with a return type, and the `@var` of a typed property. Untyped
- * parameters keep PhpStorm's tags, as do `@throws` and whatever else PhpStorm adds. A stub left
- * empty is the opening line, ` * ` with the caret, and the closing line.
+ * parameters keep PhpStorm's tags, as does whatever else PhpStorm adds, a `@throws` too unless the
+ * signature's `throws` clause names its exception. A stub of one line or none is one line, whatever
+ * it documents (design/functions.md §5): `/** <caret> */`, or `/** @param $raw */` with the caret
+ * after the tag.
  *
  * Calling the registered delegate, rather than the class that writes the stub, keeps the plugin
  * working where PhpStorm moved that work: 2025.1 writes it in `PhpDocEnterHandler`, 2026.2 in a
@@ -87,9 +89,8 @@ class PhaenonDocCommentEnterHandler : EnterHandlerDelegateAdapter() {
 
     private fun dropRedundantTags(file: PsiFile, editor: Editor, start: Int) {
         val comment = PsiTreeUtil.findElementOfClassAtOffset(file, start, PhpDocComment::class.java, false) ?: return
-        val owner = documented(comment) ?: return
         val redundant = ArrayList<PsiElement>()
-        when (owner) {
+        when (val owner = documented(comment)) {
             is Function -> {
                 for (tag in comment.paramTags) {
                     val name = tag.varName?.removePrefix("$") ?: continue
@@ -97,11 +98,14 @@ class PhaenonDocCommentEnterHandler : EnterHandlerDelegateAdapter() {
                     if (parameter.typeDeclaration != null || PhaenonErasedTypes.beforeName(parameter).isNotEmpty()) redundant.add(tag)
                 }
                 comment.returnTag?.let { if (owner.typeDeclaration != null || PhaenonErasedTypes.returnType(owner).isNotEmpty()) redundant.add(it) }
+                // The signature's `throws` clause says what a `@throws` tag would (design/functions.md §4);
+                // a tag for an exception the clause does not name stays.
+                if (PhaenonErasedTypes.throwsClause(owner) != null) {
+                    comment.getTagElementsByName("@throws").filterTo(redundant) { PhaenonThrows.declares(owner, it.type) }
+                }
             }
             is Field -> comment.varTag?.let { if (owner.typeDeclaration != null || PhaenonErasedTypes.beforeName(owner).isNotEmpty()) redundant.add(it) }
         }
-        if (redundant.isEmpty()) return
-
         val document = editor.document
         val caretLine = document.getLineNumber(editor.caretModel.offset)
         val lines = redundant.map { document.getLineNumber(it.textRange.startOffset) }.toSortedSet()
@@ -111,13 +115,17 @@ class PhaenonDocCommentEnterHandler : EnterHandlerDelegateAdapter() {
         val range = PsiTreeUtil.findElementOfClassAtOffset(file, start, PhpDocComment::class.java, false)?.textRange ?: return
         val first = document.getLineNumber(range.startOffset)
         val last = document.getLineNumber(range.endOffset)
-        if (last - first < 2) {
-            // Only the opening and closing lines are left: the stub is a line to write the description on.
-            val indent = document.getText(TextRange(document.getLineStartOffset(last), range.endOffset)).substringBefore("*/")
-            document.insertString(document.getLineStartOffset(last), "$indent* \n")
-            editor.caretModel.moveToOffset(document.getLineEndOffset(last))
+        val content = (first + 1 until last).map { document.getText(TextRange(document.getLineStartOffset(it), document.getLineEndOffset(it))).trim().removePrefix("*").trim() }
+            .filter { it.isNotEmpty() }
+        if (content.size <= 1) {
+            // A docblock of one line is one line (design/functions.md §5): `/** <caret> */`, or the one tag left.
+            val line = content.singleOrNull()
+            val text = if (line == null) "/**  */" else "/** $line */"
+            document.replaceString(range.startOffset, range.endOffset, text)
+            editor.caretModel.moveToOffset(range.startOffset + text.length - 3)
             return
         }
+        if (redundant.isEmpty()) return
         // The caret stays on the line PhpStorm put it on, or ends the last line left above it.
         val removedAbove = lines.count { it < caretLine }
         val line = if (caretLine in lines) (caretLine - removedAbove - 1).coerceAtLeast(first + 1) else caretLine - removedAbove

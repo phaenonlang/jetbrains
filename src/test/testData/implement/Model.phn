@@ -39,3 +39,9 @@ final readonly class UserId implements \App\Domain\Aggregate\AggregateId
 final class User extends \App\EventSourcing\Aggregate\EventSourcedAggregate
 {
 }
+
+namespace App\Domain\Repository;
+
+final class AggregateNotFound extends \Exception
+{
+}

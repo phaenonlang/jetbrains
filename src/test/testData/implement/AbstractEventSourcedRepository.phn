@@ -2,37 +2,27 @@ namespace App\EventSourcing\Repository;
 
 use App\Domain\Aggregate\Aggregate;
 use App\Domain\Aggregate\AggregateId;
+use App\Domain\Repository\AggregateNotFound;
 use App\Domain\Repository\AggregateRepository;
 use App\EventSourcing\Aggregate\EventSourcedAggregate;
 use App\EventSourcing\Event\DomainEvent;
 use App\EventSourcing\EventStore\EventStore;
 use App\EventSourcing\EventStore\EventStoreFactory;
 
-abstract readonly class AbstractEventSourcedRepository<Id of AggregateId, T of EventSourcedAggregate> implements AggregateRepository<Id, T>
-{
+abstract readonly class AbstractEventSourcedRepository<Id of AggregateId, T of EventSourcedAggregate> implements AggregateRepository<Id, T> {
     abstract protected static fun aggregateClass(): class<T>;
 
-    fun __construct(private EventStoreFactory $eventStoreFactory)
-    {
+    fun __construct(private EventStoreFactory $eventStoreFactory) {
     }
 
-    fun get(Id $id): ?T
-    {
-        return null;
-    }
+    fun get(Id $id): ?T => null;
 
-    fun events(Id $id, int $limit = 10, string ...$kinds): list<DomainEvent>
-    {
-        return [];
-    }
+    fun events(Id $id, int $limit = 10, string ...$kinds): list<DomainEvent> throws AggregateNotFound => [];
 
     fun mapped<U>(Closure(T): U $map, map<string, list<T>> $by = []): Closure(string...): (int, string)
-    {
-        return fn (string ...$args): array => [0, ''];
-    }
+        => fn (string ...$args): array => [0, ''];
 
-    protected fun eventStore(): EventStore
-    {
+    protected fun eventStore(): EventStore {
         return $this->eventStoreFactory->get(static::aggregateClass());
     }
 }

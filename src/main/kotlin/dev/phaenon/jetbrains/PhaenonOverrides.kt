@@ -107,11 +107,24 @@ internal object PhaenonOverrides {
         val signature = Signature(parent, implementing, target)
         val edits = ArrayList<Pair<TextRange, String>>()
 
-        signature.returnType()?.let { type ->
-            val close = method.node.findChildByType(PhpTokenTypes.chRPAREN) ?: return@let
-            val end = method.typeDeclaration?.textRange?.endOffset ?: close.textRange.endOffset
-            edits.add(TextRange(close.textRange.endOffset, end) to ": $type")
+        // Exceptions belong in the signature (design/functions.md §4): the parent's clause, and the
+        // bare `@throws` tags PhpStorm copied from a PHP parent's docblock, become a `throws` clause.
+        val docComment = method.docComment
+        val lifted = docComment?.getTagElementsByName("@throws")?.filter { liftable(it.text) }.orEmpty()
+        val throws = LinkedHashSet<String>(signature.throwsNames())
+        // A parent written in PHP declares its exceptions in its docblock, which completion's item does not copy.
+        val parentTags = parent.docComment?.getTagElementsByName("@throws")?.filter { liftable(it.text) }.orEmpty()
+        for (tag in lifted + parentTags) tag.text.removePrefix("@throws").trim().split('|').map { it.trim() }.filter { it.isNotEmpty() }.forEach { throws.add(signature.spell(it, tag)) }
+        val clause = if (throws.isEmpty()) "" else " throws " + throws.joinToString("|")
+        val close = method.node.findChildByType(PhpTokenTypes.chRPAREN)
+        val returnType = signature.returnType()
+        if (close != null && (returnType != null || clause.isNotEmpty())) {
+            val start = close.textRange.endOffset
+            val end = method.typeDeclaration?.textRange?.endOffset ?: start
+            val typeText = returnType?.let { ": $it" } ?: document.getText(TextRange(start, end))
+            edits.add(TextRange(start, end) to typeText + clause)
         }
+        if (docComment != null) docblockEdit(docComment, lifted.map { it.textRange }, document)?.let(edits::add)
         for ((i, parameter) in method.parameters.withIndex()) {
             val type = signature.parameterType(i) ?: continue
             val existing = parameter.typeDeclaration
@@ -146,6 +159,36 @@ internal object PhaenonOverrides {
             documents.commitDocument(document)
         }
         pointer.element?.let { CodeStyleManager.getInstance(project).reformat(it) }
+    }
+
+    /** A `@throws` tag that is a type and nothing else, which the signature can say: `@throws A|B`. */
+    private fun liftable(tag: String): Boolean = tag.removePrefix("@throws").trim().matches(Regex("""\\?[A-Za-z_][\w\\]*(\s*\|\s*\\?[A-Za-z_][\w\\]*)*"""))
+
+    /**
+     * The generated docblock in the canonical layout (design/functions.md §5): without the tags the
+     * signature took over, on one line when one line of content is left, gone when none is.
+     */
+    private fun docblockEdit(comment: PsiElement, dropped: List<TextRange>, document: com.intellij.openapi.editor.Document): Pair<TextRange, String>? {
+        val range = comment.textRange
+        val content = comment.text.removePrefix("/**").removeSuffix("*/").lines().map { it.trim().removePrefix("*").trim() }
+        val droppedTexts = dropped.map { document.getText(it).trim() }.toSet()
+        val kept = content.filter { it.isNotEmpty() && it !in droppedTexts }
+        val originalLines = content.count { it.isNotEmpty() }
+        if (kept.size == originalLines && (kept.size != 1 || !comment.text.contains('\n'))) return null
+        if (kept.size >= 2) {
+            // Only the lifted tags' lines go.
+            val text = comment.text.lines().filterNot { it.trim().removePrefix("*").trim() in droppedTexts }.joinToString("\n")
+            return range to text
+        }
+        if (kept.isEmpty()) {
+            // Nothing left to say: the docblock goes with the line it stood on.
+            val lineStart = document.getLineStartOffset(document.getLineNumber(range.startOffset))
+            val next = document.getLineStartOffset((document.getLineNumber(range.endOffset) + 1).coerceAtMost(document.lineCount - 1))
+            val onItsOwn = document.getText(TextRange(lineStart, range.startOffset)).isBlank()
+            return if (onItsOwn) TextRange(lineStart, next) to "" else range to ""
+        }
+        if (kept.size == 1) return range to "/** ${kept.single()} */"
+        return null
     }
 
     /** Where a type goes in a parameter that has none: before `&`, `...` or the name. */
@@ -206,6 +249,8 @@ internal object PhaenonOverrides {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
+                // The `throws` clause ends the return type; [Signature.throwsNames] carries it over.
+                PhaenonErasedTypes.isThrowsClause(leaf) -> break
                 PhaenonTokenTypes.isErased(leaf) -> {
                     erased = true
                     var from = leaf.textRange.startOffset
@@ -264,6 +309,12 @@ internal object PhaenonOverrides {
             parent.parameters.getOrNull(index)?.let(::parameterType)?.takeIf { it.erased }?.let { render(it) }
 
         fun returnType(): String? = returnType(parent)?.takeIf { it.erased }?.let { render(it) }
+
+        /** The parent's `throws` clause, its names as the implementing file spells them; empty when it has none. */
+        fun throwsNames(): List<String> = PhaenonErasedTypes.throwsNames(parent).map { render(it, parent, arguments, keep, target) }
+
+        /** A name a `@throws` tag of the generated docblock gives, as the implementing file spells it. */
+        fun spell(name: String, context: PsiElement): String = render(name, context, arguments, keep, target)
 
         private fun render(type: TypeText): String = render(type.text, type.context, arguments, keep, target)
     }

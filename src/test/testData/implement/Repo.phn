@@ -2,7 +2,6 @@ namespace App\User;
 
 use App\Domain\Repository\AggregateRepository;
 
-final class Repo implements AggregateRepository<UserId, User>
-{
+final class Repo implements AggregateRepository<UserId, User> {
     <caret>
 }

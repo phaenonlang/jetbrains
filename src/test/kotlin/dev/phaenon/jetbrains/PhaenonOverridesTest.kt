@@ -35,7 +35,8 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         myFixture.performEditorAction("ImplementMethods")
 
         // aggregateClass() from the abstract class; load() and save() from its interface, whose
-        // `<Id, T>` the abstract class passes on as its own.
+        // `<Id, T>` the abstract class passes on as its own. The interface's bare `@throws` tag is
+        // load()'s `throws` clause, its docblock gone with it (design/functions.md §4).
         myFixture.checkResultByFile("implement/UserRepository.implement.after.phn")
     }
 
@@ -44,8 +45,9 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
 
         myFixture.performEditorAction("OverrideMethods")
 
-        // `list<DomainEvent>` names a class the parent imports: the class imports it too. `mapped<U>`
-        // keeps its own type parameter; `protected fun eventStore()` its visibility.
+        // `list<DomainEvent>` names a class the parent imports: the class imports it too, as it imports
+        // what the parent's `throws` clause names. `mapped<U>` keeps its own type parameter;
+        // `protected fun eventStore()` its visibility. Braces stand on the declarations' lines.
         myFixture.checkResultByFile("implement/UserRepository.override.after.phn")
     }
 
@@ -64,7 +66,8 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
 
         val text = myFixture.editor.document.text
         assertTrue(text, text.contains("    protected static fun aggregateClass(): class<T> {\n"))
-        assertTrue(text, text.contains("    fun load(Id \$id): T {\n"))
+        // The interface's bare `@throws` tag is a `throws` clause in Phaenon (design/functions.md §4).
+        assertTrue(text, text.contains("    fun load(Id \$id): T throws AggregateNotFound {\n"))
     }
 
     fun testCompletionOffersOverridesSpelledAsPhaenon() {
@@ -86,14 +89,14 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         myFixture.finishLookup('\n')
 
         val text = myFixture.editor.document.text
-        assertTrue(text, text.contains("{\n    fun load(UserId \$id): User {\n        // TODO: Implement load() method.\n    }\n}"))
+        assertTrue(text, text.contains("{\n    fun load(UserId \$id): User throws AggregateNotFound {\n        // TODO: Implement load() method.\n    }\n}"))
     }
 
     fun testCompletingTheNameAfterFunKeepsWhatWasWritten() {
         myFixture.configureByText(
             "Child.phn",
             "namespace App\\User;\n\nuse App\\EventSourcing\\Repository\\AbstractEventSourcedRepository;\n\n" +
-                "final readonly class Child extends AbstractEventSourcedRepository<UserId, User>\n{\n    protected static fun aggregateClass(): class<User>\n    {\n        return User::class;\n    }\n\n    fun ge<caret>\n}\n",
+                "final readonly class Child extends AbstractEventSourcedRepository<UserId, User> {\n    protected static fun aggregateClass(): class<User> {\n        return User::class;\n    }\n\n    fun ge<caret>\n}\n",
         )
 
         myFixture.completeBasic()?.let { items -> myFixture.lookup.currentItem = items.first { it.lookupString == "get" }; myFixture.finishLookup('\n') }

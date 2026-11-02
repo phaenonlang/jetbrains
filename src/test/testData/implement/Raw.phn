@@ -2,7 +2,6 @@ namespace App\User;
 
 use App\EventSourcing\Repository\AbstractEventSourcedRepository;
 
-final readonly class Raw extends AbstractEventSourcedRepository
-{
+final readonly class Raw extends AbstractEventSourcedRepository {
     <caret>
 }
