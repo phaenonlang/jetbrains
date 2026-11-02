@@ -13,8 +13,7 @@ abstract readonly class AbstractEventSourcedRepository<Id of AggregateId, T of E
 {
     abstract protected static fun aggregateClass(): class<T>;
 
-    fun __construct(private EventStoreFactory $eventStoreFactory) {
-    }
+    fun __construct(private EventStoreFactory $eventStoreFactory) {}
 
     fun get(Id $id): ?T {
         $events = $this->eventStore()->load($id);

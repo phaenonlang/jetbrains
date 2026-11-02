@@ -19,8 +19,7 @@ final class Calc
 
 final class Partials
 {
-    fun __construct(private \Closure $formatter = format(?, 'pcs')) {
-    }
+    fun __construct(private \Closure $formatter = format(?, 'pcs')) {}
 
     fun run(Calc $calc): void {
         $positional = format(?, 'kg');

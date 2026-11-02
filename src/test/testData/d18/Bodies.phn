@@ -32,8 +32,7 @@ final readonly class Directory implements Names
     use Greets;
 
     /** @param list<string> $names */
-    fun __construct(private array $names) {
-    }
+    fun __construct(private array $names) {}
 
     fun find(int $id): ?string throws NotFound
         => $this->names[$id] ?? throw new NotFound($id);

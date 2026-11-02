@@ -260,6 +260,16 @@ class PhaenonD18Test : BasePlatformTestCase() {
         myFixture.performEditorAction("EditorCompleteStatement")
 
         assertTrue(myFixture.editor.document.text, myFixture.editor.document.text.startsWith("namespace App;\n\nfinal class S {\n    fun name(): string {\n"))
+        // The new body stays open to type into: an empty body becomes `{}` when Reformat Code runs over it.
+        assertFalse(myFixture.editor.document.text, myFixture.editor.document.text.contains("string {}"))
+    }
+
+    fun testEnterBetweenTheBracesOfAnEmptyBodyOpensIt() {
+        myFixture.configureByText("O.phn", "namespace App;\n\nfinal class O\n{\n    fun __construct(private int \$n) {<caret>}\n}\n")
+
+        myFixture.type("\n")
+
+        myFixture.checkResult("namespace App;\n\nfinal class O\n{\n    fun __construct(private int \$n) {\n        <caret>\n    }\n}\n")
     }
 
     fun testQuickDocumentationShowsTheClause() {

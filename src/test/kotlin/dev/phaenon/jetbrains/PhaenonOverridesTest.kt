@@ -59,6 +59,29 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         myFixture.checkResultByFile("implement/Repo.after.phn")
     }
 
+    /**
+     * A generated body with nothing in it is `{}` on the declaration's line (design/functions.md
+     * §5.1), as the reformatting that follows the action lays it out; with PhpStorm's `// TODO`
+     * comment (the default template) the body keeps its lines, as `Repo.after.phn` shows.
+     */
+    fun testAnEmptyGeneratedBodyIsTwoBracesOnTheDeclarationsLine() {
+        val template = com.intellij.ide.fileTemplates.FileTemplateManager.getInstance(project).getCodeTemplate("PHP Implemented Method Body.php")
+        val text = template.text
+        try {
+            template.text = ""
+            myFixture.configureByFile("implement/Repo.phn")
+
+            myFixture.performEditorAction("ImplementMethods")
+
+            val document = myFixture.editor.document.text
+            assertTrue(document, document.contains("    fun get(UserId \$id): ?User {}\n"))
+            assertTrue(document, document.contains("    fun load(UserId \$id): User throws AggregateNotFound {}\n"))
+            assertTrue(document, document.contains("    fun save(User \$aggregate): void {}\n"))
+        } finally {
+            template.text = text
+        }
+    }
+
     fun testWithoutTypeArgumentsTheParentsSpellingStays() {
         myFixture.configureByFile("implement/Raw.phn")
 

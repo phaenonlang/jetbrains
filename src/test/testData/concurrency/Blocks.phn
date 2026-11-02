@@ -27,8 +27,7 @@ final class Users
 
 final class Blocks
 {
-    fun __construct(private Users $users) {
-    }
+    fun __construct(private Users $users) {}
 
     /**
      * tq-cli's CiIdentityCommand: a block as a value, a block task per name.

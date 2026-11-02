@@ -14,6 +14,7 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.PhpLanguage
+import com.jetbrains.php.lang.formatter.PhpCodeStyleSettings
 import com.jetbrains.php.lang.formatter.PhpFormattingModelBuilder
 import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
 import java.io.File
@@ -50,14 +51,16 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         val source = File(testDataPath, "formatting/Plain.phn").readText()
 
         val phn = reformatted("Plain.phn", source)
-        // The .php file formatted with the brace placement of Phaenon's canonical layout — the one
-        // setting a .phn changes — gives the same text. PSR-12 puts a blank line after the open tag,
+        // The .php file formatted with the brace placement and empty bodies of Phaenon's canonical
+        // layout — the settings a .phn changes — gives the same text. PSR-12 puts a blank line after the open tag,
         // which a .phn file does not have.
         val php = CommonCodeStyleSettings.END_OF_LINE.let { endOfLine ->
             val settings = CodeStyle.getSettings(project).getCommonSettings(PhpLanguage.INSTANCE)
             settings.CLASS_BRACE_STYLE = CommonCodeStyleSettings.NEXT_LINE
             settings.METHOD_BRACE_STYLE = endOfLine
             settings.LAMBDA_BRACE_STYLE = endOfLine
+            // Plain.phn has no closure, so PhpStorm's option writes the empty constructor body as a .phn does.
+            CodeStyle.getSettings(project).getCustomSettings(PhpCodeStyleSettings::class.java).FORCE_EMPTY_METHODS_IN_ONE_LINE = true
             reformatted("Plain.php", "<?php\n" + source).removePrefix("<?php\n").trimStart('\n')
         }
 
@@ -85,6 +88,124 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         )
         val php = reformatted("Braces.php", "<?php\nnamespace App;\n\nfinal class A {\n    public function f(): void {\n    }\n}\n")
         assertTrue("a .php file keeps PSR-12's\n$php", php.contains("final class A\n{\n    public function f(): void\n    {\n"))
+    }
+
+    /**
+     * An empty function or method body — nothing but whitespace between its braces — is `{}` on the
+     * declaration's line (design/functions.md §5.1), from either brace placement and after a
+     * multi-line parameter list; a body with a comment or a statement keeps its lines, a closure is
+     * PhpStorm's, a class-like keeps its brace on a line of its own.
+     */
+    fun testAnEmptyBodyIsTwoBracesOnTheDeclarationsLine() {
+        val phn = reformatted(
+            "Empty.phn",
+            """
+            namespace App;
+
+            final class Repository
+            {
+                fun __construct(private EventStoreFactory ${'$'}eventStoreFactory) {
+                }
+
+                fun psr12(): void
+                {
+                }
+
+                fun __clone(): void { }
+
+                fun written(): void {}
+
+                fun wide(
+                    private A ${'$'}a,
+                    private B ${'$'}b,
+                ) {
+                }
+
+                fun reset(): void throws Failure {
+                }
+
+                fun commented(): void {
+                    // nothing yet
+                }
+
+                fun busy(): void {
+                    ${'$'}this->reset();
+                }
+
+                fun annotated(): void // the reason
+                {
+                }
+
+                abstract fun none(): void;
+            }
+
+            fun noBody(): void {
+            }
+
+            ${'$'}closure = function () {
+            };
+
+            interface Blank {}
+            """.trimIndent() + "\n",
+        )
+
+        assertEquals(
+            """
+            namespace App;
+
+            final class Repository
+            {
+                fun __construct(private EventStoreFactory ${'$'}eventStoreFactory) {}
+
+                fun psr12(): void {}
+
+                fun __clone(): void {}
+
+                fun written(): void {}
+
+                fun wide(
+                    private A ${'$'}a,
+                    private B ${'$'}b,
+                ) {}
+
+                fun reset(): void throws Failure {}
+
+                fun commented(): void {
+                    // nothing yet
+                }
+
+                fun busy(): void {
+                    ${'$'}this->reset();
+                }
+
+                fun annotated(): void // the reason
+                {
+                }
+
+                abstract fun none(): void;
+            }
+
+            fun noBody(): void {}
+
+            ${'$'}closure = function () {
+            };
+
+            interface Blank
+            {
+            }
+            """.trimIndent() + "\n",
+            phn,
+        )
+        assertEquals(phn, reformatted("Again.phn", phn))
+        val php = reformatted("Empty.php", "<?php\nnamespace App;\n\nfinal class A\n{\n    public function f(): void {}\n}\n")
+        assertTrue("a .php file keeps PSR-12's\n$php", php.contains("    public function f(): void\n    {\n    }\n"))
+    }
+
+    /** PER-CS's `class A {}` is not the canonical layout: with PhpStorm's PER style, an empty class-like still opens on a line of its own, and an empty closure is PER's. */
+    fun testAnEmptyClassKeepsItsBraceOnALineOfItsOwnUnderPer() {
+        com.jetbrains.php.lang.formatter.ui.predefinedStyle.PERCodeStyle().apply(CodeStyle.getSettings(project))
+        val phn = reformatted("Per.phn", "namespace App;\n\nfinal class A {}\n\nfun f(): void {\n}\n\n\$g = function () {\n};\n")
+        assertEquals("namespace App;\n\nfinal class A\n{\n}\n\nfun f(): void {}\n\n\$g = function () {};\n", phn)
     }
 
     fun testErasedConstructsAreFormattedAroundAndNeverInside() {
