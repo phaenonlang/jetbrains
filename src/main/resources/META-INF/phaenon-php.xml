@@ -14,6 +14,9 @@
              A custom builder: the platform asks it only for the contexts it claims, so .php keeps PhpStorm's. -->
         <lang.formatter language="PHP" order="last" implementationClass="dev.phaenon.jetbrains.PhaenonFormattingModelBuilder"/>
 
+        <!-- `/**` + Enter: PhpStorm's stub without the @param/@return tags a declared (or erased) type makes redundant. -->
+        <enterHandlerDelegate implementation="dev.phaenon.jetbrains.PhaenonDocCommentEnterHandler" order="before phpEnterHandler"/>
+
         <!-- Erased Phaenon types leave `readonly` properties untyped for PhpStorm's annotator; the
              .php compiled from a .phn is not "another declaration" of its classes. -->
         <daemon.highlightInfoFilter implementation="dev.phaenon.jetbrains.PhaenonHighlightFilter"/>
