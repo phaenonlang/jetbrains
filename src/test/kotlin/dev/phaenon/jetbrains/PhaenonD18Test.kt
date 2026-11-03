@@ -81,7 +81,7 @@ class PhaenonD18Test : BasePlatformTestCase() {
         val functions = functions()
 
         assertEquals(listOf("\\int"), functions.getValue("Directory::count").type.global(project).typesWithParametrisedParts.toList())
-        assertTrue("an erased return type", PhaenonTypeText.LIST_METHODS + "<string>" in functions.getValue("Directory::all").type.global(project).typesWithParametrisedParts)
+        assertTrue("an erased return type", "\\string[]" in functions.getValue("Directory::all").type.global(project).typesWithParametrisedParts)
         val names = PsiTreeUtil.findChildrenOfType(functions.getValue("Directory::find"), FieldReference::class.java).single { it.name == "names" }
         assertEquals("names", (names.resolve() as? com.jetbrains.php.lang.psi.elements.Field)?.name)
     }

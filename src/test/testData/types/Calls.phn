@@ -11,23 +11,17 @@ final class Calls
 
     public function names(): list<string>
     {
-        return $this->users->filter(fn (User $u) => $u->active)->map(fn (User $u) => $u->name);
+        return array_map(fn (User $u) => $u->name, array_values(array_filter($this->users, fn (User $u) => $u->active)));
     }
 
     public function lookup(string $name): ?User
     {
-        return $this->byName->get($name->trim());
+        return $this->byName[trim($name)] ?? null;
     }
 
-    public function digest(bytes $raw, Id $id): string
+    public function digest(bytes $raw): string
     {
-        return $raw->hex() . $id->value() . $id->startsWith('u-');
-    }
-
-    public function broken(list<User> $users): void
-    {
-        $users->nonexistent();
-        $users->filter(fn (User $u) => $u->active)->alsoNonexistent();
+        return bin2hex($raw);
     }
 
     public function arrays(list<User> $users): int

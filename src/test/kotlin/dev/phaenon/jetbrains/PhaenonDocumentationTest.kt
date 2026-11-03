@@ -27,21 +27,16 @@ class PhaenonDocumentationTest : BasePlatformTestCase() {
     }
 
     fun testAVariablePrintsTheTypePhpStormHoldsInPhaenonsSpelling() {
-        assertEquals("list", "\$list : list<User>", myFixture.hint("\$list =", 1))
-        assertEquals("map", "\$map : map<string, User>", myFixture.hint("\$map =", 1))
-        assertEquals("bytes", "\$bytes : bytes", myFixture.hint("\$bytes =", 1))
         assertEquals("nullable class-string", "\$nullable : ?class<User>", myFixture.hint("\$nullable =", 1))
         assertEquals("closure signature", "\$closure : Closure(int): string", myFixture.hint("\$closure =", 1))
     }
 
-    fun testTheStrMethodsOfAReceiverAreNotPartOfItsType() {
-        // `$name->upper()` gives the receiver the pseudo-class StrMethods; it is how the method
-        // syntax resolves, not a type of `$name`.
-        assertEquals("\$name : string", myFixture.hint("\$name->upper", 1))
-    }
-
     fun testAVariableWithoutPhaenonTypesIsPhpStorms() {
         assertEquals("\$plain : string", myFixture.hint("\$plain =", 1))
+        // A list, a map and bytes are an array and a string to PhpStorm, which prints them so.
+        assertEquals("list", "\$list : User[]", myFixture.hint("\$list =", 1))
+        assertEquals("map", "\$map : User[]", myFixture.hint("\$map =", 1))
+        assertEquals("bytes", "\$bytes : string", myFixture.hint("\$bytes =", 1))
     }
 
     fun testAFunctionPrintsItsSignatureAsWritten() {

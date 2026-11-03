@@ -12,23 +12,22 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * Translates Phaenon type text into the `PhpType` PhpStorm reasons with.
  *
  * The translation follows the compiler's erasure (`design/collections.md` §2, `strings.md` §2,
- * `generics.md` §4) and adds the editor's view of the methods Phaenon puts on values:
+ * `generics.md` §4):
  *
  * | Phaenon | PhpStorm |
  * |---|---|
- * | `list<T>` | `T[]` and `\Phaenon\Internal\ListMethods<T>` |
- * | `map<K, V>` | `V[]` and `\Phaenon\Internal\MapMethods<K, V>` |
- * | `bytes` | `string` and `\Phaenon\Internal\BytesMethods` |
+ * | `list<T>` | `T[]` |
+ * | `map<K, V>` | `V[]` — PhpStorm holds no key type for an array |
+ * | `bytes` | `string` |
  * | `(A, B)` | `A[]|B[]` — the positional shape as PhpStorm can hold it |
  * | `class<T>` | `class-string<Bound>`, as PhpStorm reads a docblock `@return class-string<Bound>` |
  * | `Closure(A, B=, C...): R` | `\Closure` and the signature as PhpStorm encodes a docblock `\Closure(A, B, C): R` |
  * | a type parameter | its bound, `mixed` without one — what the compiler writes for it |
  * | `Foo<T>` | `\Ns\Foo` — type arguments of user classes are erased |
  *
- * The array half keeps every PHP array function, `foreach` and `[]` working as before; the
- * `\Phaenon\Internal\*Methods` half is a pseudo-class bundled with the plugin whose instance
- * methods are the stdlib's functions without their receiver parameter, so `->map(...)` resolves,
- * completes and type-checks through PhpStorm's own machinery.
+ * A list, a map and bytes are a PHP array and a PHP string at runtime, and to PhpStorm they are
+ * nothing more: every PHP array and string function, `foreach` and `[]` work on them as in PHP,
+ * and so does `->`, which means what PHP means by it (roadmap D20).
  *
  * A type parameter reads as its bound because that is all the code may assume of it: inside
  * `class Repo<T of Aggregate>`, `$aggregate->id()` resolves against `Aggregate`, as PHPStan
@@ -67,9 +66,8 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         val arguments = node.arguments.map(::type)
         if (!node.qualified) {
             when (node.simple) {
-                "list" -> return collection(LIST_METHODS, arguments.takeLast(1), arguments.lastOrNull())
-                "map" -> return collection(MAP_METHODS, arguments, arguments.lastOrNull())
-                "bytes" -> return PhpType().add(PhpType.STRING).add(BYTES_METHODS)
+                "list", "map" -> return collection(arguments.lastOrNull())
+                "bytes" -> return PhpType.STRING
                 "class" -> return classString(arguments.firstOrNull())
                 "iterable" -> return PhpType.ITERABLE
             }
@@ -126,12 +124,8 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
 
     private fun serialized(type: PhpType): String = Companion.serialized(type)
 
-    private fun collection(pseudoClass: String, parameters: List<PhpType>, element: PhpType?): PhpType {
-        val result = PhpType()
-        result.add(element?.pluralise() ?: PhpType.ARRAY)
-        result.add(PhpType.createParametrizedType(pseudoClass, parameters.map { it.toString() }))
-        return result
-    }
+    /** A list or a map is the array of its element (value) type; without one, `array`. */
+    private fun collection(element: PhpType?): PhpType = PhpType().add(element?.pluralise() ?: PhpType.ARRAY)
 
     private fun resolveClass(name: String): String {
         if (name.startsWith("\\")) return name
@@ -154,11 +148,6 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
             val parts = parameters.map { PhpExpressionImpl.serializeAdvancedClosureParameter("", serialized(it)) }
             return PhpType().add(PhpType.CLOSURE).add(PhpType.createParametrizedType(PhpType._CLOSURE, parts + serialized(returnType)))
         }
-
-        const val LIST_METHODS = "\\Phaenon\\Internal\\ListMethods"
-        const val MAP_METHODS = "\\Phaenon\\Internal\\MapMethods"
-        const val STR_METHODS = "\\Phaenon\\Internal\\StrMethods"
-        const val BYTES_METHODS = "\\Phaenon\\Internal\\BytesMethods"
 
         private val PRIMITIVES: Map<String, PhpType> = mapOf(
             "int" to PhpType.INT, "integer" to PhpType.INT, "float" to PhpType.FLOAT, "double" to PhpType.FLOAT,

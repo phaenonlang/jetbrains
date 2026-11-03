@@ -27,6 +27,7 @@ import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
+import com.jetbrains.php.lang.psi.resolve.types.PhpType
 import java.io.File
 
 /**
@@ -118,11 +119,11 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
 
     /**
      * The type provider on real declarations: every parameter, property and return type whose
-     * erased text is a `list<…>` or `map<…>` must carry the pseudo-class that gives it the method
-     * syntax. (The trees do not use the method syntax on `list`/`string` receivers yet; the
-     * declarations are what exercises [PhaenonTypeProvider] at volume.)
+     * erased text is a `list<…>` or `map<…>` must be typed as an array, the array of its element
+     * type (`User[]`) or `array`. The declarations are what exercises [PhaenonTypeProvider] at
+     * volume.
      */
-    fun testErasedCollectionDeclarationsInRealTreesGetTheirPseudoClass() {
+    fun testErasedCollectionDeclarationsInRealTreesAreArrays() {
         val trees = loadTrees() ?: return
         val report = StringBuilder()
         val failures = ArrayList<String>()
@@ -137,22 +138,18 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
                         is Function -> PhaenonErasedTypes.returnType(declaration)
                         else -> PhaenonErasedTypes.beforeName(declaration)
                     }
-                    val expected = when {
-                        erased.matches(LIST) -> PhaenonTypeText.LIST_METHODS
-                        erased.matches(MAP) -> PhaenonTypeText.MAP_METHODS
-                        else -> continue
-                    }
+                    if (!erased.matches(LIST) && !erased.matches(MAP)) continue
                     checked++
                     val types = (declaration as PhpTypedElement).type.global(project).typesWithParametrisedParts
-                    if (types.none { it.startsWith(expected) }) {
-                        failures.add("${loaded.relative}:${line(loaded.text, declaration.textOffset)}: `$erased ${declaration.name}` typed as $types, expected $expected")
+                    if (types.none { PhpType.isPluralType(it) || it == PhpType._ARRAY }) {
+                        failures.add("${loaded.relative}:${line(loaded.text, declaration.textOffset)}: `$erased ${declaration.name}` typed as $types, expected an array")
                     }
                 }
             }
             report.append("${tree.root.path}: $checked list/map declarations checked\n")
         }
         println(report)
-        assertEmpty("erased declarations without their pseudo-class:\n" + failures.take(LISTING_CAP).joinToString("\n"), failures)
+        assertEmpty("erased collection declarations not typed as arrays:\n" + failures.take(LISTING_CAP).joinToString("\n"), failures)
     }
 
     /**

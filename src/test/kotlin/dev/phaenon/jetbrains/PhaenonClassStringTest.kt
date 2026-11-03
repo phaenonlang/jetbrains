@@ -27,9 +27,9 @@ import com.jetbrains.php.lang.psi.elements.Variable
 /**
  * `class<T>` is PHPStan's `class-string<T>`: a static call, `new`, a constant read on it name the
  * class, here `T`'s bound. tequila/core's repository reported "Method 'rebuildFromHistory' not
- * found in \class-string|\Phaenon\Internal\StrMethods" on `$class::rebuildFromHistory(…)` with
- * `$class = static::aggregateClass()` and `aggregateClass(): class<T>`; then `$class: string|string`
- * in its hover, the type having been `string` plus the class-string. The type is now the one
+ * found" on `$class::rebuildFromHistory(…)` with `$class = static::aggregateClass()` and
+ * `aggregateClass(): class<T>`; then `$class: string|string` in its hover, the type having been
+ * `string` plus the class-string. The type is now the one
  * PhpStorm gives a docblock-only `@return class-string<Foo>`, and the popups print Phaenon's
  * spelling ([PhaenonDocumentationProvider], [PhaenonParameterInfoHandler]).
  */
@@ -64,19 +64,6 @@ class PhaenonClassStringTest : BasePlatformTestCase() {
         assertEquals("new \$users(…)", listOf("\\App\\User"), assigned["fresh"])
         assertEquals("\$users::named(…)", listOf("\\App\\User"), assigned["user"])
         assertEmpty(warnings())
-    }
-
-    fun testAClassStringIsAStringBehindTheArrowOnly() {
-        // The language lets a class<T> use the Str methods (`$users->length()` compiles to
-        // `Str::length($users)`); a `::` access names a member of the class and never gets them.
-        myFixture.configureByFiles("classstring/ClassString.phn")
-
-        assertEquals(listOf("\\Phaenon\\Internal\\StrMethods.length"), targets("length"))
-        val staticReceivers = PsiTreeUtil.findChildrenOfType(myFixture.file, MemberReference::class.java)
-            .filter { it.isStatic && it.classReference is Variable }
-            .map { (it.classReference as PhpTypedElement).type.global(project).types }
-        assertTrue(staticReceivers.isNotEmpty())
-        assertTrue(staticReceivers.toString(), staticReceivers.none { PhaenonTypeText.STR_METHODS in it })
     }
 
     fun testTheTypeIsTheClassStringOfTheBoundAlone() {
@@ -127,7 +114,6 @@ class PhaenonClassStringTest : BasePlatformTestCase() {
         myFixture.configureByFiles("classstring/ClassString.phn")
 
         assertEquals("concrete parameter", "\$users : class<User>", hint("\$users::named", 1))
-        assertEquals("the receiver of a Str method", "\$users : class<User>", hint("\$users->length", 1))
         assertEquals("class<User> property", "\$userClass : class<User>", hint("this->userClass", 7))
         assertEquals("class<T> property", "\$aggregateClass : class<T>", hint("this->aggregateClass", 7))
         assertEquals("a method with an erased parameter", "fun make(class<User> \$users, AggregateId \$id): void", hint("fun make", 5))

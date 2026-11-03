@@ -6,17 +6,12 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
 /**
  * Prints a type PhpStorm holds in Phaenon's spelling: the reverse of [PhaenonTypeText].
  *
- * PhpStorm prints every class-string as `string` and knows nothing of the pseudo-classes behind
- * the method syntax, so a `.phn` declared `class<T>` reads `string` in its popups, and a `list<User>`
- * reads `User[]|ListMethods`. This turns the members back into what the source says:
+ * PhpStorm prints every class-string as `string`, so a `.phn` declared `class<T>` reads `string`
+ * in its popups. This turns the members back into what the source says:
  *
  * | PhpStorm holds | printed |
  * |---|---|
  * | `\class-string<\App\User>`, `\class-string<\A,\B>`, `\class-string` | `class<User>`, `class<A\|B>`, `class` |
- * | `T[]` and `\Phaenon\Internal\ListMethods<T>` | `list<T>` |
- * | `V[]` and `\Phaenon\Internal\MapMethods<K,V>` | `map<K, V>` |
- * | `string` and `\Phaenon\Internal\BytesMethods` | `bytes` |
- * | `\Phaenon\Internal\StrMethods` (the method syntax on a string receiver) | nothing: the string is already there |
  * | `\Closure` and `\Closure<…>` with a signature | `Closure(A, B): R`, parenthesised in a union |
  * | `T\|null` | `?T` |
  *
@@ -30,14 +25,14 @@ object PhaenonTypePresentation {
         /** A class or interface, [fqn] with its leading backslash. */
         fun klass(fqn: String)
 
-        /** A keyword-like type: `int`, `list`, `class`, `null`. */
+        /** A keyword-like type: `int`, `class`, `null`. */
         fun keyword(name: String)
 
         /** Punctuation: `<`, `>`, `|`, `, `, `(`, `): `, `?`. */
         fun punctuation(text: String)
     }
 
-    /** Whether [type] holds a member that PhpStorm prints differently from Phaenon: a class-string, a pseudo-class, a closure signature. */
+    /** Whether [type] holds a member that PhpStorm prints differently from Phaenon: a class-string, a closure signature. */
     fun hasPhaenonMembers(type: PhpType): Boolean = members(type).any { isPhaenonMember(it) }
 
     /** [type] in Phaenon's spelling, plain text, class names short. */
@@ -67,7 +62,7 @@ object PhaenonTypePresentation {
 
     private fun isPhaenonMember(member: String): Boolean {
         val base = PhpType.removeParametrisedType(member)
-        return base == PhpType._CLASS_STRING || base in PSEUDO_CLASSES || base == PhpType._CLOSURE && PhpType.hasParameterizedPart(member)
+        return base == PhpType._CLASS_STRING || base == PhpType._CLOSURE && PhpType.hasParameterizedPart(member)
     }
 
     private fun printMembers(raw: List<String>, sink: Sink) {
@@ -78,28 +73,6 @@ object PhaenonTypePresentation {
         val closures = HashSet<Int>()
         var nullable = false
 
-        members.firstOrNull { PhpType.removeParametrisedType(it) == PhaenonTypeText.BYTES_METHODS }?.let {
-            members.remove(it)
-            members.remove(PhpType._STRING)
-            printed.add { s -> s.keyword("bytes") }
-        }
-        members.removeAll { PhpType.removeParametrisedType(it) == PhaenonTypeText.STR_METHODS }
-        for (member in members.toList()) {
-            val base = PhpType.removeParametrisedType(member)
-            val arguments = PhpType.getParametrizedParts(member)
-            when (base) {
-                PhaenonTypeText.LIST_METHODS -> {
-                    members.remove(member)
-                    arguments.lastOrNull()?.let { element -> members.removeAll { it == plural(element) } }
-                    printed.add { s -> generic("list", arguments.takeLast(1), s) }
-                }
-                PhaenonTypeText.MAP_METHODS -> {
-                    members.remove(member)
-                    arguments.lastOrNull()?.let { value -> members.removeAll { it == plural(value) } }
-                    printed.add { s -> generic("map", arguments, s) }
-                }
-            }
-        }
         if (members.any { PhpType.removeParametrisedType(it) == PhpType._CLOSURE && PhpType.hasParameterizedPart(it) }) {
             members.remove(PhpType._CLOSURE)
         }
@@ -133,23 +106,6 @@ object PhaenonTypePresentation {
             sink.punctuation("|")
             sink.keyword("null")
         }
-    }
-
-    /** `\App\User` → `\App\User[]`; PhpStorm writes primitive type arguments without the backslash. */
-    private fun plural(element: String): String {
-        val fqn = if (!element.startsWith("\\") && PhpType.isPrimitiveType(element)) "\\$element" else element
-        return PhpType.pluralise(fqn, 1)
-    }
-
-    private fun generic(name: String, arguments: List<String>, sink: Sink) {
-        sink.keyword(name)
-        if (arguments.isEmpty()) return
-        sink.punctuation("<")
-        arguments.forEachIndexed { i, argument ->
-            if (i > 0) sink.punctuation(", ")
-            argument(argument, sink)
-        }
-        sink.punctuation(">")
     }
 
     private fun classString(arguments: List<String>, sink: Sink) {
@@ -234,8 +190,4 @@ object PhaenonTypePresentation {
 
     /** Types PhpStorm holds that are no class, beside its primitives. */
     private val PSEUDO_PRIMITIVES: Set<String> = setOf("\\resource", "\\number", "\\closed-resource")
-
-    private val PSEUDO_CLASSES: Set<String> = setOf(
-        PhaenonTypeText.LIST_METHODS, PhaenonTypeText.MAP_METHODS, PhaenonTypeText.STR_METHODS, PhaenonTypeText.BYTES_METHODS,
-    )
 }

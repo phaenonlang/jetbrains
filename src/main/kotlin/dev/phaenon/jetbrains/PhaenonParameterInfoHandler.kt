@@ -20,13 +20,12 @@ import com.jetbrains.php.lang.psi.elements.PhpClass
  *
  * PhpStorm's parameter info prints each parameter from the type it holds, through a presenter
  * that is internal to it, so a `class<T>` parameter reads `string` and a `list<User>` reads
- * `\App\User[]|\Phaenon\Internal\ListMethods`. The platform asks the parameter info handlers of
- * a language in order and takes the first that finds a call; this one is registered before
- * PhpStorm's, takes a call only when one of its targets is such a Phaenon function, and hands
- * everything else — finding the argument list, following the caret, named arguments — to
- * PhpStorm's handler, found through the extension point by its class name. Only the text of
- * each parameter is this handler's: PhpStorm's layout (`[`optional`]`, `&`, `...`, `name: type`,
- * ` = default`) with the type as the source writes it.
+ * `\App\User[]`. The platform asks the parameter info handlers of a language in order and takes
+ * the first that finds a call; this one is registered before PhpStorm's, takes a call only when
+ * one of its targets is such a Phaenon function, and hands everything else — finding the argument
+ * list, following the caret, named arguments — to PhpStorm's handler, found through the extension
+ * point by its class name. Only the text of each parameter is this handler's: PhpStorm's layout
+ * (`[`optional`]`, `&`, `...`, `name: type`, ` = default`) with the type as the source writes it.
  */
 class PhaenonParameterInfoHandler : ParameterInfoHandler<PsiElement, Any> {
 

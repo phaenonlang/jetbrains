@@ -63,7 +63,7 @@ class PhaenonHierarchyTest : BasePlatformTestCase() {
         assertEquals(listOf("\\App\\Aggregate", "\\int"), positions["union(\$x)"])
         assertEquals(listOf("\\App\\Aggregate", "\\null"), positions["union(\$y)"])
         assertEquals("unbounded", listOf("\\mixed"), positions["union(\$z)"])
-        assertEquals(listOf("\\App\\Aggregate[]", "\\Phaenon\\Internal\\ListMethods<\\App\\Aggregate>"), positions["union(\$all)"])
+        assertEquals(listOf("\\App\\Aggregate[]"), positions["union(\$all)"])
         val property = PsiTreeUtil.findChildrenOfType(myFixture.file, com.jetbrains.php.lang.psi.elements.Field::class.java).single { it.name == "last" }
         assertEquals(listOf("\\App\\Aggregate", "\\null"), property.type.global(project).typesWithParametrisedParts.sorted())
     }

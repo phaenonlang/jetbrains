@@ -60,8 +60,7 @@
         <lang.documentationProvider language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonDocumentationProvider"/>
         <codeInsight.parameterInfo language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonParameterInfoHandler"/>
 
-        <!-- A declaration in a .phn wins over its compiled copy; `->map` on a list resolves to a
-             bundled pseudo-class and navigation prefers \Phaenon\Seq::map; `@var T` goes to `<T of …>`. -->
+        <!-- A declaration in a .phn wins over its compiled copy; `@var T` goes to `<T of …>`. -->
         <gotoDeclarationHandler implementation="dev.phaenon.jetbrains.PhaenonGotoDeclarationHandler"/>
 
         <!-- `T` in `class Box<T of Item>` is a declaration: Cmd+click shows its usages, which include
@@ -91,10 +90,7 @@
         <!-- The editor highlighter is keyed by file type and asks this EP for its lexer. -->
         <baseLexerProvider implementation="dev.phaenon.jetbrains.PhaenonBaseLexerProvider"/>
 
-        <!-- Types for erased Phaenon declarations; the Str methods on string receivers. -->
+        <!-- Types for erased Phaenon declarations, partial applications, pipe stages, concurrently and spawn. -->
         <typeProvider4 implementation="dev.phaenon.jetbrains.PhaenonTypeProvider"/>
-
-        <!-- The editor-only \Phaenon\Internal\*Methods pseudo-classes behind the method syntax. -->
-        <libraryRoot id="phaenon" path="stubs/phaenon" runtime="false"/>
     </extensions>
 </idea-plugin>

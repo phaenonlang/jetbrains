@@ -1,7 +1,6 @@
 namespace App;
 
 use Closure;
-use Phaenon\Seq;
 
 type UserMap = map<Uuid, User>;
 type Result<T, E of \Throwable = \RuntimeException> = Ok<T> | Err<E>;

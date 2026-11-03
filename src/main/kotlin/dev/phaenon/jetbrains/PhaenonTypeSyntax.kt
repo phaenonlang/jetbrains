@@ -4,7 +4,7 @@ package dev.phaenon.jetbrains
  * Phaenon type text as a tree, before any name is resolved.
  *
  * The same text is read two ways: [PhaenonTypeText] turns it into the `PhpType` the editor reasons
- * with (`list<User>` → `User[]` and a pseudo-class), [PhaenonErasure] into the native type the
+ * with (`list<User>` → `User[]`), [PhaenonErasure] into the native type the
  * compiler writes for it (`list<User>` → `array`), which is what PHP compares when a method
  * overrides another. The parser accepts the fragments [PhaenonErasedTypes] collects: the erased
  * members of a union around a native one start or end with their separator (`|list<int>`).

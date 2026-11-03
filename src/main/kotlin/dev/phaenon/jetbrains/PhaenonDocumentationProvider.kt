@@ -40,8 +40,8 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  *   `abstract protected static fun aggregateClass(): class<T>`, `fun load(Id $id): T throws NotFound`;
  * - a parameter or property declared with an erased type: `$users: class<User>`, the type as
  *   written;
- * - a variable in a `.phn` file whose type holds a class-string, a pseudo-class or a closure
- *   signature: that type printed back in Phaenon's spelling ([PhaenonTypePresentation]),
+ * - a variable in a `.phn` file whose type holds a class-string or a closure signature: that type
+ *   printed back in Phaenon's spelling ([PhaenonTypePresentation]),
  *   `$class: class<EventSourcedAggregate>` — what PhpStorm holds, `T` read as its bound.
  *
  * Everything else, and every element of a `.php` file, is left to PhpStorm. If PhpStorm's popup
