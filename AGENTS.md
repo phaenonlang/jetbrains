@@ -2,9 +2,9 @@
 
 The PhpStorm plugin for `.phn` files (Kotlin, IntelliJ Platform Gradle Plugin, PhpStorm 2025.1+).
 It makes PhpStorm read a `.phn` file as PHP code without the open tag, erases Phaenon's additions to
-PHP on the way to PhpStorm's parser and gives the erased declarations their types back, so the
-method syntax on `list`, `map`, `string` and `bytes` completes and resolves; the README explains
-how and why it is not a separate language. The map of every Phaenon repo, the working method and
+PHP on the way to PhpStorm's parser and gives the erased declarations their types back (`list<User>`
+as `User[]`, `class<T>` as `class-string<Bound>`, closure signatures); the README explains how and
+why it is not a separate language. The map of every Phaenon repo, the working method and
 the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 
 ```sh
@@ -60,13 +60,9 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'   # the line
   and Blade; frames forward, breakpoints reverse, gated to the breakpoint handler's question about a
   `.phn`) with `PhaenonSourceStepping` (a step that stays on a source line through holds is
   repeated); fixtures `testData/linemap/` are compiled by hand as the spec lays them out, so keep
-  them in step when the compiled layout changes; `src/main/resources/stubs/phaenon` holds the editor-only pseudo-classes
-  (generated: `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` in the
-  compiler repo rewrites them from `stdlib/runtime/*.phn`; a PR never edits them by hand)
-  `\Phaenon\Internal\*Methods` that mirror `../phaenon/stdlib/runtime/*.phn` without the receiver
-  parameter — keep them in step when the stdlib changes.
+  them in step when the compiled layout changes.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
-  `syntax/Constructs.phn` uses every Phaenon construct; `methods/` holds the method-syntax fixtures,
+  `syntax/Constructs.phn` uses every Phaenon construct; `types/` holds the erased-type fixtures,
   `closure/` the closure-type ones, `classstring/` the `class<T>` ones, `php86/` the PHP 8.6 ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).
   Tests set the IDE's highest PHP level: the test project defaults to PHP 5.6. It also lacks
   PhpStorm's bundled PHP stubs (they are indexed only for a project with a PHP module), so a test

@@ -23,11 +23,11 @@ the **full PHP toolchain** rather than a syntax-colouring approximation of it:
 
 Phaenon's own syntax parses too — generics, `list<T>`, `map<K, V>`, `bytes`, tuples, `class<T>`,
 `Closure(T): U`, `is` / `as`, `type` aliases, expression bodies `=> expr;` and `throws A|B`, and PHP
-8.6's partial application, which no PhpStorm parses yet — and the **method syntax** on collections
-and strings
-is understood: `$users->filter(fn (User $u) => $u->active)->map(fn (User $u) => $u->name)`
-completes, resolves, shows parameter info and is type-checked like a method call on an object, and
-"go to declaration" lands on `\Phaenon\Seq::map()` when `phaenon/runtime` is installed.
+8.6's partial application, which no PhpStorm parses yet — and its types reach PhpStorm: a
+`list<User>` is a `User[]` to completion and the inspections, a `class<User>` names `User` behind
+`::` and `new`, a `Closure(int): string` checks the calls made through it. A list, a map and bytes
+are the array and the string they compile to, so `->` on them means what it means in PHP: they are
+transformed with PHP's functions and chained with pipes and partial application.
 
 In IDEs without the PHP plugin (IntelliJ IDEA Community, WebStorm, ...) the plugin falls back to a
 bundled TextMate grammar and provides highlighting only.
@@ -49,8 +49,7 @@ PhpStorm. A `.phn` file *is* a PHP file to the IDE: PHP file type, PHP language,
 | `PhaenonLexer` | the parser's lexer | PhpStorm's `PhpWithOptionalOpenTagLexer` (starts in scripting mode unless the first token is an open tag) wrapped in a `LookAheadLexer` that erases Phaenon-only syntax into `PhaenonTokenTypes.ERASED` tokens — comments to the parser (`PhaenonParserDefinition` adds the type to PHP's comment set), text and offsets untouched. See [Phaenon syntax](#phaenon-syntax). `fun` before a name is handed over as the `function` keyword (text kept), so a `fun` method parses as a method and, without a visibility, as public — as PHP reads it and as the compiler writes it (design/functions.md §1). A PHP 8.6 placeholder `?` standing alone as an argument is handed over as an identifier, so `f(?, 1)` parses as a call with a constant for an argument (see [PHP 8.6](#php-86)). `concurrently` used as a value and `spawn` are handed over as the closures they compile to, their own characters split into `function ( )` and `fn ( ) =>` tokens (`PhaenonBlocks`). A named function's `throws A\|B` is erased whole, and its expression body's arrow is handed over as `{` and `return` (see [D18](#d18-expression-bodies-throws-layout)). |
 | `PhaenonPsiBuilder` | the parser's `PsiBuilder` | A `PsiBuilderAdapter` that intercepts PhpStorm's lazy function bodies and parses them on the spot, so the whole file goes through one lexer. PhpStorm expands a lazy block by re-lexing its text with a plain PHP lexer, which would discard the erasures inside every body. An expression body's block, which the lexer opens at the arrow, it closes after its one statement: the source has no `}` for it. |
 | `PhaenonBaseLexerProvider` | `com.jetbrains.php.baseLexerProvider` | Editor highlighting does not go through the parser: PhpStorm's editor highlighter is keyed by file type and builds its own lexer, asking this EP first. It gets the plain open-tag-optional lexer, so Phaenon syntax is coloured as the PHP tokens it is made of. Wrapped in `PhaenonHighlightingLexer`, which colours `fun` as the keyword where it declares something. |
-| `PhaenonTypeProvider` | `com.jetbrains.php.typeProvider4` | Reads the erased Phaenon types back from the erased leaves (`PhaenonErasedTypes`, `PhaenonTypeSyntax`, `PhaenonTypeText`) and gives parameters, properties and return types their types: `list<User>` → `User[]` plus `\Phaenon\Internal\ListMethods<User>`; a type parameter → its bound, as the compiler writes it; `class<T>` → `class-string<Bound>` alone, the type PhpStorm gives a docblock-only `@return class-string<Bound>`, on which `$c::m()`, `new $c` and `$c::CONST` resolve; `Closure(A, B=, C...): R` → `\Closure` plus the signature in PhpStorm's own encoding. Adds `StrMethods` to `string` and `\Stringable` receivers of `->` (never of `::`; a class-string is a string to it), and keeps the element type through chains (`->filter(...)->map(...)`). Types a partial application as the closure it creates and a pipe stage that is one as the call it becomes. |
-| `stubs/phaenon` | `com.jetbrains.php.libraryRoot` | Bundled, editor-only pseudo-classes, **generated** by `phn stdlib --plugin-stubs src/main/resources/stubs/phaenon/Phaenon/Internal` from the compiler's `stdlib/runtime/*.phn` (never edited by hand; the compiler's `TestPluginStubsFresh` fails when they are stale): `\Phaenon\Internal\{List,Map,Str,Bytes}Methods`: the stdlib's `Seq`, `Map`, `Str` and `Bytes` functions as instance methods without the receiver parameter, with PHPStan docblocks. They are what the method syntax resolves to, so completion, parameter info, quick documentation and the undefined-method inspection are PhpStorm's own. |
+| `PhaenonTypeProvider` | `com.jetbrains.php.typeProvider4` | Reads the erased Phaenon types back from the erased leaves (`PhaenonErasedTypes`, `PhaenonTypeSyntax`, `PhaenonTypeText`) and gives parameters, properties and return types their types: `list<User>` and `map<string, User>` → `User[]`, `bytes` → `string`, the array and the string they erase to; a type parameter → its bound, as the compiler writes it; `class<T>` → `class-string<Bound>` alone, the type PhpStorm gives a docblock-only `@return class-string<Bound>`, on which `$c::m()`, `new $c` and `$c::CONST` resolve; `Closure(A, B=, C...): R` → `\Closure` plus the signature in PhpStorm's own encoding. Types a partial application as the closure it creates and a pipe stage that is one as the call it becomes. |
 | `PhaenonErasedReferenceContributor` | `psi.referenceContributor` for PHP | Every erased construct is a `PhaenonErasedLeaf` (a comment leaf the token type creates itself), and each class name in it — `DomainEvent` in `list<DomainEvent>`, `User` in `Box<User>`, `Closure` in `Closure(int): string` — gets a `PhaenonClassReference` resolved as PHP would through the file's imports and namespace (`PhaenonErasedNames`), except a bare `Closure` before a signature, which is `\Closure` in any namespace, as the compiler reads it. Navigation, find-usages, rename and the unused-import inspection see them as they see a docblock type. A type parameter used in one (`T` in `id(): T`) gets a `PhaenonTypeParameterReference` to its declaration in the enclosing `<T of …>` list (`PhaenonTypeParameter`, a stand-in element at the name's offset). The declaration itself is one to the platform (`PhaenonTypeParameterDeclarations`, `psi.declarationProvider`): Cmd+click on it shows the usages, found by the default find-usages handler plus `PhaenonDocTypeReferenceSearcher`, which adds the docblock types naming it (`@var T $x`); such a docblock type also navigates to the declaration and is not an "undefined class". |
 | `PhaenonImportOptimizer` | `lang.importOptimizer` for PHP, `order="first"` | Optimize Imports in `.phn` files — the action, Reformat Code with imports, the save action and the pre-commit step all take the first optimizer of the language that supports a file. Runs PhpStorm's optimizer, which counts only PHP's own references and would remove `use App\Event\DomainEvent;` that only `list<DomainEvent>` uses, then puts back every import an erased construct uses (the rule the unused-import filter follows) where the optimizer's sorting places it. The PHP code style lays the block out, as in a `.php` file. `.php` files keep PhpStorm's optimizer alone; the PHP plugin has no import optimization on the fly. |
 | `PhaenonFormattingModelBuilder` | `lang.formatter` for PHP, a `CustomFormattingModelBuilder` | The formatter of `.phn` files. PhpStorm's `PhpFormattingModelBuilder` is a template formatter: for a `.php` file it builds the HTML model of the template view provider and asks for PHP blocks inside it, and for any other view provider it falls back to one read-only block for the whole file — which is what a `.phn` file, single-rooted, got: Reformat Code, the indent of a new line, the `*` of a docblock and the reformatting after generated code all did nothing. The plugin's builder, engaged for `.phn` files only, hands the file's PSI to the PHP builder's public `createTemplateFormattingModel`, the call the template path makes for each PHP region, so every rule is PhpStorm's with the project's PHP code style. Its blocks are wrapped (`PhaenonFormattingBlock`) to decide the spacing next to an erased construct, which PhpStorm's rules see as a token of unknown kind: a `<…>` list stays against its name and the `(` of a call, an erased return type against the `)`, a union member against its neighbour; a standalone construct (`list<User> $users`, `$x as T`, `spawn $task`) is one space from its neighbours or keeps its line breaks, and an erased type keeps the wrap and alignment of the parameter it types. The construct's own text is never changed. Two blocks that meet inside a word — a keyword split into PHP tokens — stay together, and a `concurrently` block used as a statement is laid out as one statement with its body one level in, as an `if`'s. The PHP code style is the project's with one change, Phaenon's canonical layout: the opening braces of functions, methods and closures stand on the declaration's line, a class-like's on a line of its own, an empty body of a function, method or class-like — nothing but whitespace between its braces — is `{}` one space after the declaration or header (`ErasedSpacing.emptyBody`; PhpStorm's own options for empty bodies would reach closures and anonymous classes, which stay as the project's style lays them out), and an expression body stays one space after its signature or on a line of its own one level in. |
@@ -60,9 +59,9 @@ PhpStorm. A `.phn` file *is* a PHP file to the IDE: PHP file type, PHP language,
 | `PhaenonSpellcheckingStrategy` | `spellchecker.support` for PHP | An erased leaf is a comment to the platform, which would spell-check it as prose; it is code and is not checked, as PhpStorm checks no class reference. |
 | `PhaenonThrows` | used by the filter and the doc-comment handler | Whether the `throws` clauses in effect answer an exception finding of PhpStorm's as the compiled `@throws` tags would: the function's own clause, an enclosing function's for a closure (a `concurrently` block or a `spawn` too), and for a method with neither a docblock nor a clause the clause of the method it overrides, the way PhpStorm reads a parent's tags. The exceptions are the ones PhpStorm's inspections compute for the site or the function. |
 | `PhaenonBlocks` | used by the type provider, the filter and the formatter | Knows the closures `PhaenonLexer` makes of `concurrently` blocks used as values and of `spawn` (`function ( )` and `fn ( ) =>` spelt with the keyword's own characters), the function a variable really belongs to through them, and which variables they are assigned to. |
-| `PhaenonDocumentationProvider` | `lang.documentationProvider` for PHP, `order="first"` | The definition line of quick documentation and of the Ctrl+hover hint for Phaenon elements, where PhpStorm prints the erasure: PhpStorm prints every class-string as `string` (and a native `string` beside a docblock class-string as `string\|string` in 2026.2), drops an erased parameter type from a signature and pastes an erased return type in raw, its `<T>` read as an HTML tag. A function or method of a `.phn` with an erased part in its signature prints as written (`abstract protected static fun aggregateClass(): class<T>`), a parameter or property with an erased type as `$users: class<User>`, and a variable of a `.phn` whose type holds a class-string, a pseudo-class or a closure signature as that type in Phaenon's spelling (`$class: class<EventSourcedAggregate>`, `PhaenonTypePresentation`), the pseudo-class `StrMethods` of a receiver left out. The rest of the popup — the class, the docblock sections, the source — is PhpStorm's; `.php` files and everything else are PhpStorm's alone. |
+| `PhaenonDocumentationProvider` | `lang.documentationProvider` for PHP, `order="first"` | The definition line of quick documentation and of the Ctrl+hover hint for Phaenon elements, where PhpStorm prints the erasure: PhpStorm prints every class-string as `string` (and a native `string` beside a docblock class-string as `string\|string` in 2026.2), drops an erased parameter type from a signature and pastes an erased return type in raw, its `<T>` read as an HTML tag. A function or method of a `.phn` with an erased part in its signature prints as written (`abstract protected static fun aggregateClass(): class<T>`), a parameter or property with an erased type as `$users: class<User>`, and a variable of a `.phn` whose type holds a class-string or a closure signature as that type in Phaenon's spelling (`$class: class<EventSourcedAggregate>`, `PhaenonTypePresentation`). The rest of the popup — the class, the docblock sections, the source — is PhpStorm's; `.php` files and everything else are PhpStorm's alone. |
 | `PhaenonParameterInfoHandler` | `codeInsight.parameterInfo` for PHP, `order="first"` | Parameter info for a call of a Phaenon function with an erased parameter type, PhpStorm's layout with the type as written: `users: class<User>, id: \App\AggregateId` where PhpStorm prints `users: string`. It takes a call only when one of its targets is such a function and hands the rest — finding the call, the current argument, named arguments — to PhpStorm's handler. |
-| `PhaenonGotoDeclarationHandler` | `gotoDeclarationHandler` | Sends a reference that resolves both to a `.phn` declaration and to the `.php` compiled from it (`@generated by phaenon` in its header) to the source only, from `.phn` and `.php` files alike; a hand-written `.php` with the same class stays a target. Redirects navigation from a pseudo-class method to the stdlib function (`\Phaenon\Seq::map()`) when the `phaenon/runtime` package is in the project. |
+| `PhaenonGotoDeclarationHandler` | `gotoDeclarationHandler` | Sends a reference that resolves both to a `.phn` declaration and to the `.php` compiled from it (`@generated by phaenon` in its header) to the source only, from `.phn` and `.php` files alike; a hand-written `.php` with the same class stays a target. |
 | `PhaenonHighlightFilter` | `daemon.highlightInfoFilter` | Drops PhpStorm's "readonly property must have type" error and the "missing type declaration" inspections for properties, parameters and return types where the type was erased: it had one. Drops "Other declarations of class 'X' exist at X.php" when every other declaration is the compiled copy, and "Import 'X' is never used" when the import's name appears in an erased type. "Return type declaration must be compatible with…" and "Declaration must be compatible with…" are dropped on an override where either side has an erased type, in a `.phn` or in a `.php` implementing a Phaenon interface: PhpStorm reads `save(T $aggregate)` as `save(mixed $aggregate)`, and `PhaenonHierarchyInspection` judges the pair instead. PhpStorm's "Parameter type 'string' is not compatible with 'string[]'" on a call of a `Closure(string...)` property is dropped where the argument fits the declared Phaenon parameter (PhpStorm encodes the variadic of a closure literal or first-class callable assigned to it as an array). The PSR-12 "missing visibility" finding is dropped on a `fun` method, a class constant, and a property or parameter whose only visibility is `private(set)`-style, all public by the language's rule and written out by the compiler; the annotator's "expression is not allowed as …" findings are dropped on a closure in an attribute argument, a constant or a default, which the compiler lowers to PHP 8.5's `static function`. PhpStorm's findings on PHP 8.6 code go as [PHP 8.6](#php-86) describes, some only where the file's target (`PhaenonTarget`) is 8.6. In a `concurrently` block or a `spawn`, closures to PhpStorm without a `use` clause, an "undefined variable" the enclosing function defines (or a block assigns before it is read after), an "unused" parameter or variable used across a block's boundary, "Return value is expected to be …" on `return concurrently { … };` and whatever PhpStorm reports at the keyword are dropped. "Unhandled X" and "Unhandled exceptions" go where the `throws` clauses in effect name every exception reported, or a parent of it (`PhaenonThrows`), and "PHPDoc comment doesn't contain all the necessary @throws tags" where they name what the docblock lacks. |
 | `PhaenonHierarchyInspection` | `localInspection` for PHP, "Phaenon override compatibility" | Signature compatibility for overrides with an erased type on either side, in PhpStorm's words ("Declaration must be compatible with AggregateRepository->save(aggregate: \App\Aggregate)"). PhpStorm's own check compares `Parameter.getDeclaredType()`, read from the PSI's type declaration or its stub, which no extension point reaches; this one reads the parent's signature as the child sees it, the parent's type parameters replaced by the arguments written on the `extends` / `implements` path (`PhaenonErasure`), and compares as the checker does (`P2502`): a type parameter by its bound, a native child type equal to the parent's erasure as inheriting the parent's type (`generics.md` §11.1), parameters contravariant, returns covariant, counts, optional, variadic and by-reference parameters as in PHP. What passes compiles: the override-erasure rule (§4.3) widens the child's parameter to the parent's erased type. |
 | `PhaenonExcludePolicy` | `directoryIndexExcludePolicy` | Excludes the output directories of every `phaenon.json` — at each content root and in each `vendor/*/*` package — from the project, so the compiled tree is never indexed and a class is declared once, in its source. `PhaenonProjectFileListener` re-applies it when a project file changes. |
@@ -110,9 +109,9 @@ provider reads it back, and the class names in it are references.
 | `class Box<T of Bound = Default>`, `function f<T>(…)`, `fn<T>(…)` | the name, the list erased | the names become type parameters for the rest of the file |
 | `new Box<int>(…)`, `f<int>(…)`, `$o->m<T>(…)`, `C::m<T>(…)`, `implements I<T>` | the call or name, the list erased | — |
 | `Foo<T>` in a type position | `Foo` | `\Ns\Foo` (type arguments of user classes are not modelled) |
-| `list<T>` | erased | `T[]` and `\Phaenon\Internal\ListMethods<T>` |
-| `map<K, V>` | erased | `V[]` and `\Phaenon\Internal\MapMethods<K, V>` |
-| `bytes` | erased | `string` and `\Phaenon\Internal\BytesMethods` |
+| `list<T>` | erased | `T[]` |
+| `map<K, V>` | erased | `V[]` |
+| `bytes` | erased | `string` |
 | `(A, B)` tuple | erased | `A[]\|B[]` |
 | `class<T>` | erased | `class-string<Bound>` (`T`'s bound; `class<User>` names `User`, `class<A\|B>` is `class-string<A,B>`), printed `class<…>` |
 | `fun name(): T => expr;` (D18) | `{ return expr;` — the arrow split into `{` and `return`, closed after the statement; `{ expr;` under `void` and `never` | the declared return type; the value is checked as a `return`'s |
@@ -331,11 +330,12 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   without errors or error highlighting; the erased text is an erased leaf at its original offsets;
   `is` on a class name is `instanceof`; `(bytes)` is a string cast; bodies are not lazy; PHP without
   Phaenon syntax lexes exactly as PhpStorm lexes it; reformatting leaves each erased construct as written.
-- `PhaenonMethodsTest`: completion on `list`, `map`, `string`, `bytes` and `\Stringable` receivers;
-  the calls resolve to the pseudo-classes and navigate to `\Phaenon\Seq::map()`; the
-  undefined-method inspection accepts the method form and still reports a misspelt name, also at
-  the end of a chain; erased declarations get their types; chains and `foreach` keep the element
-  type; `readonly` properties with erased types are not errors.
+- `PhaenonErasedTypesTest`: erased declarations get their types (`list<User>` and
+  `map<string, User>` as `User[]`, `bytes` as `string`, tuples, `class<User>`, closure signatures,
+  type parameters); `[0]` and `foreach` yield the element type; a method call on a `string`, a
+  `list` or `bytes` resolves to nothing, completes nothing and is judged as PhpStorm judges a call
+  on a string in a `.php` file (D20); erased types are not missing type declarations, do not make
+  an override incompatible, and `readonly` properties with them are not errors (`testData/types/`).
 - `PhaenonClosureTypeTest`: a bare `Closure(…)` in a namespaced file (`testData/closure/`) — as a
   property, promoted parameter, parameter, nullable parameter, union member and return type — is
   no undefined class, is typed `\Closure`, navigates to `\Closure` even beside a namespace class
@@ -357,16 +357,16 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   parent's erasure inherits (mongodb-odm's normalizers, core's `Command<TResult>` buses).
 - `PhaenonClassStringTest`: `class<T>` and `class<User>` as return, parameter and property: the
   type is `class-string<Bound>` alone for the method, the call and the variable; static calls,
-  `new`, constants and `::class` resolve against the class, a class-string passes for a `string`,
-  `$c->length()` resolves against the `Str` methods, and no `::` access gets them; hover, quick
-  documentation and Ctrl+hover show `aggregateClass(): class<T>`, `$class: class<EventSourcedAggregate>`,
-  `$users: class<User>`; Ctrl+hover and Ctrl+click on the getter land on the method; parameter info
-  prints `users: class<User>`; a `.php` file keeps PhpStorm's presentation (`classstring/Plain.php`
-  records it: `string`, and `string|string` with a native `string` on 2026.2).
+  `new`, constants and `::class` resolve against the class, a class-string passes for a `string`;
+  hover, quick documentation and Ctrl+hover show `aggregateClass(): class<T>`,
+  `$class: class<EventSourcedAggregate>`, `$users: class<User>`; Ctrl+hover and Ctrl+click on the
+  getter land on the method; parameter info prints `users: class<User>`; a `.php` file keeps
+  PhpStorm's presentation (`classstring/Plain.php` records it: `string`, and `string|string` with a
+  native `string` on 2026.2).
 - `PhaenonDocumentationTest`: `testData/docs/Types.phn`: declarations print their written types,
-  variables `list<User>`, `map<string, User>`, `bytes`, `?class<User>`, `Closure(int): string`; the
-  `Str` methods of a receiver are not part of its type; a function prints its signature as written,
-  one parameter per line in the popup, and keeps PhpStorm's docblock sections.
+  variables `?class<User>` and `Closure(int): string`, while a variable holding a list, a map or
+  bytes is PhpStorm's (`User[]`, `string`); a function prints its signature as written, one
+  parameter per line in the popup, and keeps PhpStorm's docblock sections.
 - `PhaenonPhp86Test`: `testData/php86/`: partial applications parse without a syntax error or a
   finding on either target, are typed as their closures and come back from Reformat Code as
   written; on 2026.2 a pipe stage is typed as its call (`PartialPipe.phn`); readonly defaults,
@@ -478,7 +478,7 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
 - `PhaenonRealTreeTest`: volume. Every `.phn` file under the directories named by `PHAENON_TREES`
   (colon-separated; `vendor` excluded) is added to the test project; the test fails listing
   `file:line: message` for every syntax error and every stub tree that does not match its text,
-  checks that every erased `list<…>` / `map<…>` declaration got its pseudo-class, and that
+  checks that every erased `list<…>` / `map<…>` declaration is typed as an array, and that
   `PhaenonHierarchyInspection` reports no override in the trees (they pass `phn check`). Files using
   PHP syntax above the IDE's highest language level (`|>` on PhpStorm 2025.1) are skipped and
   listed. A second test reformats every file with the PSR-12 style and fails when an erased
@@ -500,14 +500,13 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
     ./gradlew test --tests '*RealTree*'
   ```
 
-`./gradlew test` is a no-op when nothing changed (build cache); `./gradlew test --rerun` forces a
-run. After changing a bundled stub, a stale index in the test sandbox can report "Outdated stub in
-index": delete `.intellijPlatform/sandbox/phaenon-jetbrains/<IDE>/system-test/index`.
+`./gradlew test` is a no-op when nothing changed (build cache); `./gradlew test --rerun` forces a run.
 
 ## Limitations
 
-- **Phaenon types are modelled as PhpStorm can hold them.** A `list<User>` is `User[]` plus the
-  pseudo-class; a `map<K, V>` keeps its value type and loses its key type in `foreach`; a tuple is
+- **Phaenon types are modelled as PhpStorm can hold them.** A `list<User>` is `User[]`; a
+  `map<K, V>` is `V[]`, its key type lost; `bytes` is `string`, so a variable holding one of them
+  reads `User[]` or `string` in its hover, where a declaration reads as written; a tuple is
   the union of its element arrays, so `$pair[0]` and `[$code] = $kubectl(…)` are `A|B` rather
   than `A` (PhpStorm keeps positions only for docblock shapes it reads from the PSI, and types the
   compiled `@var \Closure(string...): array{int, string}` call as `mixed`); a type parameter is its
@@ -563,16 +562,6 @@ index": delete `.intellijPlatform/sandbox/phaenon-jetbrains/<IDE>/system-test/in
   parser reads `@param $x prose` as the variable followed by a type named `prose` (an undefined
   class, a type mismatch, and `prose|string` as the parameter's type); the dash, which `phn
   migrate` writes and the compiler drops, is read as description by every tool.
-- **Strings get their methods only as receivers.** `$s->upper()` works for any `string` or
-  `\Stringable` value; the `Str` methods are not listed among the members of a string anywhere
-  else, and a `\Stringable` object offers them only when the member name is a `Str` method (or is
-  being completed).
-- **Chains type through what the closure returns.** `->map(fn (User $u) => $u->name)` is a
-  `list<string>`; a closure whose return type PhpStorm cannot infer yields an unparametrised
-  `ListMethods`, whose methods still resolve but whose element type is `mixed`.
-- The union behind a `list` carries a `?` marker from PhpStorm on method calls (the array half has
-  no methods); it does not silence the undefined-method inspection, which still reports a misspelt
-  method at the end of a chain.
 - **A bare `Closure(T): U` leaves no PHP type.** It is erased whole so that it means `\Closure`
   whatever the namespace, as in the compiler; PhpStorm then adds to the `\Closure` the plugin
   supplies what it infers from assignments and bodies (the closure's own `\Closure<…>`, `mixed`
