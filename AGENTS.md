@@ -17,6 +17,7 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper:~/labs/tequila/reflector:~/labs/tequila/tq-cli-phaenon-dogfood \
   ./gradlew test --tests '*RealTree*'   # parse every .phn of the dogfood trees; skipped when unset
 PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'   # the line map against a real Xdebug over DBGp; skipped when unset
+PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # Reformat Code with phn fmt --stdin, on the compiler's format goldens
 ```
 
 - JDK 21; Gradle provisions one if none is installed. `./gradlew test` is a no-op when nothing
@@ -60,7 +61,16 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'   # the line
   and Blade; frames forward, breakpoints reverse, gated to the breakpoint handler's question about a
   `.phn`) with `PhaenonSourceStepping` (a step that stays on a source line through holds is
   repeated); fixtures `testData/linemap/` are compiled by hand as the spec lays them out, so keep
-  them in step when the compiled layout changes.
+  them in step when the compiled layout changes;
+  the compiler's language server, `phn lsp`, gives the checker's diagnostics and build on save
+  (`PhaenonLsp.kt`: `PhaenonLspServerSupportProvider`, `PhaenonLspServerDescriptor` asking for
+  diagnostics only, `PhaenonLspClient` for the server's `phaenon/build`, `PhaenonBuildWidget` in
+  the status bar; registered by `phaenon-lsp.xml`, optional on `com.intellij.modules.ultimate`);
+  `PhaenonCompiler` finds the project's `phn` and runs `phn fmt --stdin`, which
+  `PhaenonPreFormatProcessor` / `PhaenonPostFormatProcessor` run around PhpStorm's formatter on a
+  reformat of the whole file; `PhaenonIndentOptionsProvider` keeps a `.phn` indented with spaces
+  (D21); `PhaenonSettings` (Settings | Languages & Frameworks | Phaenon) holds the binary and build
+  on save (`PhaenonLspTest`, `PhaenonLayoutTest`, the latter with `PHAENON_PHN`).
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
   `syntax/Constructs.phn` uses every Phaenon construct; `types/` holds the erased-type fixtures,
   `closure/` the closure-type ones, `classstring/` the `class<T>` ones, `php86/` the PHP 8.6 ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).

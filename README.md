@@ -270,6 +270,36 @@ on the same thread a `.phn`. A breakpoint type of its own would reach no handler
 debugger, and Xdebug 3.5's own path maps (`xdebug.path_mapping`) would need Xdebug 3.5 and an ini
 setting wherever the code runs, and still step by compiled line.
 
+## The checker in the editor: `phn lsp`
+
+With a `phn` at hand, the plugin starts the compiler's language server, `phn lsp`, when a `.phn`
+opens (design/tooling.md §6.2, §6.5):
+- **Its findings show as you type**, in the file being edited, against the whole project with the
+  open buffers as they are. A save re-checks the whole project. P1005, a tab where Phaenon wants
+  spaces, comes with a quick-fix.
+- **Build on save** writes the outputs after each save, as `phn build` does; a file with errors is
+  withheld. The status bar shows the last build (`phn: built`, `phn: 2 of 800 withheld`).
+- **The server answers nothing else.** The plugin asks for diagnostics only
+  (`"features": "diagnostics"`), and the server then advertises nothing else. So navigation,
+  completion, hover, refactoring and formatting stay PhpStorm's, through the plugin's PSI, in
+  every PhpStorm version.
+
+The `phn` is, in order, the setting under **Settings | Languages & Frameworks | Phaenon**,
+`$PHN_BINARY`, the project's `vendor/bin/phn` (the compiler the project builds with, from the
+`phaenon/phn` Composer package), or `phn` on the PATH. The same page turns build on save off. The
+LSP client API is the commercial IDEs' (`com.intellij.modules.ultimate`): elsewhere the plugin works
+without the server.
+
+**Reformat Code** writes Phaenon's layout. It is PhpStorm's PHP style with Phaenon's braces, and
+`phn fmt --stdin` (the first layer of `phn fmt`) runs before and after it:
+- before, so PhpStorm's line wrapping measures the spacing Phaenon writes;
+- after, as an edit of its own.
+
+That layer lays out what only Phaenon knows: the spacing inside `<T of Item>`,
+`map<string, list<int>>`, `throws`, `as?`, one-line docblocks, no blank line before the first
+line, and spaces for tabs. Only a reformat of the whole file runs it. A `.phn` always indents with
+spaces (D21), whatever the PHP code style or an `.editorconfig` says.
+
 ## Install
 
 Download `phaenon-jetbrains-<version>.zip` from the releases page (or build it, see below), then in
@@ -307,6 +337,13 @@ newer PhpStorm has, such as the PHP 8.5 pipe operator and its inspection:
 
 ```bash
 ./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents
+```
+
+The layout tests run `phn fmt --stdin` and are skipped without a compiler; with one they also
+reformat the compiler's `internal/format/testdata` goldens:
+
+```bash
+PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # go build -o bin/phn ./cmd/phn there first
 ```
 
 To run the debugger tests against a real Xdebug (built for the local `php`, loaded only with
@@ -461,6 +498,15 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   PhpStorm's breakpoint rules (no breakpoint on a blank line); asked from a
   `PhpLineBreakpointHandler`'s `registerBreakpoint`, a `.phn` is mapped and a compiled or plain
   `.php` is not. `PhaenonSteppingTest`: when a step is repeated.
+- `PhaenonLspTest`: the server is the project's compiler, `phn lsp` in the project's directory,
+  asked for diagnostics only, with build on save as the setting says; the compiler is the setting,
+  else the project's `vendor/bin/phn`; the project is the nearest `phaenon.json`; a build on save
+  reads in the status bar.
+- `PhaenonLayoutTest`: a `.phn` indents with spaces when the PHP style uses tabs (a `.php` keeps
+  them); without a `phn`, Reformat Code is PhpStorm's alone; with one (`PHAENON_PHN`), it writes the
+  first layer, a reformat of a range leaves the rest alone, and the compiler's format goldens and
+  their inputs reformat to one text, in Phaenon's layout, differing from the golden in PHP's
+  whitespace only.
 - `PhaenonXdebugTest`: the line map against a real Xdebug, over DBGp, with `PHAENON_XDEBUG` set to an
   `xdebug.so` (loaded with `php -n -d zend_extension=…` only; `PHAENON_PHP` picks the php): the
   breakpoints the mapper sends stop at lines that map back to their source lines, and Step Into and
