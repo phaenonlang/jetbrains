@@ -208,8 +208,9 @@ types a function stage that way itself and a method stage not at all.
 
 ## Line map: navigation and debugging
 
-Since D19 (design/line-map.md) `phn build` lays out what it generates as PSR-12 PHP — the header on
-lines of its own, expanded `=> expr` bodies, multi-line docblocks, braces where PSR-12 puts them —
+Since D19 (design/line-map.md) `phn build` lays out what it generates as PER Coding Style PHP
+(PSR-12 until D22) — the header on lines of its own, expanded `=> expr` bodies, multi-line
+docblocks, braces where PER puts them —
 so line N of `.src/Foo.php` is no longer line N of `src/Foo.phn`. Every compiled file ends with a
 line map instead:
 
