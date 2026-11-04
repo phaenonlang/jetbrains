@@ -16,9 +16,15 @@
     <depends>com.intellij.modules.platform</depends>
     <depends optional="true" config-file="phaenon-php.xml">com.jetbrains.php</depends>
     <depends optional="true" config-file="phaenon-textmate.xml">org.jetbrains.plugins.textmate</depends>
+    <!-- The LSP client API (phn lsp's diagnostics, build on save) is the commercial IDEs'. -->
+    <depends optional="true" config-file="phaenon-lsp.xml">com.intellij.modules.ultimate</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <fileIconProvider implementation="dev.phaenon.jetbrains.PhaenonFileIconProvider"/>
+
+        <!-- Settings | Languages & Frameworks | Phaenon: which phn runs, build on save. -->
+        <projectConfigurable parentId="preferences.language" id="dev.phaenon.settings" displayName="Phaenon"
+                             instance="dev.phaenon.jetbrains.PhaenonSettingsConfigurable"/>
 
         <!-- The output directories of phaenon.json hold compiled copies of the .phn declarations: not indexed. -->
         <directoryIndexExcludePolicy implementation="dev.phaenon.jetbrains.PhaenonExcludePolicy"/>

@@ -1,0 +1,9 @@
+<!-- Loaded only in the IDEs with the LSP client API (com.intellij.modules.ultimate: PhpStorm, IntelliJ IDEA Ultimate). -->
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- phn lsp for diagnostics and their quick-fixes; the PSI answers everything else (design/tooling.md §6.2). -->
+        <platform.lsp.serverSupportProvider implementation="dev.phaenon.jetbrains.PhaenonLspServerSupportProvider"/>
+        <!-- The last build on save. -->
+        <statusBarWidgetFactory id="PhaenonBuild" implementation="dev.phaenon.jetbrains.PhaenonBuildWidgetFactory" order="last"/>
+    </extensions>
+</idea-plugin>
