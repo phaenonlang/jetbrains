@@ -13,6 +13,10 @@
         <!-- PhpStorm's PHP formatter for .phn files, without the HTML layer its template formatter expects.
              A custom builder: the platform asks it only for the contexts it claims, so .php keeps PhpStorm's. -->
         <lang.formatter language="PHP" order="last" implementationClass="dev.phaenon.jetbrains.PhaenonFormattingModelBuilder"/>
+        <!-- Reformat Code ends with phn fmt's first layer, run on the text through standard input; a .phn indents with spaces (D21). -->
+        <preFormatProcessor implementation="dev.phaenon.jetbrains.PhaenonPreFormatProcessor"/>
+        <postFormatProcessor implementation="dev.phaenon.jetbrains.PhaenonPostFormatProcessor"/>
+        <fileIndentOptionsProvider implementation="dev.phaenon.jetbrains.PhaenonIndentOptionsProvider" order="first"/>
 
         <!-- Implement / Override Methods in a .phn class: `fun`, the parent's declared types, its type parameters substituted. -->
         <codeInsight.implementMethod language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonImplementMethodsHandler"/>

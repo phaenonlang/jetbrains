@@ -104,12 +104,18 @@ class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
         val php = settings.getCommonSettings(PhpLanguage.INSTANCE)
         val endOfLine = CommonCodeStyleSettings.END_OF_LINE
         val nextLine = CommonCodeStyleSettings.NEXT_LINE
-        if (php.CLASS_BRACE_STYLE == nextLine && php.METHOD_BRACE_STYLE == endOfLine && php.LAMBDA_BRACE_STYLE == endOfLine) return settings
+        val tabs = settings.getLanguageIndentOptions(PhpLanguage.INSTANCE).USE_TAB_CHARACTER
+        if (php.CLASS_BRACE_STYLE == nextLine && php.METHOD_BRACE_STYLE == endOfLine && php.LAMBDA_BRACE_STYLE == endOfLine && !tabs) return settings
         val copy = CodeStyleSettingsManager.getInstance(project).cloneSettings(settings)
         copy.getCommonSettings(PhpLanguage.INSTANCE).apply {
             CLASS_BRACE_STYLE = nextLine
             METHOD_BRACE_STYLE = endOfLine
             LAMBDA_BRACE_STYLE = endOfLine
+        }
+        // Spaces, never tabs (D21): [PhaenonIndentOptionsProvider] says the same for the file.
+        copy.getLanguageIndentOptions(PhpLanguage.INSTANCE).apply {
+            USE_TAB_CHARACTER = false
+            SMART_TABS = false
         }
         return copy
     }
@@ -354,7 +360,8 @@ internal open class PhaenonFormattingBlock protected constructor(
             val block = blocks[i]
             val next = blocks.getOrNull(i + 1)
             if (next != null && spacing.isErased(block) && typesTheNext(block, next)) {
-                out.add(of(block, spacing, next.wrap ?: block.wrap, next.alignment ?: block.alignment))
+                // The pair starts where the parameter would: its wrap, alignment and indent.
+                out.add(of(block, spacing, next.wrap ?: block.wrap, next.alignment ?: block.alignment, next.indent))
                 out.add(of(next, spacing, null, null))
                 i += 2
                 continue
