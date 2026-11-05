@@ -4,10 +4,601 @@
   "fileTypes": [
     "phn"
   ],
-  "comment": "A Phaenon file is PHP code from byte 0, so it is exactly the PHP code grammar (source.php) without the text.html.php wrapper that waits for an open tag. Both VS Code and JetBrains IDEs ship source.php in their PHP bundle.",
+  "comment": "A Phaenon file is PHP code from byte 0: the PHP code grammar (source.php, which VS Code and JetBrains IDEs ship) without the text.html.php wrapper that waits for an open tag, plus injections for what Phaenon adds: fun declarations, type parameters and arguments, throws, type aliases, is / as, concurrently / spawn and bytes. The injections reuse PHP's scope names wherever PHP has the construct, so themes colour them as PHP.",
   "patterns": [
     {
       "include": "source.php"
     }
-  ]
+  ],
+  "injections": {
+    "L:source.phaenon - comment - string - meta.use.php": {
+      "patterns": [
+        {
+          "include": "#function"
+        },
+        {
+          "include": "#generic-closure"
+        },
+        {
+          "include": "#type-alias"
+        },
+        {
+          "include": "#type-test"
+        },
+        {
+          "include": "#concurrency"
+        },
+        {
+          "include": "#generic-new"
+        },
+        {
+          "include": "#generic-call"
+        },
+        {
+          "include": "#nullable-generic"
+        },
+        {
+          "include": "#generic-type"
+        },
+        {
+          "include": "#bytes"
+        },
+        {
+          "include": "#readonly"
+        }
+      ]
+    },
+    "L:meta.class.php - meta.class.body.php - comment - string": {
+      "patterns": [
+        {
+          "include": "#type-parameters"
+        }
+      ]
+    },
+    "L:meta.interface.php - meta.interface.body.php - comment - string": {
+      "patterns": [
+        {
+          "include": "#type-parameters"
+        }
+      ]
+    },
+    "L:meta.trait.php - meta.trait.body.php - comment - string": {
+      "patterns": [
+        {
+          "include": "#type-parameters"
+        }
+      ]
+    },
+    "L:meta.enum.php - meta.enum.body.php - comment - string": {
+      "patterns": [
+        {
+          "include": "#type-parameters"
+        }
+      ]
+    }
+  },
+  "repository": {
+    "function": {
+      "comment": "A named function or method: fun, the name, its type parameters, parameters, return type and throws clause, up to the body ({ or =>) or the ; of a declaration without one.",
+      "name": "meta.function.phaenon",
+      "begin": "(?<![$\\w\\\\]|->|::)\\b(fun)\\s+(?:(&)\\s*)?([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.function.php"
+        },
+        "2": {
+          "name": "storage.modifier.reference.php"
+        },
+        "3": {
+          "patterns": [
+            {
+              "match": "(?i)\\b__construct\\b",
+              "name": "support.function.constructor.php"
+            },
+            {
+              "match": "(?i)\\b__(?:call|callStatic|debugInfo|destruct|get|set|isset|unset|toString|clone|set_state|sleep|wakeup|invoke|serialize|unserialize)\\b",
+              "name": "support.function.magic.php"
+            },
+            {
+              "match": ".+",
+              "name": "entity.name.function.php"
+            }
+          ]
+        }
+      },
+      "end": "(?=[{;]|=>)",
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type-parameters"
+        },
+        {
+          "include": "#parameters"
+        },
+        {
+          "include": "#return-type"
+        },
+        {
+          "include": "#throws"
+        }
+      ]
+    },
+    "parameters": {
+      "begin": "\\(",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.parameters.begin.bracket.round.php"
+        }
+      },
+      "end": "\\)",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.parameters.end.bracket.round.php"
+        }
+      },
+      "contentName": "meta.function.parameters.php",
+      "patterns": [
+        {
+          "include": "source.php#attribute"
+        },
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "match": "\\b(?:(?:public|private|protected)(?:\\(set\\))?|readonly|final)(?![\\w\\\\])",
+          "name": "storage.modifier.php"
+        },
+        {
+          "include": "#default-value"
+        },
+        {
+          "match": "(?:(&)\\s*)?(\\.\\.\\.)?((\\$)[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.reference.php"
+            },
+            "2": {
+              "name": "keyword.operator.variadic.php"
+            },
+            "3": {
+              "name": "variable.other.php"
+            },
+            "4": {
+              "name": "punctuation.definition.variable.php"
+            }
+          }
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.delimiter.php"
+        },
+        {
+          "include": "#type"
+        }
+      ]
+    },
+    "default-value": {
+      "begin": "=",
+      "beginCaptures": {
+        "0": {
+          "name": "keyword.operator.assignment.php"
+        }
+      },
+      "end": "(?=,|\\))",
+      "patterns": [
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "return-type": {
+      "begin": ":",
+      "beginCaptures": {
+        "0": {
+          "name": "keyword.operator.return-value.php"
+        }
+      },
+      "end": "(?=[{;]|=>|\\bthrows\\b)",
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type"
+        }
+      ]
+    },
+    "throws": {
+      "begin": "\\b(throws)\\b",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.throws.phaenon"
+        }
+      },
+      "end": "(?=[{;]|=>)",
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type"
+        }
+      ]
+    },
+    "type-parameters": {
+      "comment": "<T of Bound = Default, in TIn, out TOut> after the name of a class-like, a function or a type alias; in a class-like's header also the arguments of extends Base<T> and implements I<T>.",
+      "name": "meta.type.parameters.phaenon",
+      "begin": "<",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.typeparameters.begin.phaenon"
+        }
+      },
+      "end": ">",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.typeparameters.end.phaenon"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "match": "\\b(?:in|out)\\b(?=\\s+[A-Za-z_\\x{7f}-\\x{10ffff}])",
+          "name": "storage.modifier.variance.phaenon"
+        },
+        {
+          "match": "\\bof\\b",
+          "name": "storage.modifier.bound.phaenon"
+        },
+        {
+          "match": "=",
+          "name": "keyword.operator.assignment.php"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.delimiter.php"
+        },
+        {
+          "include": "#type"
+        }
+      ]
+    },
+    "generic-type": {
+      "comment": "A name written right before <, with a > ahead on the line before anything a type cannot hold: list<T>, map<K, V>, class<T>, Collection<U>. PHP code never writes a name against < (PER spaces the comparison operators), and a variable's $ rules out $i<10.",
+      "name": "meta.type.arguments.phaenon",
+      "begin": "(?<![$\\w\\\\]|->|::)(\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)(<)(?=[^;{}$'\"]*>)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "#type-name"
+            }
+          ]
+        },
+        "2": {
+          "name": "punctuation.definition.typeparameters.begin.phaenon"
+        }
+      },
+      "end": ">",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.typeparameters.end.phaenon"
+        }
+      },
+      "patterns": [
+        {
+          "match": ",",
+          "name": "punctuation.separator.delimiter.php"
+        },
+        {
+          "include": "#type"
+        }
+      ]
+    },
+    "type": {
+      "patterns": [
+        {
+          "include": "#generic-type"
+        },
+        {
+          "comment": "A tuple (int, string), a closure type's parameters Closure(T, int=): U, a DNF group.",
+          "begin": "\\(",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.type.begin.bracket.round.php"
+            }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.type.end.bracket.round.php"
+            }
+          },
+          "patterns": [
+            {
+              "match": ",",
+              "name": "punctuation.separator.delimiter.php"
+            },
+            {
+              "match": "=",
+              "name": "keyword.operator.optional.phaenon"
+            },
+            {
+              "include": "#type"
+            }
+          ]
+        },
+        {
+          "match": "\\?",
+          "name": "keyword.operator.nullable-type.php"
+        },
+        {
+          "match": "[|&]",
+          "name": "punctuation.separator.delimiter.php"
+        },
+        {
+          "match": ":",
+          "name": "keyword.operator.return-value.php"
+        },
+        {
+          "match": "\\.\\.\\.",
+          "name": "keyword.operator.variadic.php"
+        },
+        {
+          "include": "#type-name"
+        }
+      ]
+    },
+    "type-name": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(?:null|int|float|bool|string|array|object|callable|iterable|true|false|mixed|void|never)\\b(?![\\\\])",
+          "name": "keyword.other.type.php"
+        },
+        {
+          "match": "\\b(?:list|map|bytes|class)\\b(?![\\\\])",
+          "name": "keyword.other.type.phaenon"
+        },
+        {
+          "match": "(?i)\\b(?:static|self|parent)\\b(?![\\\\])",
+          "name": "storage.type.php"
+        },
+        {
+          "include": "source.php#class-name"
+        }
+      ]
+    },
+    "type-alias": {
+      "name": "meta.type.alias.phaenon",
+      "begin": "(?<![$\\w\\\\]|->|::)\\b(type)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)(?=\\s*[<=])",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.type.phaenon"
+        },
+        "2": {
+          "name": "entity.name.type.alias.phaenon"
+        }
+      },
+      "end": ";",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.expression.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type-parameters"
+        },
+        {
+          "match": "=",
+          "name": "keyword.operator.assignment.php"
+        },
+        {
+          "include": "#type"
+        }
+      ]
+    },
+    "type-test": {
+      "comment": "$x is T, $x as T, $x as? T (structural, generics.md). A foreach's as $v and a trait adaptation's as protected stay PHP's.",
+      "patterns": [
+        {
+          "match": "(?<![$\\w\\\\]|->|::)\\b(is)\\s+(\\??\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*(?:<(?:[^<>;{}$'\"]|<(?:[^<>;{}$'\"]|<[^<>;{}$'\"]*>)*>)*>)?)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.is.phaenon"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "include": "#type"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "match": "(?<![$\\w\\\\]|->|::)\\b(as\\??)\\s+(?!(?:public|protected|private)\\b)(\\??\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*(?:<(?:[^<>;{}$'\"]|<(?:[^<>;{}$'\"]|<[^<>;{}$'\"]*>)*>)*>)?)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.as.php"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "include": "#type"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "concurrency": {
+      "patterns": [
+        {
+          "match": "(?<![$\\w\\\\]|->|::)\\bconcurrently\\b(?=\\s*\\{)",
+          "name": "keyword.control.concurrently.phaenon"
+        },
+        {
+          "match": "(?<![$\\w\\\\]|->|::)\\bspawn\\b(?=\\s+[^\\s=;,)\\]}.])",
+          "name": "keyword.control.spawn.phaenon"
+        }
+      ]
+    },
+    "bytes": {
+      "match": "(?<![$\\w\\\\]|->|::)\\bbytes\\b(?![\\w\\\\]|\\s*\\()",
+      "name": "keyword.other.type.phaenon"
+    },
+    "generic-closure": {
+      "comment": "fn<T>(T $x): T => $x and function<T>(…), a closure with type parameters.",
+      "name": "meta.function.closure.phaenon",
+      "begin": "(?<![$\\w\\\\]|->|::)\\b(fn|function)\\s*(?=<)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.function.php"
+        }
+      },
+      "end": "(?=[{;]|=>)",
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type-parameters"
+        },
+        {
+          "include": "#parameters"
+        },
+        {
+          "match": "\\buse\\b",
+          "name": "keyword.other.function.use.php"
+        },
+        {
+          "include": "#return-type"
+        }
+      ]
+    },
+    "generic-new": {
+      "comment": "new Box<U>(…): PHP's instantiation would take the name and leave the arguments to the comparison operators. The name is taken here too: the call rule, an injection, would otherwise read it as a function's.",
+      "name": "meta.type.arguments.phaenon",
+      "begin": "(?<![$\\w\\\\]|->|::)\\b(new)\\s+(\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)(<)(?=[^;{}$'\\\"]*>)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.new.php"
+        },
+        "2": {
+          "patterns": [
+            {
+              "include": "source.php#class-name"
+            }
+          ]
+        },
+        "3": {
+          "name": "punctuation.definition.typeparameters.begin.phaenon"
+        }
+      },
+      "end": ">",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.typeparameters.end.phaenon"
+        }
+      },
+      "patterns": [
+        {
+          "match": ",",
+          "name": "punctuation.separator.delimiter.php"
+        },
+        {
+          "include": "#type"
+        }
+      ]
+    },
+    "generic-call": {
+      "comment": "Type arguments of a call: first<User>($rows), $box->get<Address>(…), Collection::of<User>(…).",
+      "patterns": [
+        {
+          "name": "meta.type.arguments.phaenon",
+          "begin": "(\\??->|::)\\s*([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)(<)(?=[^;{}$'\\\"]*>\\s*\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.operator.class.php"
+            },
+            "2": {
+              "name": "entity.name.function.php"
+            },
+            "3": {
+              "name": "punctuation.definition.typeparameters.begin.phaenon"
+            }
+          },
+          "end": ">",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.typeparameters.end.phaenon"
+            }
+          },
+          "patterns": [
+            {
+              "match": ",",
+              "name": "punctuation.separator.delimiter.php"
+            },
+            {
+              "include": "#type"
+            }
+          ]
+        },
+        {
+          "name": "meta.type.arguments.phaenon",
+          "begin": "(?<![$\\w\\\\]|->|::)(\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)(<)(?=[^;{}$'\\\"]*>\\s*\\()",
+          "beginCaptures": {
+            "1": {
+              "patterns": [
+                {
+                  "include": "source.php#namespace"
+                },
+                {
+                  "match": "[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*",
+                  "name": "entity.name.function.php"
+                }
+              ]
+            },
+            "2": {
+              "name": "punctuation.definition.typeparameters.begin.phaenon"
+            }
+          },
+          "end": ">",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.typeparameters.end.phaenon"
+            }
+          },
+          "patterns": [
+            {
+              "match": ",",
+              "name": "punctuation.separator.delimiter.php"
+            },
+            {
+              "include": "#type"
+            }
+          ]
+        }
+      ]
+    },
+    "readonly": {
+      "comment": "readonly before a type PHP's property rule cannot read (map<string, int>).",
+      "match": "(?<![$\\w\\\\]|->|::)\\breadonly\\b(?=\\s)",
+      "name": "storage.modifier.php"
+    },
+    "nullable-generic": {
+      "comment": "The ? of a property's ?map<string, int>: PHP's property rule cannot read the type, and its ternary rule would take the ? and wait for a : that never comes.",
+      "match": "\\?(?=\\s*\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*<[^;{}$'\\\"]*>)",
+      "name": "keyword.operator.nullable-type.php"
+    }
+  }
 }

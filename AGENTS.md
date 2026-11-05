@@ -71,6 +71,9 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   reformat of the whole file; `PhaenonIndentOptionsProvider` keeps a `.phn` indented with spaces
   (D21); `PhaenonSettings` (Settings | Languages & Frameworks | Phaenon) holds the binary and build
   on save (`PhaenonLspTest`, `PhaenonLayoutTest`, the latter with `PHAENON_PHN`).
+- `textmate/phaenon/` is the TextMate bundle for IDEs without the PHP plugin
+  (`PhaenonTextMateBundleProvider`); its grammar and language configuration are verbatim copies of
+  `../vscode`'s, which that repository's tests compare: refresh by copying, never edit.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
   `syntax/Constructs.phn` uses every Phaenon construct; `types/` holds the erased-type fixtures,
   `closure/` the closure-type ones, `classstring/` the `class<T>` ones, `php86/` the PHP 8.6 ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).

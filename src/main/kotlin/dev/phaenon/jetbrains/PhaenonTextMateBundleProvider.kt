@@ -7,7 +7,9 @@ import java.nio.file.Path
 
 /**
  * Highlighting-only fallback: a TextMate grammar for `.phn` that wraps the stock `source.php`
- * grammar (PHP code without the HTML/open-tag outer layer).
+ * grammar (PHP code without the HTML/open-tag outer layer) and adds Phaenon's syntax as injections.
+ * The grammar and the language configuration are verbatim copies of the VS Code extension's
+ * (`phaenonlang/vscode`), whose tests compare them: refresh them by copying.
  *
  * In PhpStorm this bundle is registered but never wins: the PHP file type claims `.phn`, and the
  * TextMate plugin only takes over extensions nobody else owns. It matters in IDEs where the PHP
