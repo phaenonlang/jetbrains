@@ -109,6 +109,24 @@ object PhaenonCompiler {
     }
 
     /**
+     * Whether a file is installed code: under a `vendor` directory that sits beside a
+     * `composer.json`. The project around that directory reads such a file as vendor code. Opened in
+     * the project's server, the file would be one of the project's own and declare its classes
+     * twice; a server of the package's own would check it without its dependencies, which are
+     * installed beside it. The VS Code extension applies the same rule.
+     */
+    @JvmStatic
+    fun isVendorCode(file: VirtualFile): Boolean {
+        var dir = file.parent
+        while (dir != null) {
+            val up = dir.parent ?: return false
+            if (dir.name == "vendor" && up.findChild("composer.json") != null) return true
+            dir = up
+        }
+        return false
+    }
+
+    /**
      * The `phn` to run in [root]: the setting; else `$PHN_BINARY`; else the project's
      * `vendor/bin/phn`, the compiler the project builds with (design/tooling.md §6.1); else `phn`
      * on the PATH. Null when there is none.

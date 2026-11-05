@@ -71,6 +71,45 @@ class PhaenonLspTest : BasePlatformTestCase() {
         assertEquals("app", PhaenonCompiler.root(project, nested)?.name)
     }
 
+    fun testEachServerTakesItsOwnProjectsFiles() {
+        myFixture.addFileToProject("app/phaenon.json", "{\"roots\": {\"src\": \".src\"}}")
+        myFixture.addFileToProject("app/composer.json", "{}")
+        val own = myFixture.addFileToProject("app/src/Shop.phn", "namespace App;\n").virtualFile
+        myFixture.addFileToProject("app/packages/inner/phaenon.json", "{\"roots\": {\"src\": \".src\"}}")
+        val nested = myFixture.addFileToProject("app/packages/inner/src/Inner.phn", "namespace Inner;\n").virtualFile
+        val app = PhaenonLspServerSupportProvider.serverRoot(project, own)!!
+        val inner = PhaenonLspServerSupportProvider.serverRoot(project, nested)!!
+        assertEquals("app", app.name)
+        assertEquals("inner", inner.name)
+
+        val outer = PhaenonLspServerDescriptor(project, app, "/opt/phn/bin/phn")
+        assertTrue(outer.isSupportedFile(own))
+        assertFalse("a nested project's file is its own server's", outer.isSupportedFile(nested))
+        assertTrue(PhaenonLspServerDescriptor(project, inner, "/opt/phn/bin/phn").isSupportedFile(nested))
+    }
+
+    fun testInstalledCodeHasNoServer() {
+        myFixture.addFileToProject("app/phaenon.json", "{\"roots\": {\"src\": \".src\"}}")
+        myFixture.addFileToProject("app/composer.json", "{}")
+        val own = myFixture.addFileToProject("app/src/Shop.phn", "namespace App;\n").virtualFile
+        myFixture.addFileToProject("app/vendor/acme/lib/phaenon.json", "{\"roots\": {\"src\": \".src\"}}")
+        myFixture.addFileToProject("app/vendor/acme/lib/composer.json", "{}")
+        val installed = myFixture.addFileToProject("app/vendor/acme/lib/src/Lib.phn", "namespace Acme;\n").virtualFile
+        // A directory named vendor is installed code only beside a composer.json.
+        val notInstalled = myFixture.addFileToProject("app/src/vendor/Seller.phn", "namespace App;\n").virtualFile
+
+        assertTrue(PhaenonCompiler.isVendorCode(installed))
+        assertFalse(PhaenonCompiler.isVendorCode(own))
+        assertFalse(PhaenonCompiler.isVendorCode(notInstalled))
+        assertNull(PhaenonLspServerSupportProvider.serverRoot(project, installed))
+        val app = PhaenonLspServerSupportProvider.serverRoot(project, own)!!
+        assertEquals(app, PhaenonLspServerSupportProvider.serverRoot(project, notInstalled))
+        assertFalse(
+            "the project reads it as vendor code",
+            PhaenonLspServerDescriptor(project, app, "/opt/phn/bin/phn").isSupportedFile(installed),
+        )
+    }
+
     fun testABuildOnSaveReadsInTheStatusBar() {
         fun build(json: String) = PhaenonBuild.of(JsonParser.parseString(json).asJsonObject)
         val clean = build("""{"files": 800, "written": 3, "withheld": 0, "durationMs": 1061}""")

@@ -33,16 +33,29 @@ import java.nio.charset.StandardCharsets
  * it what the PSI answers. It is the project's own compiler ([PhaenonCompiler.binary]), started
  * when a `.phn` opens, and with build on save on ([PhaenonSettings]) it writes the outputs after
  * each save; the status bar shows the last build.
+ *
+ * One server runs per project, in its directory ([serverRoot]), and each takes its own project's
+ * files only: a project inside another's directory gets a server of its own, whose files the outer
+ * one would otherwise check too, and installed code gets none.
  */
 class PhaenonLspServerSupportProvider : LspServerSupportProvider {
     override fun fileOpened(project: Project, file: VirtualFile, serverStarter: LspServerSupportProvider.LspServerStarter) {
-        if (!PhaenonFiles.isPhaenonFile(file)) return
-        val root = PhaenonCompiler.root(project, file)?.takeIf { java.io.File(it.path).isDirectory } ?: return
+        val root = serverRoot(project, file)?.takeIf { java.io.File(it.path).isDirectory } ?: return
         val binary = PhaenonCompiler.binary(project, root) ?: return
         serverStarter.ensureServerStarted(PhaenonLspServerDescriptor(project, root, binary))
     }
 
     companion object {
+        /**
+         * The directory of the server a file belongs to: its project's ([PhaenonCompiler.root]).
+         * Null for a file that is not a `.phn`, and for installed code
+         * ([PhaenonCompiler.isVendorCode]), which the PSI alone reads.
+         */
+        @JvmStatic
+        fun serverRoot(project: Project, file: VirtualFile): VirtualFile? =
+            if (!PhaenonFiles.isPhaenonFile(file) || PhaenonCompiler.isVendorCode(file)) null
+            else PhaenonCompiler.root(project, file)
+
         init {
             PhaenonRestart.languageServer = { project ->
                 LspServerManager.getInstance(project).stopAndRestartIfNeeded(PhaenonLspServerSupportProvider::class.java)
@@ -55,7 +68,10 @@ class PhaenonLspServerSupportProvider : LspServerSupportProvider {
 class PhaenonLspServerDescriptor(project: Project, private val root: VirtualFile, private val binary: String) :
     ProjectWideLspServerDescriptor(project, "Phaenon") {
 
-    override fun isSupportedFile(file: VirtualFile): Boolean = PhaenonFiles.isPhaenonFile(file)
+    // PhpStorm offers a file to every server whose descriptor supports it: this one takes its own
+    // project's.
+    override fun isSupportedFile(file: VirtualFile): Boolean =
+        PhaenonLspServerSupportProvider.serverRoot(project, file) == root
 
     override fun createCommandLine(): GeneralCommandLine =
         GeneralCommandLine(binary, "lsp").withWorkDirectory(root.path).withCharset(StandardCharsets.UTF_8)

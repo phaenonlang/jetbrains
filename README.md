@@ -274,7 +274,11 @@ setting wherever the code runs, and still step by compiled line.
 ## The checker in the editor: `phn lsp`
 
 With a `phn` at hand, the plugin starts the compiler's language server, `phn lsp`, when a `.phn`
-opens (design/tooling.md §6.2, §6.5):
+opens (design/tooling.md §6.2, §6.5, §6.6):
+- **One server per project**, in the directory of the nearest `phaenon.json` (else `composer.json`),
+  and each takes only its own project's files: a project inside another's directory has its own
+  server. Installed code, a `.phn` under a `vendor/` beside a `composer.json`, has none; the project
+  around it reads it as vendor code.
 - **Its findings show as you type**, in the file being edited, against the whole project with the
   open buffers as they are. A save re-checks the whole project. P1005, a tab where Phaenon wants
   spaces, comes with a quick-fix.
@@ -501,8 +505,9 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   `.php` is not. `PhaenonSteppingTest`: when a step is repeated.
 - `PhaenonLspTest`: the server is the project's compiler, `phn lsp` in the project's directory,
   asked for diagnostics only, with build on save as the setting says; the compiler is the setting,
-  else the project's `vendor/bin/phn`; the project is the nearest `phaenon.json`; a build on save
-  reads in the status bar.
+  else the project's `vendor/bin/phn`; the project is the nearest `phaenon.json`; each server takes
+  its own project's files, a nested project's going to its own; installed code has no server; a
+  build on save reads in the status bar.
 - `PhaenonLayoutTest`: a `.phn` indents with spaces when the PHP style uses tabs (a `.php` keeps
   them); without a `phn`, Reformat Code is PhpStorm's alone; with one (`PHAENON_PHN`), it writes the
   first layer, a reformat of a range leaves the rest alone, and the compiler's format goldens and
