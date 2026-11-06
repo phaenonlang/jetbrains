@@ -139,7 +139,7 @@ object PhaenonCompiler {
             val launcher = if (SystemInfo.isWindows) "vendor/bin/phn.bat" else "vendor/bin/phn"
             File(root.path, launcher).takeIf { it.isFile }?.let { return it.path }
         }
-        return PathEnvironmentVariableUtil.findInPath(if (SystemInfo.isWindows) "phn.exe" else "phn")?.path
+        return PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("phn")?.path
     }
 
     /**

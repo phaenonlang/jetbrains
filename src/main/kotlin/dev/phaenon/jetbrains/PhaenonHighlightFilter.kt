@@ -359,10 +359,16 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
             PhpBundle.message("inspection.message.attribute.can.t.be.applied.to.because.it.doest.contains", "\u0000", "\u0000")
                 .let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
 
-        val READONLY_DEFAULT: String = PhpBundle.message("readonly.property.cannot.have.default.value")
-        val ENUM_DEBUG_INFO: String = PhpBundle.message("enum.may.not.include.0", "__debugInfo")
-        val TEMPORARY_IN_WRITE: String = PhpBundle.message("cant.use.temporary.expression.in.write.context")
-        val PHP86_ONLY: Set<String> = setOf(READONLY_DEFAULT, ENUM_DEBUG_INFO, TEMPORARY_IN_WRITE)
+        /**
+         * Looked up by key, null where this PhpStorm has none: a key goes when a PhpStorm learns
+         * the construct (2026.3 dropped the readonly default's), and a finding it no longer reports
+         * needs no filtering. [PhpBundle.message] on a missing key would fail this object's
+         * initialisation and with it every rule above.
+         */
+        val READONLY_DEFAULT: String? = phpMessage("readonly.property.cannot.have.default.value")
+        val ENUM_DEBUG_INFO: String? = phpMessage("enum.may.not.include.0", "__debugInfo")
+        val TEMPORARY_IN_WRITE: String? = phpMessage("cant.use.temporary.expression.in.write.context")
+        val PHP86_ONLY: Set<String> = setOfNotNull(READONLY_DEFAULT, ENUM_DEBUG_INFO, TEMPORARY_IN_WRITE)
 
         /** A message of PhpStorm's bundle, or null when this PhpStorm does not have the key. */
         private fun phpMessage(key: String, vararg arguments: Any): String? {
