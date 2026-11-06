@@ -1,4 +1,4 @@
-namespace Tequila\Tq\Dev;
+namespace Acme\Shop\Payments;
 
 final class Plain
 {

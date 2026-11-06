@@ -1,0 +1,51 @@
+namespace Acme\Shop\Payments;
+
+/**
+ * A checkout: a gateway request held as `Closure(string...): (int, string)`, a logger as
+ * `Closure(string, int=): void`. The closure literals assigned here are what PhpStorm infers the
+ * properties from as well, and it encodes the literal's variadic as `string[]`.
+ */
+final class Checkout
+{
+    private Closure(string...): (int, string) $request;
+    private Closure(string, int=): void $log;
+    private Closure(string...): bool $accept;
+    private Closure(string...): void $notify;
+    private Closure(string, string...): (int, string) $post;
+
+    fun __construct(
+        ?Closure(string...): (int, string) $request = null,
+        ?Closure(string, int=): void $log = null,
+    ) {
+        $this->request = $request ?? static fn (string ...$args): array => [0, ''];
+        $this->log = $log ?? static fn (string $line, int $level = 0) => null;
+        $this->accept = static fn (string ...$names): bool => true;
+        $this->notify = static fn (string ...$lines) => null;
+        $this->post = static fn (string $body, string ...$args): array => [0, ''];
+    }
+
+    fun pay(string $order): int
+    {
+        [$code] = ($this->request)('post', 'charges', $order);
+        ($this->log)('charged');
+        ($this->log)('charged', 1);
+        ($this->accept)('a', 'b');
+        ($this->notify)('a', 'b', 'c');
+        ($this->post)('body', 'refunds', 'create', 'now');
+
+        return $code;
+    }
+
+    fun wrong(): void
+    {
+        ($this->request)([]);
+        ($this->log)('charged', []);
+    }
+
+    static fun first(Closure(string...): (int, string) $request): int
+    {
+        [$status] = $request('get', 'charges');
+
+        return $status;
+    }
+}

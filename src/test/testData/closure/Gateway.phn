@@ -1,0 +1,40 @@
+namespace Acme\Shop\Payments;
+
+final class Gateway
+{
+    private readonly Closure(string...): (int, string) $request;
+
+    fun __construct(
+        private readonly Closure(string): bool $accept,
+        ?Closure(string...): (int, string) $request = null,
+    ) {
+        $this->request = $request ?? self::request([]);
+    }
+
+    fun charges(): string
+    {
+        [$code, $body] = ($this->request)('get', 'charges');
+
+        return ($this->accept)($body) ? $body : '';
+    }
+
+    static fun line(Closure(string...): (int, string) $request): ?string
+    {
+        return null;
+    }
+
+    fun either(int|Closure(int): bool $test): bool
+    {
+        return \is_int($test) ? $test > 0 : $test(1);
+    }
+
+    private static fun request(list<map<string, mixed>> $responses): Closure(string...): (int, string)
+    {
+        return static fn (string ...$args): array => [0, ''];
+    }
+}
+
+interface Transport
+{
+    fun transport(): Closure(string...): (int, string);
+}

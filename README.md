@@ -362,10 +362,10 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
 
 `src/test` runs the plugin inside the IntelliJ test framework with the real PHP plugin loaded.
 
-- `PhaenonFileTest`: `.phn` files are PHP files with a Phaenon root; the real Phaenon sources from
-  the Tequila platform under `testData/reflector` lex as PHP code (no inline-HTML token), parse
-  without errors and build stubs consistent with their text; the editor highlighter starts in code
-  mode; completion offers PHP members; classes declared in `.phn` files resolve from both `.phn` and
+- `PhaenonFileTest`: `.phn` files are PHP files with a Phaenon root; the sources of the
+  `tequila/reflection` library, migrated to Phaenon, under `testData/reflector` lex as PHP code (no
+  inline-HTML token), parse without errors and build stubs consistent with their text; the editor
+  highlighter starts in code mode; completion offers PHP members; classes declared in `.phn` files resolve from both `.phn` and
   `.php` files; a stray `<?php` is reported; reformatting leaves a well-formatted file untouched;
   plain `.php` files still start in HTML mode.
 - `PhaenonSyntaxTest`: `testData/syntax/Constructs.phn` uses every Phaenon construct and parses
@@ -384,19 +384,19 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   named `Closure`, completes the `\Closure` methods, and declares the same types as the
   `\Closure(…)` spelling; an import of `Closure` stays used; a `Closure` without a signature
   resolves as in PHP. The signature is PhpStorm's own reading of the docblock spelling; a call on
-  tq-cli's `Closure(string...): (int, string) $kubectl` is checked per argument, though PhpStorm also
+  a `Closure(string...): (int, string) $request` is checked per argument, though PhpStorm also
   holds its `string[]` encoding of the literal assigned to it, and `[$status] = …` is `int|string`.
   PhpStorm indexes its bundled PHP stubs only for a project with a PHP module, which the test
   project is not: `closure/stubs/Closure.php` stands in for PHP's `\Closure`.
-- `PhaenonHierarchyTest`: `testData/hierarchy/` after tequila/core's `AggregateRepository<Id of
-  AggregateId, T of Aggregate>` and its event-sourced implementation: a type parameter is typed as
+- `PhaenonHierarchyTest`: `testData/hierarchy/`, an `AggregateRepository<Id of AggregateId, T of
+  Aggregate>` and its event-sourced implementation: a type parameter is typed as
   its bound (`?T`, `int|T`, `list<T>`, a property) and resolves members against it; the repository
   as it reads today (`save(Aggregate $aggregate)`) and with `save(T $aggregate)` raise no
   hierarchy finding; real incompatibilities are reported with the erased types (a `string`
   parameter or return, a narrower bound against a non-generic parent, a raw `implements`, a
   missing parameter), in `.phn` and in a `.php` implementing the interface; type arguments
   substitute through `Box<int>` and `Middle<U> extends Box<list<U>>`; a native type equal to the
-  parent's erasure inherits (mongodb-odm's normalizers, core's `Command<TResult>` buses).
+  parent's erasure inherits (a document mapper's normalizers, a bus of `Command<TResult>`).
 - `PhaenonClassStringTest`: `class<T>` and `class<User>` as return, parameter and property: the
   type is `class-string<Bound>` alone for the method, the call and the variable; static calls,
   `new`, constants and `::class` resolve against the class, a class-string passes for a `string`;
@@ -428,9 +428,9 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   the imports.
 - `PhaenonFormattingTest` (PSR-12 style): `.phn` files get the plugin's formatter and `.php` files
   PhpStorm's; PHP in a `.phn` file is formatted exactly as in a `.php` file formatted with the
-  canonical brace placement (`formatting/Plain.phn`, tequila/core's compiled repository class with
-  its indentation lost); functions', methods' and closures' braces move to their line in a `.phn`,
-  a class's, an interface's, a trait's and an enum's to a line of their own (an anonymous class
+  canonical brace placement (`formatting/Plain.phn`, a generic repository class as `phn build`
+  compiles it, with its indentation lost); functions', methods' and closures' braces move to their
+  line in a `.phn`, a class's, an interface's, a trait's and an enum's to a line of their own (an anonymous class
   keeps its brace on the line), and a `.php` keeps PSR-12's; an empty function or method body is
   `{}` on the declaration's line from either brace placement, `{ }` and after a multi-line
   parameter list or a `throws` clause, while a body with a comment or a statement, a body after a
@@ -440,17 +440,17 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   comment, keeps its brace on a line of its own and an anonymous class is PhpStorm's; under
   PhpStorm's PER style the result is the same; `formatting/Erased.phn`, every
   erased construct with its spacing and indentation spoilt, gives `Erased.after.phn` with each
-  construct as written; tequila/core's `AbstractEventSourcedRepository.phn` comes back from lost
-  indentation as Reformat Code leaves the original; Enter indents the new line; an import added by
-  completion gets a line of its own.
+  construct as written; `formatting/AbstractLedgerBackedRepository.phn`, that repository's source,
+  comes back from lost indentation as Reformat Code leaves the original; Enter indents the new line;
+  an import added by completion gets a line of its own.
 - `PhaenonDocCommentTest`: Enter after a docblock's opening over a method whose types are declared,
   erased ones included, gives `/** <caret> */`; an untyped parameter keeps its `@param`, on one line;
   a typed property gets no `@var`; a `throws` clause takes PhpStorm's `@throws` for the exceptions
   it names and leaves the others; a class's empty stub is one line; a `.php` file keeps PhpStorm's
   stub.
 - `PhaenonOverridesTest`: Implement Methods and Override Methods in `testData/implement/` (an
-  interface with type parameters and an abstract class passing them on, with expression bodies,
-  shaped after tequila/core's repositories) give `UserRepository.implement.after.phn`, `UserRepository.override.after.phn` and
+  interface with type parameters and an abstract class passing them on, with expression bodies)
+  give `UserRepository.implement.after.phn`, `UserRepository.override.after.phn` and
   `Repo.after.phn`: `fun`, `protected fun`, the parent's types with the class's type arguments, a
   method's own type parameter kept, a class a type names imported, the parent's `throws` clause and
   a PHP parent's bare `@throws` written as a clause, braces on the declarations' lines, a docblock of
@@ -465,7 +465,7 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   conversion is offered and keeps the methods; functions become callables and a call with more
   arguments an arrow function.
 - `PhaenonConcurrencyTest`: a statement block parses as a block and `concurrently(…)` calls stay;
-  `testData/concurrency/Blocks.phn`, after tq-cli's `CiIdentityCommand`, parses blocks used as
+  `testData/concurrency/Blocks.phn` parses blocks used as
   values and spawns as closures without a syntax error, raises no undefined or unused variable,
   return-type or unused-result finding for the enclosing scope's variables while a typo in a block
   is still undefined, types the block's value, `spawn expr` as `Amp\Future<User>` (and its
@@ -559,7 +559,7 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
 - **Phaenon types are modelled as PhpStorm can hold them.** A `list<User>` is `User[]`; a
   `map<K, V>` is `V[]`, its key type lost; `bytes` is `string`, so a variable holding one of them
   reads `User[]` or `string` in its hover, where a declaration reads as written; a tuple is
-  the union of its element arrays, so `$pair[0]` and `[$code] = $kubectl(…)` are `A|B` rather
+  the union of its element arrays, so `$pair[0]` and `[$code] = $request(…)` are `A|B` rather
   than `A` (PhpStorm keeps positions only for docblock shapes it reads from the PSI, and types the
   compiled `@var \Closure(string...): array{int, string}` call as `mixed`); a type parameter is its
   bound; type arguments of user generics (`Box<User>`) are dropped, so `$box->get()` has the bound
@@ -654,10 +654,10 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   construct is not formatted: `fun get(): ?T` keeps whatever spacing is inside `: ?T`, and
   `type X = map<A,B>;` stays as written, since the formatter sees each construct as one token. A
   construct counts towards the line length, so a line PHP would not wrap can wrap in `.phn` (an
-  `implements` list with type arguments past 120 columns). PhpStorm's PSR-12 style is not the
-  php-cs-fixer configuration of the Tequila packages (concatenation and cast spacing, `fn (`, line
-  wrapping), and its formatter re-indents the arguments of a call it wrapped when run a second
-  time; both are so in `.php` files too. Two spots in PhpStorm compare the root node against PHP's
+  `implements` list with type arguments past 120 columns). PhpStorm's PSR-12 style is not a
+  project's php-cs-fixer configuration, which may space concatenations, casts and `fn (` and wrap
+  lines otherwise, and its formatter re-indents the arguments of a call it wrapped when run a
+  second time; both are so in `.php` files too. Two spots in PhpStorm compare the root node against PHP's
   own file element type by identity (top-level folding, dead-code entry points); a corner case
   there would show up as a folding difference, not as broken analysis.
 - **The line map reaches positions, not every label.** The Frames list labels a compiled frame with

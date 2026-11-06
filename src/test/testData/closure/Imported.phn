@@ -1,10 +1,10 @@
-namespace Tequila\Tq\Dev;
+namespace Acme\Shop\Payments;
 
 use Closure;
 
 final class Imported
 {
-    fun __construct(private readonly Closure(string...): (int, string) $kubectl)
+    fun __construct(private readonly Closure(string...): (int, string) $request)
     {
     }
 }

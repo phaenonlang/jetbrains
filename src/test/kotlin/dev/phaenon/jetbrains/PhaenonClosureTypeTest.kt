@@ -38,8 +38,8 @@ import java.io.File
  * reads `Closure(` as a type form and writes `\Closure`. PhpStorm would resolve a bare `Closure`
  * in the file's namespace, so the plugin erases the bare spelling with its signature and gives the
  * declaration `\Closure` back; `\Closure(…)` keeps its name. A `Closure` without a signature is
- * PHP's and resolves as in PHP. The fixtures sit in `namespace Tequila\Tq\Dev`, as the dogfood
- * file that showed "Undefined class 'Closure'" does.
+ * PHP's and resolves as in PHP. The fixtures sit in a namespace, `Acme\Shop\Payments`, where a
+ * bare `Closure` read as PHP is "Undefined class 'Closure'".
  */
 class PhaenonClosureTypeTest : BasePlatformTestCase() {
 
@@ -58,7 +58,7 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
             PhpMissingParamTypeInspection::class.java,
             PhpMissingReturnTypeInspection::class.java,
         )
-        myFixture.configureByFiles("closure/Kubectl.phn")
+        myFixture.configureByFiles("closure/Gateway.phn")
 
         val findings = myFixture.doHighlighting()
             .filter { it.severity.myVal >= HighlightSeverity.WEAK_WARNING.myVal }
@@ -69,44 +69,44 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
     }
 
     fun testABareClosureTypeIsTheClosureClass() {
-        myFixture.configureByFiles("closure/Kubectl.phn")
+        myFixture.configureByFiles("closure/Gateway.phn")
 
         val types = types(myFixture.file) { (it as PhpTypedElement).type }
 
         // The signature travels as PhpStorm encodes a docblock `\Closure(…): …`; a tuple result is
         // the plugin's tuple, the union of its element arrays.
-        val kubectl = closure(listOf("\\string"), "\\int[]", "\\string[]")
+        val request = closure(listOf("\\string"), "\\int[]", "\\string[]")
         assertEquals("promoted parameter", listOf("\\Closure", closure(listOf("\\string"), "\\bool")), types["__construct(\$accept)"])
-        assertEquals("nullable parameter", listOf("\\Closure", kubectl, "\\null"), types["__construct(\$kubectl)"])
-        assertEquals("parameter", listOf("\\Closure", kubectl), types["line(\$kubectl)"])
+        assertEquals("nullable parameter", listOf("\\Closure", request, "\\null"), types["__construct(\$request)"])
+        assertEquals("parameter", listOf("\\Closure", request), types["line(\$request)"])
         assertEquals("union member", listOf("\\Closure", closure(listOf("\\int"), "\\bool"), "\\int"), types["either(\$test)"])
-        assertEquals("return type without a body", listOf("\\Closure", kubectl), types["runner()"])
+        assertEquals("return type without a body", listOf("\\Closure", request), types["transport()"])
         assertEquals("the promoted property, read to call it", listOf("\\Closure", closure(listOf("\\string"), "\\bool")), types["->accept"])
         // An erased declaration has no type of its own to PhpStorm, which adds what it infers from
         // the assignments and the body (README § Limitations): the closure's own `\Closure<…>`,
-        // and `mixed` through `$kubectl ?? …` on a parameter it sees as untyped.
-        for (key in listOf("\$kubectl", "->kubectl", "kubectl()")) {
+        // and `mixed` through `$request ?? …` on a parameter it sees as untyped.
+        for (key in listOf("\$request", "->request", "request()")) {
             val type = types.getValue(key)
             assertTrue("$key: $type", "\\Closure" in type && type.all { it.startsWith("\\Closure") || it == "\\mixed" })
         }
     }
 
     fun testTheQualifiedSpellingDeclaresTheSameTypes() {
-        val bare = types(myFixture.configureByFiles("closure/Kubectl.phn").single(), ::declaredType)
+        val bare = types(myFixture.configureByFiles("closure/Gateway.phn").single(), ::declaredType)
         val qualified = types(myFixture.configureByText("Qualified.phn", qualifiedCopy()), ::declaredType)
 
         assertEquals(bare, qualified)
     }
 
     fun testABareClosureTypeNavigatesToPhpsClosureBesideANamespaceClassNamedClosure() {
-        myFixture.configureByFiles("closure/Kubectl.phn", "closure/Decoy.phn")
+        myFixture.configureByFiles("closure/Gateway.phn", "closure/Decoy.phn")
         val bareTargets = closureTargets()
         myFixture.configureByText("Qualified.phn", qualifiedCopy())
         val qualifiedTargets = closureTargets()
 
         assertEquals(List(7) { "\\Closure" to "/src/stubs/Closure.php" }, bareTargets)
         assertEquals(bareTargets, qualifiedTargets)
-        val decoy = PhpIndex.getInstance(project).getClassesByFQN("\\Tequila\\Tq\\Dev\\Closure").single()
+        val decoy = PhpIndex.getInstance(project).getClassesByFQN("\\Acme\\Shop\\Payments\\Closure").single()
         val uses = myFixture.findUsages(decoy).filterNot { it.isNonCodeUsage }.map { it.file?.name to it.element?.text }
         assertEmpty("the bare spelling is no use of the namespace's Closure", uses)
     }
@@ -138,7 +138,7 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
         val parameter = PsiTreeUtil.findChildOfType(myFixture.file, Parameter::class.java)!!
 
         assertEquals(listOf("Closure"), undefined)
-        assertEquals(listOf("\\Tequila\\Tq\\Dev\\Closure"), parameter.type.global(project).types.sorted())
+        assertEquals(listOf("\\Acme\\Shop\\Payments\\Closure"), parameter.type.global(project).types.sorted())
         assertEmpty(PsiTreeUtil.collectElementsOfType(myFixture.file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) })
     }
 
@@ -161,15 +161,15 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
         // "Parameter type 'string' is not compatible with 'string[]'". The arguments that fit the
         // declared parameter are not reported; the ones that do not still are.
         myFixture.enableInspections(PsalmAdvanceCallableParamsInspection::class.java, PhpParamsInspection::class.java)
-        myFixture.configureByFiles("closure/DevUp.phn")
+        myFixture.configureByFiles("closure/Checkout.phn")
 
         val findings = myFixture.doHighlighting()
             .filter { it.severity.myVal >= HighlightSeverity.WEAK_WARNING.myVal }
             .map { it.text to myFixture.editor.document.getLineNumber(it.startOffset) + 1 }
 
         assertEquals(listOf("[]" to 41, "[]" to 42), findings)
-        val kubectl = PsiTreeUtil.findChildrenOfType(myFixture.file, Field::class.java).single { it.name == "kubectl" }
-        val held = kubectl.type.global(project).typesWithParametrisedParts.filter { it.startsWith("\\Closure<") }
+        val request = PsiTreeUtil.findChildrenOfType(myFixture.file, Field::class.java).single { it.name == "request" }
+        val held = request.type.global(project).typesWithParametrisedParts.filter { it.startsWith("\\Closure<") }
         assertTrue("PhpStorm's own encoding of the literal is there too: $held", held.any { "\\string[]" in it })
     }
 
@@ -177,7 +177,7 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
         // Which `\Closure<…>` of a property PhpStorm checks a call against depends on the order of its
         // type set; PhpStorm 2026 also encodes a first-class callable's variadic as an array. The filter
         // decides on the declared signature whichever one was picked.
-        myFixture.configureByFiles("closure/DevUp.phn")
+        myFixture.configureByFiles("closure/Checkout.phn")
         val text = myFixture.editor.document.text
         fun finding(argument: String, declared: String): HighlightInfo {
             val start = text.indexOf(argument)
@@ -188,9 +188,9 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
         }
 
         val filter = PhaenonHighlightFilter()
-        assertFalse("a string for `string...`", filter.accept(finding("'get', 'namespace', \$ns", "string[]"), myFixture.file))
-        assertFalse("the second string for `string...`", filter.accept(finding("'namespace', \$ns", "string[]"), myFixture.file))
-        assertFalse("the variadic after a first parameter", filter.accept(finding("'apply', '-f'", "string[]"), myFixture.file))
+        assertFalse("a string for `string...`", filter.accept(finding("'post', 'charges', \$order", "string[]"), myFixture.file))
+        assertFalse("the second string for `string...`", filter.accept(finding("'charges', \$order", "string[]"), myFixture.file))
+        assertFalse("the variadic after a first parameter", filter.accept(finding("'refunds', 'create'", "string[]"), myFixture.file))
         assertTrue("an array for `string...`", filter.accept(finding("[]);", "string[]"), myFixture.file))
     }
 
@@ -199,7 +199,7 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
         // `[$status]` is `int|string`: no `mixed` and no `string[]`. PhpStorm keeps positions only
         // for docblock shapes it reads from the PSI; its own reading of the compiled
         // `@var \Closure(string...): array{int, string}` types `$status` as `mixed`.
-        myFixture.configureByFiles("closure/DevUp.phn")
+        myFixture.configureByFiles("closure/Checkout.phn")
 
         val status = PsiTreeUtil.findChildrenOfType(myFixture.file, Variable::class.java).first { it.name == "status" }
 
@@ -215,10 +215,10 @@ class PhaenonClosureTypeTest : BasePlatformTestCase() {
             }
         }
 
-    /** `closure/Kubectl.phn` with every closure type written `\Closure(…)`, in a namespace of its own. */
+    /** `closure/Gateway.phn` with every closure type written `\Closure(…)`, in a namespace of its own. */
     private fun qualifiedCopy(): String =
-        File(testDataPath, "closure/Kubectl.phn").readText()
-            .replace("namespace Tequila\\Tq\\Dev;", "namespace Tequila\\Tq\\Qualified;")
+        File(testDataPath, "closure/Gateway.phn").readText()
+            .replace("namespace Acme\\Shop\\Payments;", "namespace Acme\\Shop\\Qualified;")
             .replace(Regex("""(?<![\\\w])Closure\("""), "\\\\Closure(")
             .also { assertEquals(7, Regex("""\\Closure\(""").findAll(it).count()) }
 

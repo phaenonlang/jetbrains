@@ -172,7 +172,7 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
 
     /**
      * Whether the argument PhpStorm flagged fits the parameter a Phaenon closure type declares for
-     * it: `($this->kubectl)('get')` with `Closure(string...): (int, string) $kubectl`.
+     * it: `($this->request)('get')` with `Closure(string...): (int, string) $request`.
      */
     private fun argumentFitsPhaenonClosure(info: HighlightInfo, file: PsiFile): Boolean {
         val leaf = file.findElementAt(info.startOffset) ?: return false
@@ -195,7 +195,7 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         }
     }
 
-    /** The property or parameter a called expression reads: `($this->kubectl)`, `$kubectl`. */
+    /** The property or parameter a called expression reads: `($this->request)`, `$request`. */
     private fun closureDeclaration(callee: PsiElement?): PhpNamedElement? {
         var expression = callee
         while (expression is ParenthesizedExpression) expression = expression.argument

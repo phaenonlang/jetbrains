@@ -28,7 +28,7 @@ final class Blocks
     fun __construct(private Users $users) {}
 
     /**
-     * tq-cli's CiIdentityCommand: a block as a value, a block task per name.
+     * The names that exist: a block as a value, a block task per name.
      *
      * @param list<string> $names
      * @return list<string>

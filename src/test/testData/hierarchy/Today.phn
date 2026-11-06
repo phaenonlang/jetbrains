@@ -1,7 +1,7 @@
 namespace App;
 
 /**
- * tequila/core's AbstractEventSourcedRepository as it reads today: `save()` spells the parent's
+ * An event-sourced repository as code migrated from PHP spells it: `save()` takes the parent's
  * erased type, `Aggregate`, and keeps `T` in the docblock.
  */
 abstract readonly class AbstractEventSourcedRepository<Id of AggregateId, T of EventSourcedAggregate> implements AggregateRepository<Id, T>

@@ -1,4 +1,4 @@
-namespace Tequila\Tq\Dev;
+namespace Acme\Shop\Payments;
 
 /** A class of the namespace named Closure, which a bare closure type never means. */
 final class Closure

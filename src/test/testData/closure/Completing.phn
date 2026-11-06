@@ -1,13 +1,13 @@
-namespace Tequila\Tq\Dev;
+namespace Acme\Shop\Payments;
 
 final class Completing
 {
-    fun __construct(private readonly Closure(string...): (int, string) $kubectl)
+    fun __construct(private readonly Closure(string...): (int, string) $request)
     {
     }
 
     fun run(): void
     {
-        $this->kubectl-><caret>
+        $this->request-><caret>
     }
 }

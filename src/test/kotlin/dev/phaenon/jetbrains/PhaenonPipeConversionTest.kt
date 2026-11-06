@@ -34,15 +34,15 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
             }
         }
 
-        final class DevUp
+        final class Receipt
         {
             public function __construct(private Out ${'$'}output)
             {
             }
 
-            public function run(string ${'$'}ns): void
+            public function run(string ${'$'}order): void
             {
-                ${'$'}this->output->writeln(Style::line(sprin<caret>tf('✓ namespace %s', ${'$'}ns)));
+                ${'$'}this->output->writeln(Style::line(sprin<caret>tf('✓ order %s', ${'$'}order)));
             }
         }
     """.trimIndent() + "\n"
@@ -71,7 +71,7 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
     fun testPhpStormsFixTurnsMethodCallsIntoTheirQualifiersInAPhpFile() {
         val inspection = phpStormsInspection() ?: return
         myFixture.enableInspections(inspection)
-        myFixture.configureByText("DevUp.php", "<?php\n$body")
+        myFixture.configureByText("Receipt.php", "<?php\n$body")
 
         myFixture.launchAction(myFixture.availableIntentions.single { it.text == "Convert nested function calls to a pipe expression" })
 
@@ -84,14 +84,14 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
     fun testAPhnFileGetsTheConversionThatKeepsTheMethods() {
         if (!pipesExist()) return
         phpStormsInspection()?.let { myFixture.enableInspections(it) }
-        myFixture.configureByText("DevUp.phn", body.replace("public function", "fun"))
+        myFixture.configureByText("Receipt.phn", body.replace("public function", "fun"))
 
         assertEquals("PhpStorm's fix is replaced, not doubled", 1, conversions().size)
         myFixture.launchAction(myFixture.availableIntentions.single { it.text == "Convert nested function calls to a pipe expression" })
 
         val text = myFixture.editor.document.text
-        val pipe = text.substringAfter("fun run(string \$ns): void\n    {\n").substringBefore("\n    }")
-        assertEquals("sprintf('✓ namespace %s', \$ns) |> Style::line(...) |> \$this->output->writeln(...);", pipe.trim().replace(Regex("\\s*\\n\\s*"), " "))
+        val pipe = text.substringAfter("fun run(string \$order): void\n    {\n").substringBefore("\n    }")
+        assertEquals("sprintf('✓ order %s', \$order) |> Style::line(...) |> \$this->output->writeln(...);", pipe.trim().replace(Regex("\\s*\\n\\s*"), " "))
     }
 
     fun testFunctionsBecomeCallablesAndACallWithMoreArgumentsAnArrowFunction() {

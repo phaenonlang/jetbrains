@@ -46,8 +46,8 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
     }
 
     fun testPhpInAPhnFileIsFormattedAsInAPhpFileBracesAside() {
-        // Plain.phn is PHP only (the compiled AbstractEventSourcedRepository.php of tequila/core),
-        // with its indentation and some spacing lost.
+        // Plain.phn is PHP only (AbstractLedgerBackedRepository.phn as `phn build` compiles it, its open
+        // tag, banner, strict_types and line map left out), with its indentation and some spacing lost.
         val source = File(testDataPath, "formatting/Plain.phn").readText()
 
         val phn = reformatted("Plain.phn", source)
@@ -65,9 +65,9 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         }
 
         assertEquals(php, phn)
-        assertTrue(phn.contains("\nabstract readonly class AbstractEventSourcedRepository implements AggregateRepository\n{\n"))
-        assertTrue(phn.contains("\n    public function get(AggregateId \$id): ?EventSourcedAggregate {\n        \$events = "))
-        assertTrue(phn.contains("\n        if (0 === count(\$events)) {\n"))
+        assertTrue(phn.contains("\nabstract readonly class AbstractLedgerBackedRepository implements ItemRepository\n{\n"))
+        assertTrue(phn.contains("\n    public function find(ItemCode \$code): ?StockedItem {\n        \$entries = "))
+        assertTrue(phn.contains("\n        if (0 === count(\$entries)) {\n"))
     }
 
     fun testOpeningBracesOfDeclarationsStandOnTheirLine() {
@@ -318,17 +318,19 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         assertEmpty(PsiTreeUtil.collectElementsOfType(myFixture.file, PsiErrorElement::class.java))
     }
 
-    fun testARealSourceComesBackFromLostIndentation() {
-        // tequila/core's AbstractEventSourcedRepository.phn with every line indented by one space
-        // (column 0 would keep its line comments there, as PhpStorm keeps them in PHP). The result
-        // is the source as php-cs-fixer left it, except that PhpStorm's PSR-12 style wraps the two
-        // lines longer than 120 columns; the erased type parameters stay on their declarations.
-        val source = File(testDataPath, "formatting/AbstractEventSourcedRepository.phn").readText()
+    fun testARepositoryComesBackFromLostIndentation() {
+        // AbstractLedgerBackedRepository.phn, a generic repository with its braces where PSR-12
+        // puts them, with every line indented by one space (column 0 would keep its line comments
+        // there, as PhpStorm keeps them in PHP). The result is the source in Phaenon's layout (the
+        // methods' braces on their line, the empty constructor `{}`), except that PhpStorm's PSR-12
+        // style wraps the two lines longer than 120 columns; the erased type parameters stay on their
+        // declarations.
+        val source = File(testDataPath, "formatting/AbstractLedgerBackedRepository.phn").readText()
         val flat = source.lines().joinToString("\n") { if (it.isBlank()) it else " " + it.trimStart() }
 
-        val restored = reformatted("AbstractEventSourcedRepository.phn", flat)
+        val restored = reformatted("AbstractLedgerBackedRepository.phn", flat)
 
-        assertEquals(File(testDataPath, "formatting/AbstractEventSourcedRepository.after.phn").readText(), restored)
+        assertEquals(File(testDataPath, "formatting/AbstractLedgerBackedRepository.after.phn").readText(), restored)
         assertEquals(restored, reformatted("Source.phn", source))
     }
 
