@@ -15,8 +15,8 @@ import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
  * the classes those types name imported. A `.php` file keeps PhpStorm's PHP.
  *
  * The parents are `testData/implement/AggregateRepository.phn` (an interface with type parameters)
- * and `AbstractEventSourcedRepository.phn` (an abstract class implementing it), shaped after
- * tequila/core's; their classes are in `Model.phn`. Without a dialog the actions take every candidate.
+ * and `AbstractEventSourcedRepository.phn` (an abstract class implementing it); their classes are
+ * in `Model.phn`. Without a dialog the actions take every candidate.
  */
 class PhaenonOverridesTest : BasePlatformTestCase() {
 

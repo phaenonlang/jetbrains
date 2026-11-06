@@ -1,0 +1,62 @@
+namespace Acme\Shop\Inventory\Storage;
+
+use Acme\Shop\Inventory\Item\Item;
+use Acme\Shop\Inventory\Item\ItemCode;
+use Acme\Shop\Inventory\Item\ItemMissing;
+use Acme\Shop\Inventory\Item\ItemRepository;
+use Acme\Shop\Inventory\Item\StockedItem;
+use Acme\Shop\Inventory\Ledger\Ledger;
+use Acme\Shop\Inventory\Ledger\LedgerRegistry;
+
+abstract readonly class AbstractLedgerBackedRepository<Code of ItemCode, T of StockedItem> implements ItemRepository<Code, T>
+{
+    abstract protected static fun itemClass(): class<T>;
+
+    fun __construct(private LedgerRegistry $ledgers)
+    {
+    }
+
+    fun find(Code $code): ?T
+    {
+        $entries = $this->ledger()->entriesFor($code);
+        if (!is_array($entries) && !$entries instanceof \Countable) {
+            $entries = iterator_to_array($entries);
+        }
+        if (0 === count($entries)) {
+            return null;
+        }
+        $class = static::itemClass();
+
+        return $class::fromLedger($code, $entries);
+    }
+
+    /**
+     * @throws ItemMissing
+     */
+    fun get(Code $code): T
+    {
+        return $this->find($code) ?? throw new ItemMissing(static::itemClass(), $code);
+    }
+
+    fun store(T $item): void
+    {
+        $itemClass = static::itemClass();
+        if (!$item instanceof $itemClass) {
+            throw new \InvalidArgumentException(sprintf('This repository keeps "%s" items only and cannot store a "%s" in their place.', $itemClass, $item::class));
+        }
+        $entries = $item->unrecordedEntries();
+        if ([] === $entries) {
+            // No stock moved: storing an item whose count is what it was when it was found
+            // is a no-op, not a failure — the ledger refuses an empty append, so storing
+            // makes none.
+            return;
+        }
+        $this->ledger()->record($item->lastEntry(), ...$entries);
+        $item->markEntriesRecorded();
+    }
+
+    protected fun ledger(): Ledger
+    {
+        return $this->ledgers->ledgerOf(static::itemClass());
+    }
+}

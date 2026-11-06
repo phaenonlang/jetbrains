@@ -1,0 +1,95 @@
+# CI (README.md, "Build" and "Tests"): every pull request into main and every
+# push to main. One job builds the compiler from phaenonlang/phaenon's main
+# into a sibling directory, where the layout tests look for it, then runs the
+# plugin's suite and the Plugin Verifier.
+#
+# What runs on the runner:
+#   - `./gradlew test`, the whole suite inside a headless PhpStorm of
+#     gradle.properties' platformVersion. PHAENON_PHN names the compiler built
+#     here, so PhaenonLayoutTest runs `phn fmt --stdin` and reformats the
+#     compiler's internal/format/testdata goldens (../phaenon from this
+#     checkout).
+#   - `./gradlew verifyPlugin`, the built zip against the PhpStorm the plugin
+#     is built against, failing at the levels build.gradle.kts sets.
+#   - Skipped for want of their variables: the runs over whole Phaenon trees
+#     (PHAENON_TREES) and the line map against a real Xdebug (PHAENON_XDEBUG).
+#     The tests of a newer PhpStorm's behaviour return early on platformVersion;
+#     they need -PtestIdePath and an installed IDE.
+#
+# The compiler's repository is checked out with this workflow's own token,
+# which reads this repository and public ones only. While phaenonlang/phaenon
+# is private that step fails; once it is public the job needs no other token
+# and no secret.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+jobs:
+  plugin:
+    name: Test and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: jetbrains
+      - uses: actions/checkout@v7
+        with:
+          repository: phaenonlang/phaenon
+          ref: main
+          path: phaenon
+      - uses: actions/setup-go@v7
+        with:
+          # The toolchain line, which setup-go prefers to the go line.
+          go-version-file: phaenon/go.mod
+          # The compiler has no module requirements and builds in seconds.
+          cache: false
+      - name: Build the compiler
+        working-directory: phaenon
+        run: |
+          go build -o bin/phn ./cmd/phn
+          echo "PHAENON_PHN=$GITHUB_WORKSPACE/phaenon/bin/phn" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          # Gradle's caches hold the PhpStorm distribution the tests run in;
+          # gradle.properties names its version.
+          cache: gradle
+          cache-dependency-path: |
+            jetbrains/*.gradle.kts
+            jetbrains/gradle.properties
+            jetbrains/gradle/wrapper/gradle-wrapper.properties
+          # Not the build cache: a test result from it would not have seen
+          # the compiler's main, which is no input of the test task.
+          cache-path: |
+            ~/.gradle/caches
+            !~/.gradle/caches/build-cache-1
+          # main's caches are the ones every branch can restore.
+          cache-read-only: ${{ github.event_name != 'push' }}
+      - name: Test
+        working-directory: jetbrains
+        run: ./gradlew test
+      - name: Verify the plugin
+        working-directory: jetbrains
+        run: ./gradlew verifyPlugin
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-reports
+          path: |
+            jetbrains/build/reports/tests/test
+            jetbrains/build/test-results/test
+          if-no-files-found: ignore

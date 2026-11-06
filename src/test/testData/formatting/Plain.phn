@@ -1,75 +1,79 @@
-namespace Tequila\Core\EventSourcing\Repository;
+namespace Acme\Shop\Inventory\Storage;
 
-use Tequila\Core\Domain\Aggregate\Aggregate;
-use Tequila\Core\Domain\Aggregate\AggregateId;
-use Tequila\Core\Domain\Repository\AggregateNotFound;
-use Tequila\Core\Domain\Repository\AggregateRepository;
-use Tequila\Core\EventSourcing\Aggregate\EventSourcedAggregate;
-use Tequila\Core\EventSourcing\EventStore\EventStore;
-use Tequila\Core\EventSourcing\EventStore\EventStoreFactory;
+use Acme\Shop\Inventory\Item\Item;
+use Acme\Shop\Inventory\Item\ItemCode;
+use Acme\Shop\Inventory\Item\ItemMissing;
+use Acme\Shop\Inventory\Item\ItemRepository;
+use Acme\Shop\Inventory\Item\StockedItem;
+use Acme\Shop\Inventory\Ledger\Ledger;
+use Acme\Shop\Inventory\Ledger\LedgerRegistry;
 
 /**
-* @template Id of AggregateId
-* @template T of EventSourcedAggregate
-* @implements AggregateRepository<Id, T>
+* @template Code of ItemCode
+* @template T of StockedItem
+* @implements ItemRepository<Code, T>
 */
-abstract readonly class AbstractEventSourcedRepository implements AggregateRepository
+abstract readonly class AbstractLedgerBackedRepository implements ItemRepository
 {
-/** @return class-string<T> */
-abstract protected static function aggregateClass(): string;
+/**
+* @return class-string<T>
+*/
+abstract protected static function itemClass(): string;
 
-public function __construct(private EventStoreFactory $eventStoreFactory)
+public function __construct(private LedgerRegistry $ledgers)
 {
 }
 
 /**
-* @param Id $id
+* @param Code $code
 * @return ?T
 */
-public function get(AggregateId $id): ?EventSourcedAggregate
+public function find(ItemCode $code): ?StockedItem
 {
-$events = $this->eventStore()->load($id);
-if(!is_array($events) && !$events instanceof \Countable){
-$events = iterator_to_array($events);
+$entries = $this->ledger()->entriesFor($code);
+if(!is_array($entries) && !$entries instanceof \Countable){
+$entries = iterator_to_array($entries);
 }
-if(0 === count($events)){
+if(0 === count($entries)){
 return null;
 }
-$class = static::aggregateClass();
+$class = static::itemClass();
 
-return $class::rebuildFromHistory($id, $events);
+return $class::fromLedger($code, $entries);
 }
 
 /**
-* @param Id $id
+* @param Code $code
 * @return T
-* @throws AggregateNotFound
+* @throws ItemMissing
 */
-public function load(AggregateId $id): EventSourcedAggregate
+public function get(ItemCode $code): StockedItem
 {
-return $this->get($id) ?? throw new AggregateNotFound(static::aggregateClass(), $id);
+return $this->find($code) ?? throw new ItemMissing(static::itemClass(), $code);
 }
 
-/** @param T $aggregate */
-public function save(Aggregate $aggregate): void
+/**
+* @param T $item
+*/
+public function store(Item $item): void
 {
-$aggregateClass = static::aggregateClass();
-if(!$aggregate instanceof $aggregateClass){
-throw new \InvalidArgumentException(sprintf('This repository only works with "%s" instances, "%s given".', $aggregateClass, $aggregate::class));
+$itemClass = static::itemClass();
+if(!$item instanceof $itemClass){
+throw new \InvalidArgumentException(sprintf('This repository keeps "%s" items only and cannot store a "%s" in their place.', $itemClass, $item::class));
 }
-$events = $aggregate->getUncommittedEvents();
-if([] === $events){
-// Nothing happened: a command that found the aggregate already in the state it asked
-// for is idempotent, not an error — the event store's "at least one event" guard is
-// for callers that append, and a save of no change appends nothing.
+$entries = $item->unrecordedEntries();
+if([] === $entries){
+// No stock moved: storing an item whose count is what it was when it was found
+// is a no-op, not a failure — the ledger refuses an empty append, so storing
+// makes none.
 return;
 }
-$this->eventStore()->appendAfter($aggregate->chainHead(), ...$events);
-$aggregate->clearUncommittedEvents();
+$this->ledger()->record($item->lastEntry(), ...$entries);
+$item->markEntriesRecorded();
 }
 
-protected function eventStore(): EventStore
+protected function ledger(): Ledger
 {
-return $this->eventStoreFactory->get(static::aggregateClass());
+return $this->ledgers->ledgerOf(static::itemClass());
 }
 }

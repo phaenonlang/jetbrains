@@ -1,4 +1,4 @@
-namespace Tequila\Tq\Docs;
+namespace Acme\Shop\Docs;
 
 final class Spelled
 {

@@ -31,7 +31,7 @@ private readonly map<string, list<Event<T>>>   $streams;
         return $items[0] ?? null;
     }
 
-    fun kubectl(Closure(string, int=): void $log):Closure(string, string...): (int, string)
+    fun request(Closure(string, int=): void $log):Closure(string, string...): (int, string)
     {
         return static fn (string $stdin, string ...$args): array => [0, $stdin];
     }

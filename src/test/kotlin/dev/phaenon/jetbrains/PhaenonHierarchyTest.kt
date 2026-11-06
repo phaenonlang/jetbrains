@@ -16,9 +16,9 @@ import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 
 /**
  * A type parameter erases to its bound, and an override is judged with the types the compiler
- * writes. The fixtures (`testData/hierarchy/`) follow tequila/core's `AggregateRepository<Id of
- * AggregateId, T of Aggregate>` and `AbstractEventSourcedRepository<Id, T of
- * EventSourcedAggregate>`, where PhpStorm reported "Declaration must be compatible with
+ * writes. The fixtures (`testData/hierarchy/`) model an event-sourced repository,
+ * `AggregateRepository<Id of AggregateId, T of Aggregate>` and `AbstractEventSourcedRepository<Id,
+ * T of EventSourcedAggregate>`, where PhpStorm reported "Declaration must be compatible with
  * AggregateRepository->save(aggregate: mixed)": to PhpStorm the interface's `save(T $aggregate)`
  * had no type at all.
  */

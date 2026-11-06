@@ -117,7 +117,7 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
     }
 
     fun testKeywordNamedMethodsTakeTypeParameters() {
-        // PHP lets a method carry a reserved word as its name; `function for<U>` is one in tequila/core.
+        // PHP lets a method carry a reserved word as its name, `function for<U>` among them.
         val file = myFixture.configureByText(
             "Keyword.phn",
             "final class Scenario<T>\n{\n    public static function for<U of Aggregate>(class<U> \$class, ?Id \$id = null): self<U>\n    {\n        return new self(\$class, \$id);\n    }\n\n    public function list<U>(list<U> \$xs): static { return \$this; }\n\n    public function run(): void\n    {\n        \$a = Scenario::for<Order>(Order::class);\n        \$b = \$this->list<int>([1]);\n        \$c = \$a?->list<int>([1]);\n    }\n}\n",

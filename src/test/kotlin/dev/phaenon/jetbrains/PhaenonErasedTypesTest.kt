@@ -52,7 +52,7 @@ class PhaenonErasedTypesTest : BasePlatformTestCase() {
                     private readonly class<User> ${'$'}userClass,
                     private readonly \Closure(T): bool ${'$'}pred,
                     private readonly \Closure(string, int=): void ${'$'}log,
-                    private readonly \Closure(string, string...): (int, string) ${'$'}kubectl,
+                    private readonly \Closure(string, string...): (int, string) ${'$'}request,
                     private readonly T ${'$'}item,
                     private readonly User|list<int> ${'$'}mixed,
                 ) {
@@ -81,7 +81,7 @@ class PhaenonErasedTypesTest : BasePlatformTestCase() {
         assertEquals(listOf("\\class-string<\\App\\User>"), types["userClass"])
         assertEquals(listOf("\\Closure", closure(listOf("\\mixed"), "\\bool")), types["pred"])
         assertEquals(listOf("\\Closure", closure(listOf("\\string", "\\int"), "\\void")), types["log"])
-        assertEquals(listOf("\\Closure", closure(listOf("\\string", "\\string"), "\\int[]", "\\string[]")), types["kubectl"])
+        assertEquals(listOf("\\Closure", closure(listOf("\\string", "\\string"), "\\int[]", "\\string[]")), types["request"])
         assertEquals(listOf("\\mixed"), types["item"])
         assertEquals(listOf("\\App\\User", "\\int[]"), types["mixed"])
         assertEquals(listOf("\\array"), types["xs"])

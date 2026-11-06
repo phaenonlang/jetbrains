@@ -1,0 +1,54 @@
+# The PR-level release contract (CONTRIBUTING.md, "Pull requests";
+# .github/scripts/pr-semantics.sh has the rules and their reasons): a
+# Conventional Commit title, Conventional Commits, and the title's release
+# impact equal to the highest of the commits'. Pull requests are squash-merged,
+# so the title is the commit on main that the next release is read from.
+#
+# `edited` is in the trigger on purpose: retitling a PR runs the gate again.
+# Started by hand (workflow_dispatch) on a branch, the gate finds the open PR
+# from that branch into main.
+name: PR semantics
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-semantics-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Conventional title ↔ commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: PR semantics gate
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PR_NUMBER" ]]; then
+            PR_NUMBER=$(gh pr list -R "$REPO" --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+            if [[ -z "$PR_NUMBER" ]]; then
+              echo "::error::no open pull request into main from $BRANCH"
+              exit 1
+            fi
+            export PR_NUMBER
+          fi
+          bash .github/scripts/pr-semantics.sh

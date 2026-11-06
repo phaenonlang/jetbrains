@@ -30,8 +30,8 @@ import com.jetbrains.php.lang.psi.elements.Variable
  * `concurrently` and `spawn` (design/concurrency.md §4, §6, §11). A block used as a statement
  * parses as a block; a block used as a value, `spawn { … }` and `spawn expr` parse as the closures
  * they compile to ([PhaenonLexer], [PhaenonBlocks]), with the findings PhpStorm draws from that
- * closure's scope filtered and the values typed (`testData/concurrency/Blocks.phn`, after tq-cli's
- * `CiIdentityCommand`). Members and functions called concurrently or spawn are untouched. The
+ * closure's scope filtered and the values typed (`testData/concurrency/Blocks.phn`, a fan-out
+ * over names among others). Members and functions called concurrently or spawn are untouched. The
  * editor highlighter colours the two words as keywords (a `concurrently(…)` call cannot be told
  * from a block by one token, and is coloured too).
  */

@@ -26,7 +26,7 @@ import com.jetbrains.php.lang.psi.elements.Variable
 
 /**
  * `class<T>` is PHPStan's `class-string<T>`: a static call, `new`, a constant read on it name the
- * class, here `T`'s bound. tequila/core's repository reported "Method 'rebuildFromHistory' not
+ * class, here `T`'s bound. A generic repository reported "Method 'rebuildFromHistory' not
  * found" on `$class::rebuildFromHistory(…)` with `$class = static::aggregateClass()` and
  * `aggregateClass(): class<T>`; then `$class: string|string` in its hover, the type having been
  * `string` plus the class-string. The type is now the one

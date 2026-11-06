@@ -1,6 +1,6 @@
 <?php
 
-namespace Tequila\Tq\Docs;
+namespace Acme\Shop\Docs;
 
 final class Docblock
 {
@@ -10,6 +10,6 @@ final class Docblock
     /** @var \Closure(string...): bool */
     private \Closure $accept;
 
-    /** @var \Closure(int|string): \Tequila\Tq\Docs\Docblock */
+    /** @var \Closure(int|string): \Acme\Shop\Docs\Docblock */
     private \Closure $find;
 }
