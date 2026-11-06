@@ -1,0 +1,115 @@
+# Releases are cut by merging release-please's release PR. On every push to
+# main, release-please (release-please-config.json,
+# .release-please-manifest.json) keeps one PR open, "chore(main): release
+# X.Y.Z", whose version (build.gradle.kts) and CHANGELOG.md entry come from
+# the Conventional Commits since the last release. Merging the PR is the
+# release: the push of its squash commit runs this workflow, release-please
+# tags the commit vX.Y.Z and makes the GitHub release, and the publish job
+# builds the plugin from the tag, runs the Plugin Verifier on it, puts the
+# zip onto the release and uploads it to the JetBrains Marketplace, whose
+# change notes for the version are CHANGELOG.md's entry.
+#
+# Why the publish runs here rather than on the tag: release-please creates
+# the tag through the API with this workflow's GITHUB_TOKEN, and nothing that
+# token creates starts a workflow (GitHub's recursion guard), so a `push:
+# tags` workflow would never run. A token of another identity for
+# release-please would lift that, at the price of a secret to keep and
+# rotate.
+#
+# Run by hand with a tag, the workflow publishes an existing release again:
+# the zip goes onto the release if it is not there yet, and to the
+# Marketplace if the token is set. The first version of a plugin is uploaded
+# by hand on plugins.jetbrains.com, which creates the listing; the token
+# (JETBRAINS_MARKETPLACE_TOKEN, a Marketplace token of the vendor) publishes
+# the versions after it, and until it is set the Marketplace step is skipped.
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'An existing release to publish again, e.g. v0.2.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
+    permissions:
+      contents: write # the release PR's branch, the tag and the release
+      pull-requests: write # the release PR
+      issues: write # its autorelease labels
+    outputs:
+      created: ${{ steps.release-please.outputs.release_created }}
+      tag: ${{ steps.release-please.outputs.tag_name }}
+    steps:
+      - name: release-please
+        id: release-please
+        uses: googleapis/release-please-action@v5
+
+  publish:
+    needs: release
+    if: ${{ !cancelled() && ((needs.release.result == 'success' && needs.release.outputs.created == 'true') || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # the release's assets
+    env:
+      TAG: ${{ inputs.tag || needs.release.outputs.tag }}
+      PUBLISH_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+    steps:
+      - name: The tag names a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json tagName --jq .tagName
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            *.gradle.kts
+            gradle.properties
+            gradle/wrapper/gradle-wrapper.properties
+          cache-path: |
+            ~/.gradle/caches
+            !~/.gradle/caches/build-cache-1
+          cache-read-only: true
+      - name: Build and verify the plugin
+        id: built
+        run: |
+          set -euo pipefail
+          ./gradlew buildPlugin verifyPlugin
+          zip="build/distributions/phaenon-jetbrains-${TAG#v}.zip"
+          if [ ! -f "$zip" ]; then
+            echo "::error::$TAG built $(ls build/distributions), not $(basename "$zip"): the tag and build.gradle.kts's version differ"
+            exit 1
+          fi
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+      - name: Put the zip onto the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP: ${{ steps.built.outputs.zip }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx "$(basename "$ZIP")"; then
+            echo "$TAG already carries $(basename "$ZIP")"
+          else
+            gh release upload "$TAG" "$ZIP" -R "$GITHUB_REPOSITORY"
+          fi
+      - name: Publish to the JetBrains Marketplace
+        if: env.PUBLISH_TOKEN != ''
+        run: ./gradlew publishPlugin
