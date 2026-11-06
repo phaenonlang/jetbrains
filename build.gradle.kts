@@ -8,7 +8,8 @@ plugins {
 }
 
 group = providers.gradleProperty("pluginGroup").get()
-version = providers.gradleProperty("pluginVersion").get()
+// release-please bumps this line in its release PR (release-please-config.json); the tag is v<version>.
+version = "0.2.0" // x-release-please-version
 
 kotlin {
     // PhpStorm 2025.1+ runs on JBR 21, so the plugin targets Java 21 bytecode.
@@ -49,7 +50,10 @@ intellijPlatform {
     pluginConfiguration {
         id = "dev.phaenon.jetbrains"
         name = "Phaenon"
-        version = providers.gradleProperty("pluginVersion")
+        version = project.version.toString()
+        // The Marketplace's change notes are CHANGELOG.md's newest entry, which release-please writes
+        // from the Conventional Commits of the release; plugin.xml carries none.
+        changeNotes = provider { changeNotesFromChangelog() }
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
             // No upper bound: the plugin only uses stable PHP plugin APIs.
@@ -59,6 +63,13 @@ intellijPlatform {
             name = "Phaenon"
             url = "https://phaenon.dev"
         }
+    }
+
+    publishing {
+        // publishPlugin uploads the zip to the JetBrains Marketplace (.github/workflows/release.yml);
+        // the token is a Marketplace token of the vendor. The first version of a plugin is uploaded by
+        // hand on plugins.jetbrains.com; the token publishes the versions after it.
+        token = providers.environmentVariable("PUBLISH_TOKEN")
     }
 
     pluginVerification {
@@ -79,6 +90,46 @@ intellijPlatform {
             providers.gradleProperty("localIdePath").orNull?.let { local(file(it)) }
         }
     }
+}
+
+// CHANGELOG.md's newest entry (from its first "## " heading to the next) as the HTML the Marketplace
+// shows: release-please's Markdown is headings, bullets of "**scope:** subject ([sha](url))" and
+// paragraphs, which is all this renders.
+fun changeNotesFromChangelog(): String {
+    val lines = layout.projectDirectory.file("CHANGELOG.md").asFile.readLines()
+    val start = lines.indexOfFirst { it.startsWith("## ") }
+    if (start < 0) return ""
+    val next = lines.drop(start + 1).indexOfFirst { it.startsWith("## ") }
+    val entry = lines.subList(start, if (next < 0) lines.size else start + 1 + next)
+    fun inline(text: String) = text
+        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace(Regex("""`([^`]+)`"""), "<code>$1</code>")
+        .replace(Regex("""\*\*([^*]+)\*\*"""), "<b>$1</b>")
+        .replace(Regex("""\[([^\]]+)]\(([^)\s]+)\)"""), "<a href=\"$2\">$1</a>")
+    val html = StringBuilder()
+    var item: StringBuilder? = null
+    var paragraph: StringBuilder? = null
+    fun flush() {
+        item?.let { html.append("<li>").append(inline(it.toString().trim())).append("</li>\n"); item = null }
+        paragraph?.let { html.append("<p>").append(inline(it.toString().trim())).append("</p>\n"); paragraph = null }
+    }
+    for (line in entry) {
+        when {
+            line.startsWith("## ") -> { flush(); html.append("<h3>").append(inline(line.removePrefix("## "))).append("</h3>\n") }
+            line.startsWith("### ") -> { flush(); html.append("<h4>").append(inline(line.removePrefix("### "))).append("</h4>\n") }
+            line.startsWith("* ") || line.startsWith("- ") -> {
+                flush()
+                if (!html.endsWith("</li>\n")) html.append("<ul>\n")
+                item = StringBuilder(line.substring(2))
+            }
+            line.isBlank() -> { flush(); if (html.endsWith("</li>\n")) html.append("</ul>\n") }
+            item != null -> item!!.append(' ').append(line.trim())
+            else -> (paragraph ?: StringBuilder().also { paragraph = it }).append(' ').append(line.trim())
+        }
+    }
+    flush()
+    if (html.endsWith("</li>\n")) html.append("</ul>\n")
+    return html.toString()
 }
 
 // The TextMate bundle must exist as plain files on disk (the TextMate plugin reads a directory,

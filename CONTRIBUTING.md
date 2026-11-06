@@ -48,6 +48,14 @@ covers.
   PR semantics check holds every pull request to this (`.github/scripts/pr-semantics.sh`); merge
   commits are exempt, and `fixup!` / `squash!` commits are squashed before the merge.
 
+## Releases
+
+A release is cut by merging the release PR that release-please keeps open on `main`
+(`chore(main): release X.Y.Z`): it bumps the version in `build.gradle.kts` and writes the
+`CHANGELOG.md` entry from the merged commits. The merge tags `vX.Y.Z`, makes the GitHub release
+with the zip and publishes the version to the JetBrains Marketplace, with that entry as its change
+notes (`.github/workflows/release.yml`).
+
 ## Licence
 
 Contributions are licensed under the repository's [MIT licence](LICENSE).
