@@ -541,16 +541,17 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   level in; it counts the braces it moved, none in a tree `phn migrate` laid out; files a second pass
   changes again are listed, not counted (PhpStorm re-indents the arguments of a call it wrapped in
   `.php` files as well). The test framework's recursion assertion is off in this test: PhpStorm's own inference
-  has cycles in real code which the IDE resolves silently. Without the variable the test passes
-  trivially:
+  has cycles in real code which the IDE resolves silently. The trees are any Phaenon projects;
+  without the variable the test passes trivially:
+
+  ```bash
+  PHAENON_TREES=/path/to/a/phaenon/project:/path/to/another \
+    ./gradlew test --tests '*RealTree*'
+  ```
+
 `PHAENON_DEBUG_FILES=a.phn:b.phn ./gradlew test --tests '*FileDebug*'` prints each file's parse errors with line
 numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read them from the test report's
 `system-out`.
-
-  ```bash
-  PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper:~/labs/tequila/reflector:~/labs/tequila/tq-cli-phaenon-dogfood \
-    ./gradlew test --tests '*RealTree*'
-  ```
 
 `./gradlew test` is a no-op when nothing changed (build cache); `./gradlew test --rerun` forces a run.
 

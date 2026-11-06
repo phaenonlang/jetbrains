@@ -14,8 +14,8 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
 ./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # tests against an installed, newer IDE
 
-PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm:~/labs/tequila/object-mapper:~/labs/tequila/reflector:~/labs/tequila/tq-cli-phaenon-dogfood \
-  ./gradlew test --tests '*RealTree*'   # parse every .phn of the dogfood trees; skipped when unset
+PHAENON_TREES=/path/to/a/phaenon/project:/path/to/another \
+  ./gradlew test --tests '*RealTree*'   # parse every .phn of any Phaenon trees named; skipped when unset
 PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'   # the line map against a real Xdebug over DBGp; skipped when unset
 PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # Reformat Code with phn fmt --stdin, on the compiler's format goldens
 ```

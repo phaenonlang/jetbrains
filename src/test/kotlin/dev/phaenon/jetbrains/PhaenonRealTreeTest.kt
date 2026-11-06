@@ -34,20 +34,21 @@ import java.io.File
  * Runs the plugin over real Phaenon source trees: every `.phn` file is added to the test project
  * and parsed, stubbed and typed as it would be in the IDE.
  *
- * The fixtures under `testData` cover constructs; this covers volume. The trees are the Tequila
- * packages migrated to Phaenon, which `phn check` parses without a finding, so every syntax error
- * the PHP parser reports on them is an erasure the plugin got wrong — with one exception: PHP
- * syntax newer than the highest language level this PhpStorm knows is an error in `.php` files as
- * well (the pipe operator `|>` of PHP 8.5 in PhpStorm 2025.1, whose levels stop at 8.4). Files
- * using it are skipped and listed when the IDE lacks the level, so that the run stays meaningful
- * on an older IDE and checks them on a newer one.
+ * The fixtures under `testData` cover constructs; this covers volume. The trees are Phaenon
+ * projects that `phn check` parses without a finding (the dogfood: the Tequila platform's
+ * packages migrated to Phaenon), so every syntax error the PHP parser reports on them is an
+ * erasure the plugin got wrong — with one exception: PHP syntax newer than the highest language
+ * level this PhpStorm knows is an error in `.php` files as well (the pipe operator `|>` of PHP 8.5
+ * in PhpStorm 2025.1, whose levels stop at 8.4). Files using it are skipped and listed when the
+ * IDE lacks the level, so that the run stays meaningful on an older IDE and checks them on a newer
+ * one.
  *
  * The test runs only when `PHAENON_TREES` names the trees to scan — colon-separated directories,
  * each walked recursively, `vendor` excluded — and passes trivially otherwise, so that the plain
  * test suite stays self-contained:
  *
  * ```sh
- * PHAENON_TREES=~/labs/tequila/core:~/labs/tequila/mongodb-odm ./gradlew test --tests '*RealTree*'
+ * PHAENON_TREES=/path/to/a/phaenon/project:/path/to/another ./gradlew test --tests '*RealTree*'
  * ```
  *
  * The listing of findings is capped per tree; the totals are not.
@@ -185,7 +186,7 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
      * construct that belongs to its neighbour against it (`Box<T>`, `): T`, `string|list<int>`),
      * and breaks no file that parsed. Files a second pass changes again are listed, not counted:
      * PhpStorm's PHP formatter re-indents the arguments of a call it wrapped on the first pass in
-     * `.php` files as well (the compiled `SitesApi.php` of tq-cli does it as its `.phn` does).
+     * `.php` files as well (a compiled file does it as its `.phn` does).
      *
      * The canonical layout (design/functions.md §5) holds afterwards: the opening brace of every
      * function and method stands on the line of the code before it (unless a comment stands between
