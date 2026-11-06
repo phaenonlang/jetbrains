@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>dev.phaenon.jetbrains</id>
     <name>Phaenon</name>
-    <vendor url="https://github.com/phaenonlang">Phaenon</vendor>
+    <vendor url="https://phaenon.dev">Phaenon</vendor>
 
     <description><![CDATA[
         <p>Support for <b>Phaenon</b> source files (<code>.phn</code>): a typed dialect of PHP that compiles to PHP.</p>
@@ -11,7 +11,21 @@
         highlighting, completion, navigation, refactorings and inspections work exactly as they do for PHP.
         Classes declared in <code>.phn</code> files are indexed and resolvable from PHP files and vice versa.</p>
         <p>Without the PHP plugin, a bundled TextMate grammar still provides syntax highlighting.</p>
+        <p>Source and issues: <a href="https://github.com/phaenonlang/jetbrains">github.com/phaenonlang/jetbrains</a>.
+        The compiler and the language: <a href="https://github.com/phaenonlang">github.com/phaenonlang</a>.</p>
     ]]></description>
+
+    <change-notes><![CDATA[
+        <p>0.2.0: a <code>.phn</code> file is PHP to PhpStorm, so its lexer, parser, indexes and inspections run
+        on it; Phaenon's syntax (generics, <code>list&lt;T&gt;</code>, <code>map&lt;K, V&gt;</code>, tuples,
+        <code>class&lt;T&gt;</code>, closure types, expression bodies and <code>throws</code>,
+        <code>concurrently</code> and <code>spawn</code>, PHP 8.6's partial application) is erased on the way
+        to the parser and its types are given back to completion, navigation, quick documentation and the
+        inspections. In the commercial IDEs the compiler's diagnostics come from <code>phn lsp</code>, which
+        also builds on save; Reformat Code writes Phaenon's layout through <code>phn fmt</code>; and the line
+        map every compiled file carries takes Xdebug's breakpoints, frames and steps, and every position in
+        compiled code a console or a test run shows, to the <code>.phn</code> line.</p>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
     <depends optional="true" config-file="phaenon-php.xml">com.jetbrains.php</depends>

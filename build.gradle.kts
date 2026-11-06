@@ -57,7 +57,7 @@ intellijPlatform {
         }
         vendor {
             name = "Phaenon"
-            url = "https://github.com/phaenonlang"
+            url = "https://phaenon.dev"
         }
     }
 

@@ -307,9 +307,15 @@ spaces (D21), whatever the PHP code style or an `.editorconfig` says.
 
 ## Install
 
-Download `phaenon-jetbrains-<version>.zip` from the releases page (or build it, see below), then in
-PhpStorm: **Settings → Plugins → ⚙ → Install Plugin from Disk…**, pick the zip, restart. Any `.phn`
-file opens as Phaenon.
+The first release, on this repository's releases page and on the JetBrains Marketplace, is coming.
+Until then, build the zip from a checkout (JDK 21, see [Build](#build)):
+
+```bash
+./gradlew buildPlugin        # → build/distributions/phaenon-jetbrains-<version>.zip
+```
+
+then in PhpStorm: **Settings → Plugins → ⚙ → Install Plugin from Disk…**, pick the zip, restart.
+Any `.phn` file opens as Phaenon.
 
 Requires PhpStorm 2025.1 or newer (or another JetBrains IDE 2025.1+ with the PHP plugin for full
 support).
