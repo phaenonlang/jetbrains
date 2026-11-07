@@ -18,8 +18,8 @@ import com.jetbrains.php.lang.inspections.type.PhpParamsInspection
 import com.jetbrains.php.lang.psi.elements.Variable
 
 /**
- * PHP 8.6 in `.phn` files (design/php-versions.md §4, §5). PhpStorm's language levels stop at 8.4
- * (2025.1) and 8.5 (2026.2.3), so each construct is an error to it in plain PHP too:
+ * PHP 8.6 in `.phn` files (design/php-versions.md §4, §5). PhpStorm's language levels stop at 8.5
+ * (2025.3 through 2026.3), so each construct is an error to it in plain PHP too:
  *
  * - `f(?, 1)`, `f(b: ?)`, `$o->m(?)`, `C::m(?)`: "Expected: )" at the `?`, the rest of the
  *   statement in pieces; `f(1, ...)`: "Expected: expression after spread operator";

@@ -16,9 +16,12 @@ import com.intellij.platform.lsp.api.LspServerManager
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.intellij.platform.lsp.api.LspServerSupportProvider
 import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
-import com.intellij.platform.lsp.api.customization.LspCompletionSupport
-import com.intellij.platform.lsp.api.customization.LspFormattingSupport
-import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
+import com.intellij.platform.lsp.api.customization.LspCompletionDisabled
+import com.intellij.platform.lsp.api.customization.LspCustomization
+import com.intellij.platform.lsp.api.customization.LspFormattingDisabled
+import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
+import com.intellij.platform.lsp.api.customization.LspHoverDisabled
+import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.util.Consumer
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 import java.awt.event.MouseEvent
@@ -83,13 +86,14 @@ class PhaenonLspServerDescriptor(project: Project, private val root: VirtualFile
 
     override fun createLsp4jClient(handler: LspServerNotificationsHandler): Lsp4jClient = PhaenonLspClient(handler, project)
 
-    // What the PSI answers. The server does not advertise these either; PhpStorm 2025.1 reads
-    // these properties, later versions their replacements, which the server's capabilities decide.
-    override val lspGoToDefinitionSupport: Boolean get() = false
-    override val lspHoverSupport: Boolean get() = false
-    override val lspCompletionSupport: LspCompletionSupport? get() = null
-    override val lspFormattingSupport: LspFormattingSupport? get() = null
-    override val lspSemanticTokensSupport: LspSemanticTokensSupport? get() = null
+    // What the PSI answers. The server does not advertise these either.
+    override val lspCustomization: LspCustomization get() = object : LspCustomization() {
+        override val goToDefinitionCustomizer get() = LspGoToDefinitionDisabled
+        override val hoverCustomizer get() = LspHoverDisabled
+        override val completionCustomizer get() = LspCompletionDisabled
+        override val formattingCustomizer get() = LspFormattingDisabled
+        override val semanticTokensCustomizer get() = LspSemanticTokensDisabled
+    }
 
     override fun equals(other: Any?): Boolean =
         other is PhaenonLspServerDescriptor && other.root == root && other.binary == binary

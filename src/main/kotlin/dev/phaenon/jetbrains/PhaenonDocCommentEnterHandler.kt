@@ -43,7 +43,7 @@ import com.jetbrains.php.lang.psi.elements.PhpNamedElement
  * after the tag.
  *
  * Calling the registered delegate, rather than the class that writes the stub, keeps the plugin
- * working where PhpStorm moved that work: 2025.1 writes it in `PhpDocEnterHandler`, 2026.2 in a
+ * working where PhpStorm moved that work: 2025.3 writes it in `PhpDocEnterHandler`, 2026.2 in a
  * backend subclass the adapter picks (`BackendPhpDocEnterHandler`).
  */
 class PhaenonDocCommentEnterHandler : EnterHandlerDelegateAdapter() {

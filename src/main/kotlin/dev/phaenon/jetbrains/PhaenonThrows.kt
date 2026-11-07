@@ -37,7 +37,7 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * A clause naming a type parameter, bounded by a Throwable, may stand for any exception and answers
  * all of them. The exceptions are PhpStorm's own: the sets its inspections compute for the site or
  * the function (`PhpUnhandledExceptionInspection.Companion`'s `PsiElement.getExceptionClasses()`,
- * `PhpDocMissingThrowsInspection.getAllUndocumentedExceptions`, public in 2025.1 and 2026.2). When
+ * `PhpDocMissingThrowsInspection.getAllUndocumentedExceptions`, public in 2025.3 and 2026.3). When
  * either is missing, the finding stays.
  */
 object PhaenonThrows {

@@ -39,9 +39,9 @@ import java.io.File
  * packages migrated to Phaenon), so every syntax error the PHP parser reports on them is an
  * erasure the plugin got wrong — with one exception: PHP syntax newer than the highest language
  * level this PhpStorm knows is an error in `.php` files as well (the pipe operator `|>` of PHP 8.5
- * in PhpStorm 2025.1, whose levels stop at 8.4). Files using it are skipped and listed when the
- * IDE lacks the level, so that the run stays meaningful on an older IDE and checks them on a newer
- * one.
+ * below PhpStorm 2025.3, whose levels are the first to reach 8.5). Files using it are skipped and
+ * listed when the IDE lacks the level, so that the run stays meaningful on an older IDE and checks
+ * them on a newer one.
  *
  * The test runs only when `PHAENON_TREES` names the trees to scan — colon-separated directories,
  * each walked recursively, `vendor` excluded — and passes trivially otherwise, so that the plain
@@ -89,7 +89,7 @@ class PhaenonRealTreeTest : BasePlatformTestCase() {
                 val errors = PsiTreeUtil.collectElementsOfType(loaded.file, PsiErrorElement::class.java)
                 if (errors.isNotEmpty() && failsAsPlainPhp(loaded.text, errors)) {
                     // PhpStorm's own parser rejects the same PHP at the same places (`[...$a][0]`
-                    // on 2025.1): not the plugin's erasure, listed and not counted.
+                    // on 2025.3): not the plugin's erasure, listed and not counted.
                     phpStormFailsToo.add("${loaded.relative}:${line(loaded.text, errors.first().textOffset)}")
                 } else if (errors.isNotEmpty()) {
                     filesWithErrors++

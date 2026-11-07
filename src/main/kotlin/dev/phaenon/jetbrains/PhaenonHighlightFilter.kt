@@ -74,8 +74,8 @@ import com.jetbrains.php.lang.psi.elements.Variable
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
  * some other declaration is hand-written.
  *
- * PHP 8.6 (design/php-versions.md §4), which PhpStorm 2025.1 and 2026.2 do not know — their
- * language levels stop at 8.4 and 8.5:
+ * PHP 8.6 (design/php-versions.md §4), which no PhpStorm knows, 2025.3 through 2026.3 — their
+ * language levels stop at 8.5:
  *
  * - a partial application's `?` is a constant to PhpStorm ([PhaenonLexer]), "undefined", and its
  *   trailing `...` "a spread without an expression"; in a constant expression it is "not allowed",

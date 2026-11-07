@@ -146,7 +146,7 @@ class PhaenonClassStringTest : BasePlatformTestCase() {
         myFixture.copyFileToProject("classstring/ClassString.phn")
         myFixture.configureByFiles("classstring/Plain.php")
 
-        // PhpStorm prints a class-string as `string` (2025.1 and 2026.2); with a native `string`
+        // PhpStorm prints a class-string as `string` (2025.3 and 2026.3); with a native `string`
         // beside the docblock, 2026.2 prints both members: `string|string`. A .php file is
         // PhpStorm's to print.
         assertEquals("\$docOnly : string", hint("\$docOnly =", 1))
