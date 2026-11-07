@@ -20,6 +20,12 @@ kotlin {
         // writes coroutine debug metadata that library rejects: with the IDE's coroutine debug
         // probes installed, a suspended coroutine of the plugin then never resumes.
         apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+        // No DefaultImpls bridges: in the compatibility modes the compiler adds, to a class
+        // implementing a platform interface, an override of each default method it inherits,
+        // which calls the interface's default. For a deprecated default (StatusBarWidget's
+        // getPresentation(PlatformType)) the bridge is a usage of deprecated API the Plugin
+        // Verifier reports. Nothing compiled outside this plugin calls its interfaces.
+        jvmDefault.set(org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY)
     }
 }
 
