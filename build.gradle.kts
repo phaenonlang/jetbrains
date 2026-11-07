@@ -12,14 +12,21 @@ group = providers.gradleProperty("pluginGroup").get()
 version = "0.2.1" // x-release-please-version
 
 kotlin {
-    // PhpStorm 2025.1+ runs on JBR 21, so the plugin targets Java 21 bytecode.
+    // PhpStorm 2025.3+ runs on JBR 21, so the plugin targets Java 21 bytecode.
     jvmToolchain(21)
     compilerOptions {
-        // The plugin runs on the Kotlin standard library the IDE bundles, 2.1 in PhpStorm 2025.1.
-        // A newer API version lets the compiler call library functions that are not there, and it
+        // The plugin runs on the Kotlin standard library the IDE bundles, 2.2 in PhpStorm 2025.3;
+        // the API version stays at 2.1, which everything here needs. A newer API version than the
+        // library's lets the compiler call library functions that are not there, and it
         // writes coroutine debug metadata that library rejects: with the IDE's coroutine debug
         // probes installed, a suspended coroutine of the plugin then never resumes.
         apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+        // No DefaultImpls bridges: in the compatibility modes the compiler adds, to a class
+        // implementing a platform interface, an override of each default method it inherits,
+        // which calls the interface's default. For a deprecated default (StatusBarWidget's
+        // getPresentation(PlatformType)) the bridge is a usage of deprecated API the Plugin
+        // Verifier reports. Nothing compiled outside this plugin calls its interfaces.
+        jvmDefault.set(org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY)
     }
 }
 
@@ -39,7 +46,13 @@ dependencies {
         if (testIde != null) local(testIde) else phpstorm(providers.gradleProperty("platformVersion"))
         // The PHP plugin provides the lexer, parser and PSI we reuse; the TextMate plugin
         // hosts the highlighting-only fallback. Both are optional at runtime (see plugin.xml).
-        bundledPlugins("com.jetbrains.php", "org.jetbrains.plugins.textmate")
+        // Grazie: since 2025.3 the typo inspection is its GrazieSpellCheckingInspection; the
+        // test IDE has it only when the plugin is loaded. The plugin itself does not depend
+        // on Grazie (plugin.xml declares what it needs).
+        bundledPlugins("com.jetbrains.php", "org.jetbrains.plugins.textmate", "tanvd.grazi")
+        // The spellchecker API is a content module of the platform since 2025.2, no longer in
+        // the core jar the compiler sees by itself.
+        bundledModule("intellij.spellchecker")
         testFramework(TestFrameworkType.Platform)
         pluginVerifier()
     }

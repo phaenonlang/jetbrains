@@ -163,7 +163,8 @@ class PhaenonErasedEditingTest : BasePlatformTestCase() {
     }
 
     fun testErasedConstructsAreNotSpellChecked() {
-        myFixture.enableInspections(com.intellij.spellchecker.inspections.SpellCheckingInspection::class.java)
+        // The typo inspection by its name: since 2025.3 it is Grazie's, and the platform's class is abstract.
+        myFixture.enableInspections(com.intellij.codeInspection.LocalInspectionEP.LOCAL_INSPECTION.extensionList.single { it.shortName == "SpellCheckingInspection" }.instantiateTool())
         myFixture.configureByText("Spelled.phn", "namespace App;\n\n// a xqzvwt word\nfunction f(): list<Xqzvwt>\n{\n    return [];\n}\n")
 
         val typos = myFixture.doHighlighting().filter { it.description.orEmpty().startsWith("Typo") }.map { it.text }

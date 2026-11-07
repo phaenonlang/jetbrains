@@ -52,7 +52,8 @@ import com.jetbrains.php.lang.psi.elements.Variable
  * is public, and so is a property with an asymmetric visibility and no main one: the PSR-12
  * "missing visibility" finding does not apply, and the compiler writes the `public` out.
  * A closure in a constant expression — an attribute argument, a constant, a default — is lowered
- * to the `static function` PHP 8.5 accepts there (§2), so it is not an invalid constant expression.
+ * to the `static function` PHP 8.5 accepts there (§2), so it is not an invalid constant expression,
+ * nor a closure-valued default that "must be declared static" (PhpStorm 2025.3).
  *
  * PhpStorm's "Declaration must be compatible with …" and "Return type declaration must be
  * compatible with …" compare the types declared in the PSI, and an erased type declares none: to
@@ -74,8 +75,8 @@ import com.jetbrains.php.lang.psi.elements.Variable
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
  * some other declaration is hand-written.
  *
- * PHP 8.6 (design/php-versions.md §4), which PhpStorm 2025.1 and 2026.2 do not know — their
- * language levels stop at 8.4 and 8.5:
+ * PHP 8.6 (design/php-versions.md §4), which no PhpStorm knows, 2025.3 through 2026.3 — their
+ * language levels stop at 8.5:
  *
  * - a partial application's `?` is a constant to PhpStorm ([PhaenonLexer]), "undefined", and its
  *   trailing `...` "a spread without an expression"; in a constant expression it is "not allowed",
@@ -300,6 +301,7 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
             "expression.is.not.allowed.as.parameter.default.value",
             "expression.is.not.allowed.as.field.default.value",
             "expression.is.not.allowed.as.static.initializer",
+            "closures.as.default.values.must.be.static", // 2025.3: a non-static closure as a default
         ).map { PhpBundle.message(it) }.toSet()
 
         /** "Return type declaration must be compatible with X : Y", "Declaration must be compatible with X", up to what is filled in. */

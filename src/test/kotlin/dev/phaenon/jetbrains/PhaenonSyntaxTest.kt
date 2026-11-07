@@ -145,8 +145,8 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
 
     fun testPhpSyntaxUnknownToTheIdeIsReportedAsInPhpFiles() {
         // The plugin erases Phaenon, not PHP: what PhpStorm's parser cannot read at its highest
-        // language level (the PHP 8.5 pipe operator in PhpStorm 2025.1) is an error in `.phn` and
-        // `.php` alike, and neither more nor less so.
+        // language level (the PHP 8.5 pipe operator below PhpStorm 2025.3; nothing of PHP 8.5 from
+        // the floor on) is an error in `.phn` and `.php` alike, and neither more nor less so.
         val phn = myFixture.configureByText("Pipe.phn", "function f(array \$xs): array { return \$xs |> array_values(...); }\n")
         val php = myFixture.configureByText("Pipe.php", "<?php\nfunction f(array \$xs): array { return \$xs |> array_values(...); }\n")
 

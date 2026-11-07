@@ -10,7 +10,7 @@ import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
 /**
  * Nested calls to a pipe expression ([PhaenonPipeConversionIntention], [PhaenonPipeQuickFixFilter]).
  *
- * PhpStorm's inspection and quick-fix come with its PHP 8.5 support (2026.2 has them); on the 2025.1 the
+ * PhpStorm's inspection and quick-fix came after its PHP 8.5 support (2026.2 has them); on the 2025.3 the
  * plugin is built against, only the first test runs. The others run against a newer installed
  * IDE: `./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents --tests '*PipeConversion*'`.
  */

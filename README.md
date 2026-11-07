@@ -71,7 +71,7 @@ PhpStorm. A `.phn` file *is* a PHP file to the IDE: PHP file type, PHP language,
 | `PhaenonCompiledLinkFilter` | `consoleFilterProvider` (`order="first"`), `analyzeStacktraceFilter` | Links `path.php:42`, `path.php(42)` and `in path.php on line 42` of compiled files in consoles, the terminal and Analyze Stack Trace to the `.phn` at the forward line, ahead of PhpStorm's own link on the same text. |
 | `PhaenonCompiledEditorProvider` | `fileEditorProvider` | Compiled files with a map open in PhpStorm's text editor wrapped so that a navigation to a position in them — from anywhere but their own focused editor — opens the `.phn` at the forward line instead. |
 | `PhaenonCompiledNotificationProvider` | `editorNotificationProvider` | A banner on a compiled file: its source, a link to the source at the caret's line, a warning when the source changed after the build. |
-| `PhaenonPipeConversionIntention`, `PhaenonPipeQuickFixFilter` | `intentionAction` for PHP, `daemon.intentionActionFilter` | PhpStorm releases with PHP 8.5 (2026.2; not 2025.1) report nested calls that can be a pipe, and its quick-fix writes each one-argument call as its first PSI child plus `(...)` — for a method call the object or class it is called on: `$this->output->writeln(Style::line(sprintf(…)))` becomes `sprintf(…) \|> Style(...) \|> $this->output(...)`, in `.php` files too. In a `.phn` file the filter hides that fix (matched by class name) and the intention converts correctly: `sprintf(…) \|> Style::line(...) \|> $this->output->writeln(...)`, a call with other arguments as a parenthesised arrow function. Available where the project's language level has `\|>`. |
+| `PhaenonPipeConversionIntention`, `PhaenonPipeQuickFixFilter` | `intentionAction` for PHP, `daemon.intentionActionFilter` | PhpStorm releases with the pipe inspection (2026.2; not 2025.3) report nested calls that can be a pipe, and its quick-fix writes each one-argument call as its first PSI child plus `(...)` — for a method call the object or class it is called on: `$this->output->writeln(Style::line(sprintf(…)))` becomes `sprintf(…) \|> Style(...) \|> $this->output(...)`, in `.php` files too. In a `.phn` file the filter hides that fix (matched by class name) and the intention converts correctly: `sprintf(…) \|> Style::line(...) \|> $this->output->writeln(...)`, a call with other arguments as a parenthesised arrow function. Available where the project's language level has `\|>`. |
 | `PhaenonPhpTagAnnotator` | `annotator` for PHP | Reports `<?php`, `<?=` and `?>` as errors in Phaenon files. |
 | `PhaenonFileIconProvider` | `fileIconProvider` | Gives `.phn` files their own icon despite sharing the PHP file type. |
 | `PhaenonTextMateBundleProvider` | `textmate.bundleProvider` | Registers `textmate/phaenon`, a grammar that includes `source.php` (the PHP *code* grammar, not the `text.html.php` wrapper). Only used when the PHP plugin is absent. |
@@ -181,10 +181,10 @@ after a signature and a name after a return type are syntax errors in any PHP fi
 ## PHP 8.6
 
 PHP 8.6 ships on 2026-11-19 and the compiler supports it (design/php-versions.md). No PhpStorm
-does yet: the language levels of 2025.1 stop at PHP 8.4 and those of 2026.2.3 at PHP 8.5, so in
-plain PHP each 8.6 construct is a finding, the same in both:
+does yet: the language levels stop at PHP 8.5, from 2025.3 to 2026.3, so in plain PHP each 8.6
+construct is a finding, the same in all:
 
-| PHP 8.6 | PhpStorm 2025.1 and 2026.2.3 in a `.php` file | `.phn`, target 8.6 | `.phn`, target 8.5 |
+| PHP 8.6 | PhpStorm 2025.3 to 2026.3 in a `.php` file | `.phn`, target 8.6 | `.phn`, target 8.5 |
 |---|---|---|---|
 | partial application: `f(?, 1)`, `f(b: ?)`, `$o->m(?)`, `C::m(?)`, in pipes and constant expressions | syntax errors from the `?` on ("Expected: )"); `f(1, ...)`: "Expected: expression after spread operator"; in a constant: "Expression is not allowed as constant value" | parses, no finding, typed (below) | the same: the compiler lowers it for 8.5 |
 | `public readonly string $name = 'x';` | "'readonly' property cannot have default value" | no finding | PhpStorm's finding stays (the compiler: "needs PHP 8.6") |
@@ -313,7 +313,7 @@ JetBrains Marketplace then brings the updates. Each release is also a zip on thi
 Install Plugin from Disk…**, and `./gradlew buildPlugin` builds one from a checkout (JDK 21, see
 [Build](#build)). Any `.phn` file opens as Phaenon.
 
-Requires PhpStorm 2025.1 or newer (or another JetBrains IDE 2025.1+ with the PHP plugin for full
+Requires PhpStorm 2025.3 or newer (or another JetBrains IDE 2025.3+ with the PHP plugin for full
 support).
 
 A project built with `phaenon.json` (`{"roots": {"src": ".src", "tests": ".tests"}}`) needs no
@@ -534,8 +534,8 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   `file:line: message` for every syntax error and every stub tree that does not match its text,
   checks that every erased `list<…>` / `map<…>` declaration is typed as an array, and that
   `PhaenonHierarchyInspection` reports no override in the trees (they pass `phn check`). Files using
-  PHP syntax above the IDE's highest language level (`|>` on PhpStorm 2025.1) are skipped and
-  listed. A second test reformats every file with the PSR-12 style and fails when an erased
+  PHP syntax above the IDE's highest language level are skipped and listed (none on the floor,
+  2025.3, whose levels reach PHP 8.5). A second test reformats every file with the PSR-12 style and fails when an erased
   construct changed, moved off what it belongs to, or a file stopped parsing, when a function's or
   method's opening brace is left on a line of its own (a comment before it aside), a class-like's on
   its declaration's line (an empty one's `{}` aside) or an empty class-like's not, or when an expression
@@ -636,10 +636,11 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
 - A `<…>` that scans as a type list is one: `f(A < B, C > ($d))` and `A < B & C > $d` with constants
   are misread, as the compiler misreads the former (`generics.md` §2.4).
 - **The plugin erases Phaenon, not PHP.** PHP syntax newer than the IDE's highest language level
-  is a syntax error in `.phn` exactly as in `.php`: on PhpStorm 2025.1 (levels up to PHP 8.4)
-  that is the PHP 8.5 pipe operator `|>`, which breaks the enclosing class body. A newer PhpStorm
-  parses it. PHP 8.6 is the exception the compiler's support makes: its placeholders are handed
-  over as identifiers in both, and its other constructs are valid PHP to the parser already.
+  is a syntax error in `.phn` exactly as in `.php` (the floor, 2025.3, is the first PhpStorm whose
+  levels reach PHP 8.5, the language's own floor: below it the pipe operator `|>` broke the
+  enclosing class body). PHP 8.6 is the exception the compiler's support makes: its placeholders
+  are handed over as identifiers in both, and its other constructs are valid PHP to the parser
+  already.
 - **An erased return type leaves no PHP return type.** For `function f(): map<string, mixed>`
   PhpStorm sees a function without a return type, so besides the type the plugin supplies it also
   infers one from the body, as it does for untyped PHP functions. The union is wider than the
@@ -684,10 +685,10 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   hands Enter to), `PhpImplementMethodsHandler` / `PhpOverrideMethodsHandler` and
   `getMethodsToOverride`, and an `instanceof` of `PhpOverriddenMethodInsertHandler` to recognise
   override items. PhpStorm's pipe quick-fix is matched by its class name, a string, because the
-  class does not exist in 2025.1.
+  class does not exist in 2025.3.
 - The debugger support implements `PhpTemplateLanguagePathMapper` (`com.intellij.php.debug.templateLanguage`),
   PHP plugin API marked internal; Twig and Blade, bundled with PhpStorm, are its other implementations,
-  and it is the same in 2025.1 and 2026.2. Its gate relies on how PhpStorm asks: that
+  and it is the same in 2025.3 and 2026.3. Its gate relies on how PhpStorm asks: that
   `PhpLineBreakpointHandler.registerBreakpoint` calls `isTemplateFileType` itself (checked on the
   stack) right after `getInstance` asked `isGeneratedFile` about the breakpoint's file. If PhpStorm
   changes that, `.phn` breakpoints are no longer mapped (and not hit), while `.php` files are
@@ -698,7 +699,7 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   (bundled with every JetBrains IDE) for `source.php`.
 - `com.jetbrains.php.baseLexerProvider` is marked internal by JetBrains. It is the only way to
   hand the editor highlighter a lexer for a file of the PHP file type, and it is present unchanged
-  from 2025.1 through 2026.2 (both verified with the Plugin Verifier), but a future PhpStorm could
+  from 2025.3 through 2026.3 (both verified with the Plugin Verifier), but a future PhpStorm could
   rename it. If that happens, parsing and every analysis feature keep working and only the editor
   colouring of `.phn` files would regress until the plugin is updated. The verifier is configured
   to report, not fail on, internal API usage for this reason. `PhaenonPsiBuilder` and
@@ -707,7 +708,7 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   so do `PhaenonTypeText` (`PhpExpressionImpl.serializeAdvancedClosureParameter` and its separator,
   the encoding of closure signatures) and `PhaenonHighlightFilter`
   (`PhpParamsInspection.isCallTypeConvertibleFromDeclaredType`, the convertibility PhpStorm's own
-  closure-call check uses). The verifier reports them compatible with 2025.1 and 2026.2.
+  closure-call check uses). The verifier reports them compatible with 2025.3 and 2026.3.
   `PhaenonTypePresentation` decodes closure signatures with
   `PhpExpressionImpl.getTypeFromSerializedClosureParameter`, and `PhaenonDocumentationProvider`
   styles its definition with the PHP plugin's `PhpHighlightingData` keys and the platform's

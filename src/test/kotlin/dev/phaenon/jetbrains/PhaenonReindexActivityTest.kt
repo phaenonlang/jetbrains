@@ -45,8 +45,9 @@ class PhaenonReindexActivityTest : BasePlatformTestCase() {
 
     /**
      * The IDE installs the coroutine debug probes, which read the debug metadata of every suspended
-     * frame on resume; the Kotlin 2.1 library PhpStorm 2025.1 bundles rejects metadata above
-     * version 1, and the coroutine then never resumes (the tests below would hang, not fail).
+     * frame on resume; the Kotlin library the IDE bundles (2.2 in PhpStorm 2025.3) rejects the
+     * metadata of a newer API version, and the coroutine then never resumes (the tests below would
+     * hang, not fail).
      * Guarded by the API version in build.gradle.kts.
      */
     fun testTheActivityCarriesCoroutineMetadataTheBundledLibraryReads() {
