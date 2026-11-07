@@ -4,6 +4,22 @@ From 0.2.1 on, release-please writes each entry from the Conventional Commits me
 previous release (`release-please-config.json`); the entry is the Marketplace's change notes for
 that version. The first release was written by hand.
 
+## [0.3.0](https://github.com/phaenonlang/jetbrains/compare/v0.2.1...v0.3.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* PhpStorm 2025.1 and 2025.2 are no longer supported.
+
+### Features
+
+* PhpStorm 2025.3 is the floor ([6480d52](https://github.com/phaenonlang/jetbrains/commit/6480d52b1aefc862c1d693ef0d2dce3b2d2f36b8))
+
+
+### Bug Fixes
+
+* a closure-valued default is not one that "must be declared static" ([1b271b5](https://github.com/phaenonlang/jetbrains/commit/1b271b55265db2d1ac1c51a99ba885bcfbeba110))
+
 ## [0.2.1](https://github.com/phaenonlang/jetbrains/compare/v0.2.0...v0.2.1) (2026-11-07)
 
 

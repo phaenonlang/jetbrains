@@ -9,7 +9,7 @@ plugins {
 
 group = providers.gradleProperty("pluginGroup").get()
 // release-please bumps this line in its release PR (release-please-config.json); the tag is v<version>.
-version = "0.2.1" // x-release-please-version
+version = "0.3.0" // x-release-please-version
 
 kotlin {
     // PhpStorm 2025.3+ runs on JBR 21, so the plugin targets Java 21 bytecode.
