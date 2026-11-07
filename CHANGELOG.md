@@ -4,6 +4,14 @@ From 0.2.1 on, release-please writes each entry from the Conventional Commits me
 previous release (`release-please-config.json`); the entry is the Marketplace's change notes for
 that version. The first release was written by hand.
 
+## [0.2.1](https://github.com/phaenonlang/jetbrains/compare/v0.2.0...v0.2.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* PhpStorm 2026.3 drops a bundle key and deprecates the PATH lookup ([7d5631a](https://github.com/phaenonlang/jetbrains/commit/7d5631a96c8378220f106beb65dc59234e523f6e))
+* PhpStorm 2026.3 drops a bundle key and deprecates the PATH lookup ([ab942c0](https://github.com/phaenonlang/jetbrains/commit/ab942c08ece74d8218cccafd7bbeb626c0250d91))
+
 ## [0.2.0](https://github.com/phaenonlang/jetbrains/releases/tag/v0.2.0) (2026-11-06)
 
 The first release, for PhpStorm 2025.1 and newer, with the compiler's 0.2.0.
