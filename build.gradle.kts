@@ -46,7 +46,10 @@ dependencies {
         if (testIde != null) local(testIde) else phpstorm(providers.gradleProperty("platformVersion"))
         // The PHP plugin provides the lexer, parser and PSI we reuse; the TextMate plugin
         // hosts the highlighting-only fallback. Both are optional at runtime (see plugin.xml).
-        bundledPlugins("com.jetbrains.php", "org.jetbrains.plugins.textmate")
+        // Grazie: since 2025.3 the typo inspection is its GrazieSpellCheckingInspection; the
+        // test IDE has it only when the plugin is loaded. The plugin itself does not depend
+        // on Grazie (plugin.xml declares what it needs).
+        bundledPlugins("com.jetbrains.php", "org.jetbrains.plugins.textmate", "tanvd.grazi")
         // The spellchecker API is a content module of the platform since 2025.2, no longer in
         // the core jar the compiler sees by itself.
         bundledModule("intellij.spellchecker")
