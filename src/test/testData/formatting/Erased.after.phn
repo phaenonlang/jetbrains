@@ -56,7 +56,6 @@ final class Box<T of object = object> implements \IteratorAggregate<int, T>
         $first = first<User>($rows);
         $x = $box->get<Address>(Uuid::nil())->map<User>(fn(Address $a): User => $a->user);
         $y = Collection::of<User>($rows);
-        $task = spawn $this->load($id);
         return $box;
     }
 }

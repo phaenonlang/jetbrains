@@ -36,13 +36,8 @@ class PhaenonHighlightingLexer(delegate: Lexer) : DelegateLexer(delegate) {
         val text = bufferSequence
         val start = tokenStart
         val end = tokenEnd
-        return when (text.subSequence(start, end).toString()) {
-            "fun" -> if (declaresName(text, end)) PhpTokenTypes.kwFUNCTION else type
-            // Coloured as keywords where they are ones: not after `->` or `::`, and `spawn = 1` is a constant.
-            "concurrently" -> if (afterMemberAccess(text, start)) type else PhpTokenTypes.kwFUNCTION
-            "spawn" -> if (afterMemberAccess(text, start) || assigned(text, end)) type else PhpTokenTypes.kwFUNCTION
-            else -> type
-        }
+        if (end - start != 3 || !text.regionMatches(start, "fun", 0, 3)) return type
+        return if (declaresName(text, end)) PhpTokenTypes.kwFUNCTION else type
     }
 
     private fun declaresName(text: CharSequence, end: Int): Boolean {
@@ -53,17 +48,5 @@ class PhaenonHighlightingLexer(delegate: Lexer) : DelegateLexer(delegate) {
             while (i < text.length && text[i].isWhitespace()) i++
         }
         return i < text.length && (text[i].isLetter() || text[i] == '_')
-    }
-
-    private fun afterMemberAccess(text: CharSequence, start: Int): Boolean {
-        var i = start - 1
-        while (i >= 0 && text[i].isWhitespace()) i--
-        return i >= 0 && (text[i] == '>' || text[i] == ':')
-    }
-
-    private fun assigned(text: CharSequence, end: Int): Boolean {
-        var i = end
-        while (i < text.length && text[i].isWhitespace()) i++
-        return i < text.length && text[i] == '=' && (i + 1 >= text.length || text[i + 1] != '=' && text[i + 1] != '>')
     }
 }

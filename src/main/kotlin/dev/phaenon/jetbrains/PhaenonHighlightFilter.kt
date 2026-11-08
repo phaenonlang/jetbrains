@@ -28,13 +28,10 @@ import com.jetbrains.php.lang.psi.elements.PhpAttribute
 import com.jetbrains.php.lang.psi.elements.PhpAttributesList
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpEnumCase
-import com.jetbrains.php.lang.psi.elements.PhpExpression
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
-import com.jetbrains.php.lang.psi.elements.PhpReturn
 import com.jetbrains.php.lang.psi.elements.PhpReference
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import com.jetbrains.php.lang.psi.elements.PhpUse
-import com.jetbrains.php.lang.psi.elements.Variable
 
 /**
  * Drops the PhpStorm findings that Phaenon's compilation model provokes in a `.phn` file.
@@ -90,13 +87,6 @@ import com.jetbrains.php.lang.psi.elements.Variable
  *   target ([PhaenonTarget]) is 8.6. On an 8.5 target they stay: the compiler refuses them there,
  *   "… needs PHP 8.6 (target 8.5)".
  *
- * A `concurrently` block used as a value and a `spawn` are closures to PhpStorm ([PhaenonBlocks]),
- * with a scope of their own and no `use` clause; the compiler writes that clause. So a variable of
- * the enclosing function read in a block is not "undefined", nor one a block assigns and the
- * function reads after it, and a parameter or variable used only on the other side of a block
- * boundary is not "unused". What PhpStorm says of the closure itself it says at the keyword
- * (`spawn $mailer->send($m);` is an expression whose result "is not used"): that goes too.
- *
  * A function's `throws A|B` clause is what its compiled `@throws` tag says, but PhpStorm's exception
  * analysis reads only docblocks: "Unhandled X" (or "Unhandled exceptions") goes where the clauses
  * in effect name X or a parent of it, as does "PHPDoc comment doesn't contain all the necessary
@@ -119,7 +109,6 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (NOT_A_VALID_CALLABLE.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) return !partialApplicationAt(info, file)
         if (description.startsWith(ATTRIBUTE_TARGET.first) && description.endsWith(ATTRIBUTE_TARGET.second)) return !overrideOnConstant(info, file)
         if (description in PHP86_ONLY) return !php86Construct(info, file, description)
-        if (PhaenonBlocks.isKeywordAt(file, info.startOffset)) return false
         if (description == UNHANDLED_SEVERAL || description.startsWith(UNHANDLED.first) && description.endsWith(UNHANDLED.second)) {
             return !PhaenonThrows.answersUnhandled(file.findElementAt(info.startOffset) ?: return true)
         }
@@ -130,17 +119,6 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
                 ?: PsiTreeUtil.getParentOfType(leaf, Function::class.java, false) ?: return true
             return !PhaenonThrows.answersMissingTags(function)
         }
-        if (UNDEFINED_VARIABLE.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
-            val variable = PsiTreeUtil.getParentOfType(file.findElementAt(info.startOffset), Variable::class.java, false) ?: return true
-            return !PhaenonBlocks.isKnownAcrossBlocks(variable)
-        }
-        if (UNUSED_VARIABLE.any { description.startsWith(it) }) {
-            val leaf = file.findElementAt(info.startOffset) ?: return true
-            val declaration: PhpNamedElement = PsiTreeUtil.getParentOfType(leaf, Variable::class.java, Parameter::class.java) ?: return true
-            val name = declaration.name ?: return true
-            return !PhaenonBlocks.isUsedAcrossBlocks(declaration, name)
-        }
-        if (description.startsWith(INCOMPATIBLE_RETURN.first) && description.endsWith(INCOMPATIBLE_RETURN.second)) return !returnsABlock(info, file)
         if (UNDEFINED_CLASS.let { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
             return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf)
@@ -226,14 +204,6 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val leaf = file.findElementAt(info.startOffset) ?: return false
         val function = PsiTreeUtil.getParentOfType(leaf, Function::class.java, false) ?: return false
         return function.isClosure
-    }
-
-    /** `return concurrently { … };`: the block is its body's value, which PhpStorm holds beside a `\Closure`. */
-    private fun returnsABlock(info: HighlightInfo, file: PsiFile): Boolean {
-        val leaf = file.findElementAt(info.startOffset) ?: return false
-        val statement = PsiTreeUtil.getParentOfType(leaf, PhpReturn::class.java, false) ?: return false
-        val value = statement.argument as? PhpExpression ?: return false
-        return PhaenonBlocks.kind(value.firstChild as? Function) == PhaenonBlocks.Kind.CONCURRENTLY
     }
 
     /** A partial application where the finding starts: `f(?, 1)` as a constant or a pipe stage. */
@@ -329,19 +299,6 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val UNHANDLED: Pair<String, String> = PhpBundle.message("unhandled.0", "\u0000").let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
         val UNHANDLED_SEVERAL: String = PhpBundle.message("unhandled.exceptions")
         val MISSING_THROWS_TAGS: String = PhpBundle.message("inspection.doc.throws.problem")
-
-        /** "Undefined variable '#ref'", "Variable '#ref' is probably undefined". */
-        val UNDEFINED_VARIABLE: List<Pair<String, String>> = listOf("inspection.undefined.variable.problem1", "inspection.undefined.variable.problem2")
-            .map { PhpBundle.message(it) }
-            .map { it.substringBefore("#ref") to it.substringAfter("#ref") }
-
-        /** "Unused local variable 'x'. …", "Unused parameter 'x'. …", up to the name. */
-        val UNUSED_VARIABLE: List<String> = listOf("inspection.unused.local.variable.problem", "inspection.unused.parameter.problem")
-            .map { PhpBundle.message(it, "\u0000", "").substringBefore('\u0000') }
-
-        /** "Return value is expected to be '{0}', '{1}' returned", around what is filled in. */
-        val INCOMPATIBLE_RETURN: Pair<String, String> =
-            PhpBundle.message("inspection.incompatible.return.type", "\u0000", "\u0000").let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
 
         /** "Undefined constant '#ref'", "Constant '#ref' is probably undefined": a placeholder `?` to PhpStorm. */
         val UNDEFINED_CONSTANT: List<Pair<String, String>> = listOf("inspection.undefined.constant.problem1", "inspection.undefined.constant.problem2")

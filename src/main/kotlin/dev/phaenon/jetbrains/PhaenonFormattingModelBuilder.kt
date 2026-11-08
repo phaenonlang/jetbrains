@@ -130,7 +130,7 @@ class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
  * (`: ?T`, `: list<User>`) to the `)` before it, as a PHP return type is; a union member erased
  * with its separator (`string|list<int>`, `list<T>|null`) to the member it is joined to.
  * Every other erased construct stands where a PHP token
- * would (`list<User> $users`, `$x as T`, `type Name = …;`, `spawn $task`): PhpStorm's rule for that
+ * would (`list<User> $users`, `$x as T`, `type Name = …;`): PhpStorm's rule for that
  * spot applies, except that it never joins the construct to its neighbour where they were apart,
  * which would make one word of two (`$x as T` → `$xas T`) or glue a type to its variable. Where
  * PhpStorm has no rule, a construct apart from its neighbour is one space from it, or the line
@@ -210,16 +210,10 @@ internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSetti
 
     /** The spacing between [left] and [right] when either side is an erased construct; null to leave it to PhpStorm. */
     fun between(left: Block, right: Block, phpStorm: () -> Spacing?): Spacing? {
-        // Two blocks that meet inside a word are one Phaenon keyword handed to the parser as several
-        // PHP tokens (`concurrently` as `function ( )`, `spawn` as `fn ( ) =>`): nothing goes between.
-        // PHP tokens never meet so — they would have been lexed as one word.
-        // So are the two halves of an expression body's arrow, `{` and `return` to the parser.
+        // The two halves of an expression body's arrow, `{` and `return` to the parser, are one
+        // token of the source: nothing goes between.
         val meet = left.textRange.endOffset
-        if (meet == right.textRange.startOffset && meet > 0 && meet < text.length) {
-            val a = text[meet - 1]
-            val b = text[meet]
-            if (a.isLetterOrDigit() && b.isLetterOrDigit() || a == '=' && b == '>') return GLUED
-        }
+        if (meet == right.textRange.startOffset && meet > 0 && meet < text.length && text[meet - 1] == '=' && text[meet] == '>') return GLUED
         val after = lastErased(left)
         val before = firstErased(right)
         if (after == null && before == null) return null
@@ -233,7 +227,7 @@ internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSetti
         // No rule for a token of unknown kind: as written when written together, else one space.
         if (spacing == null) return if (gap.isEmpty()) GLUED else apart
         if (gap.isEmpty()) return spacing
-        // Apart, and both sides word-like (`$x as T`, `list<User> $users`, `spawn $task`): a rule meant
+        // Apart, and both sides word-like (`$x as T`, `list<User> $users`): a rule meant
         // for other tokens could join them, so they stay one space or their line breaks apart. Elsewhere
         // (punctuation on either side, a body's brace) PhpStorm's rule holds.
         val leftChar = text[left.textRange.endOffset - 1]
@@ -305,20 +299,6 @@ internal open class PhaenonFormattingBlock protected constructor(
     private val delegateNode: ASTNode? get() = (delegate as? ASTBlock)?.node
 
     /**
-     * A `concurrently` block used as a statement is, to PhpStorm, an erased leaf followed by a bare
-     * block, and PhpStorm indents a bare block's statements no further than the block. The two are
-     * taken together as one statement, the way `if (…) {` is, so the braces stand where the keyword
-     * does and the body is one level further in.
-     */
-    private fun isStatementBlock(erased: Block, next: Block): Boolean {
-        if (!spacing.isErased(erased) || !erased.nodeText().startsWith("concurrently")) return false
-        val node = (next as? ASTBlock)?.node ?: return false
-        return node.elementType in PhpElementTypes.ANY_GROUP_STATEMENT || node.psi is GroupStatement
-    }
-
-    private fun Block.nodeText(): String = (this as? ASTBlock)?.node?.text.orEmpty()
-
-    /**
      * An expression body, `=> expr;`: to PhpStorm a block whose `{` is the arrow's first character.
      * It stays where it was written — one space after the signature, or on a line of its own one
      * level in, the arrow starting the continuation line — whatever the brace placement says.
@@ -331,25 +311,10 @@ internal open class PhaenonFormattingBlock protected constructor(
     }
 
     private val children: List<Block> by lazy {
-        val blocks = wrapChildren(delegate.subBlocks).map { block ->
+        wrapChildren(delegate.subBlocks).map { block ->
             if (block is PhaenonFormattingBlock && isExpressionBody(block.delegate)) of(block.delegate, spacing, block.wrap, block.alignment, Indent.getNormalIndent())
             else block
         }
-        val out = ArrayList<Block>(blocks.size)
-        var i = 0
-        while (i < blocks.size) {
-            val block = blocks[i]
-            val next = blocks.getOrNull(i + 1)
-            if (next is PhaenonFormattingBlock && block is PhaenonFormattingBlock && isStatementBlock(block.delegate, next.delegate)) {
-                val keyword = of(block.delegate, spacing, null, null, Indent.getNoneIndent())
-                out.add(StatementBlock(keyword, of(next.delegate, spacing, next.wrap, next.alignment, Indent.getNoneIndent()), spacing, block.indent, block.wrap, block.alignment))
-                i += 2
-                continue
-            }
-            out.add(block)
-            i++
-        }
-        out
     }
 
     private fun wrapChildren(blocks: List<Block>): List<Block> {
@@ -403,9 +368,8 @@ internal open class PhaenonFormattingBlock protected constructor(
     override fun getAlignment(): Alignment? = ownAlignment
 
     override fun getSpacing(child1: Block?, child2: Block): Spacing? {
-        // A statement block is the plugin's: PhpStorm is asked about the leaf or block at its edge.
-        val left = ((child1 as? StatementBlock)?.body ?: child1).let { (it as? PhaenonFormattingBlock)?.delegate ?: it }
-        val right = ((child2 as? StatementBlock)?.keyword ?: child2).let { (it as? PhaenonFormattingBlock)?.delegate ?: it }
+        val left = (child1 as? PhaenonFormattingBlock)?.delegate ?: child1
+        val right = (child2 as? PhaenonFormattingBlock)?.delegate ?: child2
         if (left == null) return delegate.getSpacing(null, right)
         if (isExpressionBody(right)) return spacing.arrow
         spacing.emptyBody(left, right)?.let { return it }
@@ -426,40 +390,4 @@ internal open class PhaenonFormattingBlock protected constructor(
     override fun getDebugName(): String = "Phaenon(" + (delegate.debugName ?: delegate.javaClass.simpleName) + ")"
 
     override fun toString(): String = getDebugName() + " " + textRange
-}
-
-/**
- * A `concurrently` block used as a statement: its erased keyword and options, and the braces
- * PhpStorm parses as a bare block, as one block that stands where a statement does — the indent,
- * wrap and alignment the keyword had — with the body's block inside it unindented, as an `if`'s.
- */
-internal class StatementBlock(
-    val keyword: PhaenonFormattingBlock,
-    val body: PhaenonFormattingBlock,
-    private val spacing: ErasedSpacing,
-    private val indent: Indent?,
-    private val wrap: Wrap?,
-    private val alignment: Alignment?,
-) : Block {
-
-    override fun getTextRange(): TextRange = TextRange(keyword.textRange.startOffset, body.textRange.endOffset)
-
-    override fun getSubBlocks(): List<Block> = listOf(keyword, body)
-
-    override fun getWrap(): Wrap? = wrap
-
-    override fun getIndent(): Indent? = indent
-
-    override fun getAlignment(): Alignment? = alignment
-
-    override fun getSpacing(child1: Block?, child2: Block): Spacing? {
-        if (child1 == null) return null
-        return spacing.between(keyword.delegate, body.delegate) { null }
-    }
-
-    override fun getChildAttributes(newChildIndex: Int): ChildAttributes = ChildAttributes(Indent.getNoneIndent(), null)
-
-    override fun isIncomplete(): Boolean = body.isIncomplete
-
-    override fun isLeaf(): Boolean = false
 }

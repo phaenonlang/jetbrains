@@ -4,7 +4,7 @@
   "fileTypes": [
     "phn"
   ],
-  "comment": "A Phaenon file is PHP code from byte 0: the PHP code grammar (source.php, which VS Code and JetBrains IDEs ship) without the text.html.php wrapper that waits for an open tag, plus injections for what Phaenon adds: fun declarations, type parameters and arguments, throws, type aliases, is / as, concurrently / spawn and bytes. The injections reuse PHP's scope names wherever PHP has the construct, so themes colour them as PHP.",
+  "comment": "A Phaenon file is PHP code from byte 0: the PHP code grammar (source.php, which VS Code and JetBrains IDEs ship) without the text.html.php wrapper that waits for an open tag, plus injections for what Phaenon adds: fun declarations, type parameters and arguments, throws, type aliases, is / as and bytes. The injections reuse PHP's scope names wherever PHP has the construct, so themes colour them as PHP.",
   "patterns": [
     {
       "include": "source.php"
@@ -24,9 +24,6 @@
         },
         {
           "include": "#type-test"
-        },
-        {
-          "include": "#concurrency"
         },
         {
           "include": "#generic-new"
@@ -437,18 +434,6 @@
               ]
             }
           }
-        }
-      ]
-    },
-    "concurrency": {
-      "patterns": [
-        {
-          "match": "(?<![$\\w\\\\]|->|::)\\bconcurrently\\b(?=\\s*\\{)",
-          "name": "keyword.control.concurrently.phaenon"
-        },
-        {
-          "match": "(?<![$\\w\\\\]|->|::)\\bspawn\\b(?=\\s+[^\\s=;,)\\]}.])",
-          "name": "keyword.control.spawn.phaenon"
         }
       ]
     },
