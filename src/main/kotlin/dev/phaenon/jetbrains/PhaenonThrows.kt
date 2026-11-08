@@ -26,8 +26,8 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * an exception is what would answer it for PhpStorm in the compiled PHP:
  *
  * - the clause of the function the finding is in, and the clauses of the functions around it when
- *   that function is a closure — a `concurrently` block or a `spawn` included —, as PhpStorm reads a
- *   closure's exceptions against the enclosing function's `@throws` tags too;
+ *   that function is a closure, as PhpStorm reads a closure's exceptions against the enclosing
+ *   function's `@throws` tags too;
  * - the clauses of the methods it overrides, when it has neither a docblock nor a clause of its own
  *   (or a docblock with `{@inheritDoc}`): its compiled copy has no docblock, and PhpStorm reads the
  *   parent's tags for a method without one;

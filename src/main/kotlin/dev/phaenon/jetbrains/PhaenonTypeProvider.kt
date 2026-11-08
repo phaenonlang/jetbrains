@@ -9,7 +9,6 @@ import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.FunctionReference
 import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.ParenthesizedExpression
-import com.jetbrains.php.lang.psi.elements.Variable
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.resolve.types.PhpType
 import com.jetbrains.php.lang.psi.resolve.types.PhpTypeProvider4
@@ -34,14 +33,10 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpTypeProvider4
  *   is checked against the closure's signature.
  * - A pipe whose stage is a partial application, `$x |> $o->m(1, ?)`: the call it becomes. PhpStorm
  *   types a pipe by the function its right side names, which for a method call is no function.
- * - A `concurrently` block used as a value and a `spawn`, which reach the parser as the closures
- *   they compile to ([PhaenonBlocks]): the block is what its body returns, the spawn an
- *   `Amp\Future` of it. PhpStorm keeps its own `\Closure` beside it, as for a partial application.
  *
- * A type that only an index lookup can decode (a callee, a body typed through another class) is
- * deferred the way the extension point intends: [getType] returns a signature under this
- * provider's key and [complete] resolves it when the indices are available. A partial application
- * always is: its callee is found through the index.
+ * A type that only an index lookup can decode is deferred the way the extension point intends:
+ * [getType] returns a signature under this provider's key and [complete] resolves it when the
+ * indices are available. A partial application always is: its callee is found through the index.
  */
 class PhaenonTypeProvider : PhpTypeProvider4 {
 
@@ -54,44 +49,8 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
             is Function -> declared(element, PhaenonErasedTypes.returnType(element))
             is FunctionReference -> partial(element)
             is BinaryExpression -> pipe(element)
-            is Variable -> blockValue(element)
             else -> null
         }
-    }
-
-    // ---------------------------------------------------------------- concurrently and spawn
-
-    /**
-     * A variable that holds the value of a `concurrently` block or a `spawn` handle. PhpStorm types
-     * the closure such an expression reaches it as without asking the type providers, so the type
-     * goes to the variables it is assigned to — `$x = concurrently {…}` what the body returns,
-     * `$f = spawn …` an `Amp\Future` of the task's value, `$tasks[$k] = spawn …` an array of them —
-     * at every occurrence in the function, block bodies included, as the compiled `use` clause
-     * shares them.
-     */
-    private fun blockValue(variable: Variable): PhpType? {
-        val name = variable.name ?: return null
-        val scope: PsiElement = PhaenonBlocks.scopeOf(variable) ?: variable.containingFile ?: return null
-        return PhaenonBlocks.assignedValues(scope)[name]?.let { assigned ->
-            val result = PhpType()
-            for ((function, kind, element) in assigned) {
-                val body = function.type
-                when {
-                    kind == PhaenonBlocks.Kind.CONCURRENTLY -> result.add(body)
-                    !element -> result.add(if (body.isComplete) future(body) else PhpType().add(signature(FUTURE, "", body)))
-                    else -> result.add(if (body.isComplete) future(body).pluralise() else PhpType().add(signature(FUTURES, "", body)))
-                }
-            }
-            result.takeIf { !it.isEmpty }
-        }
-    }
-
-    /** `\Amp\Future<T>`, the handle of a task whose body gives [body]. */
-    private fun future(body: PhpType): PhpType {
-        val members = body.typesWithParametrisedParts.filter { !it.startsWith("#") && it != "?" }.toMutableSet()
-        if (members.remove(PhpType._TRUE) or members.remove(PhpType._FALSE)) members.add(PhpType._BOOL)
-        val argument = members.map(::argument).sorted().joinToString("|").ifEmpty { "mixed" }
-        return PhpType().add(PhpType.createParametrizedType(FUTURE_CLASS, listOf(argument)))
     }
 
     // ---------------------------------------------------------------- partial application
@@ -136,9 +95,6 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         return PhaenonTypeText(element, PhaenonErasedTypes.typeParameterBounds(element)).parse(text)
     }
 
-    /** PhpStorm writes primitive type arguments without the leading backslash (`Future<string>`). */
-    private fun argument(type: String): String = if (PhpType.isPrimitiveType(type)) type.trimStart('\\') else type
-
     // ---------------------------------------------------------------- deferred resolution
 
     override fun complete(expression: String, project: Project): PhpType? {
@@ -150,8 +106,6 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         val type = decode(fields.getOrNull(1)) ?: return null
         return when (kind) {
             PARTIAL -> completePartial(member, type, project)
-            FUTURE -> future(type.global(project))
-            FUTURES -> future(type.global(project)).pluralise()
             else -> null
         }
     }
@@ -177,9 +131,6 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         /** Unique among type providers; a letter no other known plugin uses. */
         const val KEY = 'Φ'
         const val PARTIAL = 'P'
-        const val FUTURE = 'F'
-        const val FUTURES = 'A'
-        const val FUTURE_CLASS = "\\Amp\\Future"
         const val SEPARATOR = '¦'
         const val PIPE = '¶'
     }

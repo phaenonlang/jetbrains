@@ -44,10 +44,10 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   Phaenon's spelling; fixtures `testData/docs/`, `testData/classstring/`); PHP 8.6 placeholders
   are identifiers to the parser (`PhaenonLexer`), typed as closures (`PhaenonPartialApplication`),
   and PhpStorm's findings on 8.6 code are dropped by target (`PhaenonTarget` reads `phaenon.json` and
-  composer.json; fixtures `testData/php86/`); a `concurrently` block used as a value and `spawn`
-  are the closures they compile to, their keywords split into PHP tokens (`PhaenonBlocks`; fixtures
-  `testData/concurrency/`); D18's `throws` clause is erased (`PhaenonThrows` answers the exception
-  findings it covers) and an expression body is the block it compiles to, opened by the lexer and
+  composer.json; fixtures `testData/php86/`); `concurrently` and `spawn` are names like any other
+  since D25 withdrew the concurrency syntax (`PhaenonUnreservedWordsTest`); D18's `throws` clause
+  is erased (`PhaenonThrows` answers the exception findings it covers) and an expression body is
+  the block it compiles to, opened by the lexer and
   closed by `PhaenonPsiBuilder`; `.phn` is formatted in the canonical layout, the braces of functions
   and methods on their line, of class-likes on a line of their own, and an empty body (a function,
   method or class-like with nothing between its braces) as `{}` (fixtures `testData/d18/`,
@@ -91,8 +91,7 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   (README § How it works).
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
-  element-array unions, a partial application is also its callee's result to PhpStorm, a block
-  used as a value and a spawn are closures to it (their values typed on the variables); the
+  element-array unions, a partial application is also its callee's result to PhpStorm; the
   implied `strict_types` is not modelled; editor colouring uses the
   internal extension point `com.jetbrains.php.baseLexerProvider`, and debugging the internal
   `PhpTemplateLanguagePathMapper` (`com.intellij.php.debug.templateLanguage`); the Frames list labels

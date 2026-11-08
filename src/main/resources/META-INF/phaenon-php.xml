@@ -94,7 +94,7 @@
         <!-- The editor highlighter is keyed by file type and asks this EP for its lexer. -->
         <baseLexerProvider implementation="dev.phaenon.jetbrains.PhaenonBaseLexerProvider"/>
 
-        <!-- Types for erased Phaenon declarations, partial applications, pipe stages, concurrently and spawn. -->
+        <!-- Types for erased Phaenon declarations, partial applications and pipe stages. -->
         <typeProvider4 implementation="dev.phaenon.jetbrains.PhaenonTypeProvider"/>
     </extensions>
 </idea-plugin>
