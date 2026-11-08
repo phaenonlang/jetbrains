@@ -36,7 +36,7 @@ class PhaenonHighlightingLexer(delegate: Lexer) : DelegateLexer(delegate) {
         val text = bufferSequence
         val start = tokenStart
         val end = tokenEnd
-        if (end - start != 3 || text[start] != 'f' || text[start + 1] != 'u' || text[start + 2] != 'n') return type
+        if (end - start != 3 || !text.regionMatches(start, "fun", 0, 3)) return type
         return if (declaresName(text, end)) PhpTokenTypes.kwFUNCTION else type
     }
 

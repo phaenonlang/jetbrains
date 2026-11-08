@@ -47,9 +47,9 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   composer.json; fixtures `testData/php86/`); `concurrently` and `spawn` are names like any other
   since D25 withdrew the concurrency syntax (`PhaenonUnreservedWordsTest`); D18's `throws` clause
   is erased (`PhaenonThrows` answers the exception findings it covers) and an expression body is
-  the block it compiles to, opened by the lexer and
-  closed by `PhaenonPsiBuilder`; `.phn` is formatted in the canonical layout, the braces of functions
-  and methods on their line, of class-likes on a line of their own, and an empty body (a function,
+  the block it compiles to, opened by the lexer and closed by `PhaenonPsiBuilder`; `.phn` is
+  formatted in the canonical layout, the braces of functions and methods on their line, of
+  class-likes on a line of their own, and an empty body (a function,
   method or class-like with nothing between its braces) as `{}` (fixtures `testData/d18/`,
   `PhaenonFormattingTest`);
   D19's line map (design/line-map.md) is read by `PhaenonLineMap` / `PhaenonLineMaps` (tested
