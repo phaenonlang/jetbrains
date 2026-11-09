@@ -4,6 +4,22 @@ From 0.2.1 on, release-please writes each entry from the Conventional Commits me
 previous release (`release-please-config.json`); the entry is the Marketplace's change notes for
 that version. The first release was written by hand.
 
+## [0.4.0](https://github.com/phaenonlang/jetbrains/compare/v0.3.0...v0.4.0) (2026-11-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* the plugin no longer understands `concurrently { }` and `spawn`; a .phn that still uses them reads as PHP, with syntax errors where the blocks stand (roadmap D25, concurrency.md §17).
+
+### Features
+
+* concurrently and spawn are plain identifiers ([#8](https://github.com/phaenonlang/jetbrains/issues/8)) ([17e4de1](https://github.com/phaenonlang/jetbrains/commit/17e4de1e02a479e237f37e6d27f3561cb02c0999))
+
+
+### Bug Fixes
+
+* public API where PhpStorm has one, verified across the declared range ([c398b0d](https://github.com/phaenonlang/jetbrains/commit/c398b0d767575adcb4229cd7d7d8162a1383d4b1))
+
 ## [0.3.0](https://github.com/phaenonlang/jetbrains/compare/v0.2.1...v0.3.0) (2026-11-07)
 
 
