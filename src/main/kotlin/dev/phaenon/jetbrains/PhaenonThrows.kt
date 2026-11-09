@@ -13,6 +13,7 @@ import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.NewExpression
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpThrowExpression
+import com.jetbrains.php.lang.psi.elements.Try
 import com.jetbrains.php.lang.psi.resolve.types.PhpType
 
 /**
@@ -39,11 +40,12 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * (`PhpThrownExceptionsAnalyzer`) asked as its inspections ask it: at a site, of the innermost
  * function that is not a closure, over the site's range; for a docblock, of the whole function,
  * less what its `@throws` tags (inherited ones included) and `@expectedException` document. The
- * inspections' own helpers are internal API. Where the public analysis is asked differently, it
- * answers more, never less: everything thrown within a site's range, where the inspection asks for
- * the site alone; catches counted only within that range, where the inspection counts them all;
- * PHPUnit's expected exceptions left in. A finding the clauses answer may then stay, but none they
- * do not answer is dropped.
+ * inspections' own helpers are internal API. The public analysis of a site counts only the
+ * catches within the site's range, where the inspection counts every one around it; the exceptions
+ * the `try` statements around the site catch are taken off here ([caughtAround]). Where it is
+ * still asked differently, it answers more, never less: everything thrown within a site's range,
+ * where the inspection asks for the site alone; PHPUnit's expected exceptions left in. A finding the
+ * clauses answer may then stay, but none they do not answer is dropped.
  */
 object PhaenonThrows {
 
@@ -56,7 +58,10 @@ object PhaenonThrows {
         // The function the inspection reads the site against: the innermost one, closures included.
         val function = PhpPsiUtil.getParentOfClass(site, Function::class.java) ?: return false
         val holder = scopeHolderSkippingClosures(site) ?: return false
+        val caught = caughtAround(site, holder)
+        val index = PhpIndex.getInstance(site.project)
         val exceptions = PhpThrownExceptionsAnalyzer.getExceptionClasses(holder, site.textRange)
+            .filterNot { !caught.isEmpty && caught.isConvertibleFrom(it, index) }
         if (exceptions.isEmpty()) return false
         val declared = declared(function, withDocTags = true) ?: return true
         return exceptions.all { declared.covers(it) }
@@ -76,6 +81,23 @@ object PhaenonThrows {
     fun declares(function: Function, exception: PhpType): Boolean {
         val declared = declared(function, withDocTags = false) ?: return true
         return declared.covers(exception)
+    }
+
+    /**
+     * What the `catch` clauses of the `try` statements around [site], up to [holder], catch: the
+     * public analysis counts only the catches within the site's range, the inspection every one
+     * around it, so these come off the set as the inspection takes them off.
+     */
+    private fun caughtAround(site: PsiElement, holder: PhpScopeHolder): PhpType {
+        val caught = PhpType()
+        var parent = site.parent
+        while (parent != null && parent !== holder) {
+            if (parent is Try && PsiTreeUtil.isAncestor(parent.statement, site, false)) {
+                for (clause in parent.catchClauses) for (type in clause.exceptionTypes) caught.add(type.fqn)
+            }
+            parent = parent.parent
+        }
+        return caught
     }
 
     /** The scope the analysis reads a site in, as the "Unhandled" inspection picks it: closures are skipped outwards. */
