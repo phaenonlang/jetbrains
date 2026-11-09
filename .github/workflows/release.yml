@@ -61,7 +61,7 @@ jobs:
     needs: release
     if: ${{ !cancelled() && ((needs.release.result == 'success' && needs.release.outputs.created == 'true') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: write # the release's assets
     env:
@@ -72,6 +72,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json tagName --jq .tagName
+      - name: Make room for the IDEs the verifier downloads
+        # verifyPlugin covers every PhpStorm of the declared range (ci.yml).
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
