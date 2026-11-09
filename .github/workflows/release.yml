@@ -72,14 +72,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json tagName --jq .tagName
-      - name: Make room for the IDEs the verifier downloads
-        # verifyPlugin covers every PhpStorm of the declared range (ci.yml).
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
-          df -h /
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
+      - name: The PhpStorm the plugin is built against
+        run: echo "PLATFORM_VERSION=$(sed -n 's/^platformVersion *= *//p' gradle.properties)" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -89,9 +86,15 @@ jobs:
             *.gradle.kts
             gradle.properties
             gradle/wrapper/gradle-wrapper.properties
+          # As ci.yml's, so that this restores what main's CI saved.
           cache-path: |
             ~/.gradle/caches
             !~/.gradle/caches/build-cache-1
+            !~/.gradle/caches/modules-2/files-2.1/webide
+            !~/.gradle/caches/*/transforms/*/transformed/PhpStorm-*
+            ~/.gradle/caches/modules-2/files-2.1/webide/PhpStorm/${{ env.PLATFORM_VERSION }}
+            ~/.gradle/caches/*/transforms/*/transformed/PhpStorm-${{ env.PLATFORM_VERSION }}
+            ~/.gradle/caches/*/transforms/*/transformed/PhpStorm-${{ env.PLATFORM_VERSION }}-*
           cache-read-only: true
       - name: Build and verify the plugin
         id: built
