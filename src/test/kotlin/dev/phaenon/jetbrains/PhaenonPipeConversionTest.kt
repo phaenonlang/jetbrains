@@ -1,17 +1,18 @@
 package dev.phaenon.jetbrains
 
 import com.intellij.application.options.CodeStyle
-import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
+import com.jetbrains.php.lang.inspections.PhpPipeOperatorCanBeUsedInspection
 
 /**
  * Nested calls to a pipe expression ([PhaenonPipeConversionIntention], [PhaenonPipeQuickFixFilter]).
  *
  * PhpStorm's inspection and quick-fix came after its PHP 8.5 support: 2025.3 has neither, every
- * PhpStorm from 2026.1 on has both, so all of these run on the PhpStorm the plugin is built against.
+ * PhpStorm from 2026.1 on has both. So none of these returns early: an IDE without the pipe fails
+ * them, and one without the inspection does not compile them.
  */
 class PhaenonPipeConversionTest : BasePlatformTestCase() {
 
@@ -52,11 +53,8 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
         PSR12CodeStyle().apply(CodeStyle.getSettings(project))
     }
 
-    private fun pipesExist(): Boolean = PhpLanguageLevel.values().last().versionString.let { it >= "8.5" }
-
-    private fun phpStormsInspection(): LocalInspectionTool? =
-        runCatching { Class.forName("com.jetbrains.php.lang.inspections.PhpPipeOperatorCanBeUsedInspection") }.getOrNull()
-            ?.getDeclaredConstructor()?.newInstance() as? LocalInspectionTool
+    private fun assertThePipeParses() =
+        assertTrue("the IDE's highest PHP language level has no pipe", PhpLanguageLevel.values().last() >= PhpLanguageLevel.PHP850)
 
     private fun conversions(): List<String> = myFixture.availableIntentions.map { it.text }.filter { it == "Convert nested function calls to a pipe expression" }
 
@@ -68,8 +66,8 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
     }
 
     fun testPhpStormsFixTurnsMethodCallsIntoTheirQualifiersInAPhpFile() {
-        val inspection = phpStormsInspection() ?: return
-        myFixture.enableInspections(inspection)
+        assertThePipeParses()
+        myFixture.enableInspections(PhpPipeOperatorCanBeUsedInspection())
         myFixture.configureByText("Receipt.php", "<?php\n$body")
 
         myFixture.launchAction(myFixture.availableIntentions.single { it.text == "Convert nested function calls to a pipe expression" })
@@ -81,8 +79,8 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
     }
 
     fun testAPhnFileGetsTheConversionThatKeepsTheMethods() {
-        if (!pipesExist()) return
-        phpStormsInspection()?.let { myFixture.enableInspections(it) }
+        assertThePipeParses()
+        myFixture.enableInspections(PhpPipeOperatorCanBeUsedInspection())
         myFixture.configureByText("Receipt.phn", body.replace("public function ", ""))
 
         assertEquals("PhpStorm's fix is replaced, not doubled", 1, conversions().size)
@@ -94,7 +92,7 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
     }
 
     fun testFunctionsBecomeCallablesAndACallWithMoreArgumentsAnArrowFunction() {
-        if (!pipesExist()) return
+        assertThePipeParses()
         myFixture.configureByText(
             "Calls.phn",
             "namespace App;\n\nfunction f(string \$x): string\n{\n    return str_pad(tr<caret>im(strval(\$x)), 10);\n}\n",

@@ -2,6 +2,7 @@ package dev.phaenon.jetbrains
 
 import com.google.gson.JsonParser
 import com.intellij.openapi.extensions.ExtensionPointName
+import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.customization.LspCompletionDisabled
 import com.intellij.platform.lsp.api.customization.LspFormattingDisabled
@@ -9,7 +10,9 @@ import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
 import com.intellij.platform.lsp.api.customization.LspHoverDisabled
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.testFramework.replaceService
 import java.io.File
+import java.lang.reflect.Proxy
 import java.nio.file.Files
 
 /**
@@ -29,14 +32,35 @@ class PhaenonLspTest : BasePlatformTestCase() {
         }
     }
 
+    // platform.lsp.integrationProvider (phaenon-lsp.xml), the extension point of the current API,
+    // which PhpStorm declares from 2026.1.4 on.
+    private fun providers(): List<LspIntegrationProvider> =
+        ExtensionPointName.create<LspIntegrationProvider>("com.intellij.platform.lsp.integrationProvider").extensionList
+
     fun testTheProviderIsRegisteredWhereThePlatformLooksForIt() {
-        // platform.lsp.integrationProvider (phaenon-lsp.xml), the extension point of the current
-        // API, which PhpStorm declares from 2026.1.4 on.
-        val point = ExtensionPointName.create<LspIntegrationProvider>("com.intellij.platform.lsp.integrationProvider")
-        assertTrue(point.extensionList.any { it is PhaenonLspIntegrationProvider })
-        // Loaded, the provider installs the restart the settings page asks for after a change: its
-        // servers stopped and started again through LspClientManager.
+        assertTrue(providers().any { it is PhaenonLspIntegrationProvider })
+    }
+
+    fun testASettingsChangeRestartsTheServersThroughLspClientManager() {
+        // The project's LspClientManager, replaced by one that records what it is asked.
+        val restarted = mutableListOf<Any?>()
+        val manager = Proxy.newProxyInstance(LspClientManager::class.java.classLoader, arrayOf(LspClientManager::class.java)) { proxy, method, args ->
+            when (method.name) {
+                "stopAndRestartClientsIfNeeded" -> restarted += args?.single()
+                "equals" -> return@newProxyInstance proxy === args?.single()
+                "hashCode" -> return@newProxyInstance System.identityHashCode(proxy)
+                "toString" -> return@newProxyInstance "a recording LspClientManager"
+            }
+            null
+        } as LspClientManager
+        project.replaceService(LspClientManager::class.java, manager, testRootDisposable)
+
+        // Loaded, the provider installs the hook the settings page runs after a change; until then
+        // the hook does nothing.
+        assertNotEmpty(providers().filterIsInstance<PhaenonLspIntegrationProvider>())
         PhaenonRestart.languageServer(project)
+
+        assertEquals(listOf(PhaenonLspIntegrationProvider::class.java), restarted)
     }
 
     fun testTheServerIsTheProjectsCompilerAskedForDiagnosticsOnly() {

@@ -529,8 +529,8 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   PhpStorm's breakpoint rules (no breakpoint on a blank line); asked from a
   `PhpLineBreakpointHandler`'s `registerBreakpoint`, a `.phn` is mapped and a compiled or plain
   `.php` is not. `PhaenonSteppingTest`: when a step is repeated.
-- `PhaenonLspTest`: the provider is registered on `platform.lsp.integrationProvider` and restarts
-  its servers through `LspClientManager`; the server is the project's compiler, `phn lsp` in the
+- `PhaenonLspTest`: the provider is registered on `platform.lsp.integrationProvider`, and a
+  settings change restarts its servers through `LspClientManager`; the server is the project's compiler, `phn lsp` in the
   project's directory, asked for diagnostics only, with build on save as the setting says; the
   compiler is the setting, else the project's `vendor/bin/phn`; the project is the nearest
   `phaenon.json`; each server takes its own project's files, a nested project's going to its own;

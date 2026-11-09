@@ -21,10 +21,8 @@
 #   - Skipped for want of their variables: the runs over whole Phaenon trees
 #     (PHAENON_TREES) and the line map against a real Xdebug (PHAENON_XDEBUG).
 #
-# The compiler's repository is checked out with this workflow's own token,
-# which reads this repository and public ones only. While phaenonlang/phaenon
-# is private that step fails; once it is public the job needs no other token
-# and no secret.
+# The compiler's repository is public: this workflow's own token checks it
+# out, and the job needs no other token and no secret.
 name: CI
 
 on:
