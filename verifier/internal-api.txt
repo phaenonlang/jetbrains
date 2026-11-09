@@ -1,8 +1,9 @@
 # Internal API the plugin uses knowingly, for want of a public API that does the same (README,
 # "Internal API"). One line per used class and plugin class, as verifyInternalApi reads the Plugin
 # Verifier's internal-api-usages.txt: "<API class> in <plugin class>", the API class being the one
-# that declares the member used. A use that is not named here fails verifyPlugin in every IDE the
-# verification covers; a line no IDE reports any more is warned about, and goes.
+# that declares the member used. A line covers every member of that class the plugin class uses, so
+# a further member of a listed class passes; a class not listed fails verifyPlugin in every IDE the
+# verification covers, and so does a line no IDE reports any more, which then goes.
 
 # Reading a .phn as PHP code from its first byte. PhpStorm's own lexer for PHP without an open tag,
 # under the parser and under the editor's highlighter, which asks the baseLexerProvider extension

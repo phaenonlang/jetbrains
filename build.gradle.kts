@@ -174,10 +174,11 @@ tasks.withType<PrepareSandboxTask>().configureEach {
 }
 
 // Fails when the Plugin Verifier saw internal API that verifier/internal-api.txt does not name, in any IDE it
-// verified against. Runs after verifyPlugin, on the reports of this version.
+// verified against, and when the list names a use no IDE reports. Runs after verifyPlugin, on the reports of
+// this version.
 val verifyInternalApi by tasks.registering {
     group = "verification"
-    description = "Fails on internal API uses that verifier/internal-api.txt does not name."
+    description = "Fails on internal API uses that verifier/internal-api.txt does not name, and on lines no IDE reports."
     val listed = layout.projectDirectory.file("verifier/internal-api.txt")
     val reports = layout.buildDirectory.dir("reports/pluginVerifier")
     val version = project.version.toString()
@@ -195,8 +196,13 @@ val verifyInternalApi by tasks.registering {
         if (unlisted.isNotEmpty()) {
             throw GradleException("Internal API that verifier/internal-api.txt does not name:\n  " + unlisted.joinToString("\n  "))
         }
+        // A line no IDE reports is a use that went, or a report the verifier no longer writes or
+        // words differently: either way the list no longer says what the verifier saw.
         val used = ides.flatMap { ide -> ide.resolve("$pluginDir/internal-api-usages.txt").takeIf { it.isFile }?.let(::internalApiUses).orEmpty() }.toSet()
-        (allowed - used).forEach { logger.warn("verifier/internal-api.txt names an internal API use no verified IDE reports: $it") }
+        val stale = allowed - used
+        if (stale.isNotEmpty()) {
+            throw GradleException("verifier/internal-api.txt names internal API no verified IDE reports:\n  " + stale.joinToString("\n  "))
+        }
     }
 }
 

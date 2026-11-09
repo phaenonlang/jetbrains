@@ -333,8 +333,8 @@ The first build downloads the PhpStorm distribution declared in `gradle.properti
 the newest build of every PhpStorm line from `pluginSinceBuild` on, EAP and RC builds included:
 the range the JetBrains Marketplace verifies an upload against. Each is downloaded once (about
 1 GB). It fails on compatibility problems and on API scheduled for removal; `verifyInternalApi`,
-which runs after it, fails on internal API that `verifier/internal-api.txt` does not name (see
-[Internal API](#internal-api)). On macOS the verifier does not resolve the XML plugin of PhpStorm
+which runs after it, fails on internal API that `verifier/internal-api.txt` does not name, and on
+a line there no IDE reports (see [Internal API](#internal-api)). On macOS the verifier does not resolve the XML plugin of PhpStorm
 2026.3's macOS distribution, and reports the XML formatter classes the plugin builds on as missing,
 as it does the PHP plugin's own; the Linux distribution, which CI verifies, and IntelliJ IDEA 2026.3
 resolve it, and the plugin verifies as compatible there.
@@ -701,7 +701,8 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   the erasure in it. The debugger's mapper and the breakpoint handler its gate recognises (above),
   and the Enter delegate that writes PhpStorm's docblock stub (`PhpEnterHandlerAdapter`, internal
   since 2026.3), are the rest. `verifier/internal-api.txt` names each of these uses with its reason,
-  and `verifyInternalApi` fails on any other the Plugin Verifier reports in an IDE of the range.
+  and `verifyInternalApi` fails on any other the Plugin Verifier reports in an IDE of the range, and
+  on a line there that no IDE reports.
   Should one of these classes change, the build against the new PhpStorm and the verifier say so;
   the extension point going would leave parsing and every analysis feature working and regress the
   editor colouring of `.phn` files alone. Everything else goes through public API.
