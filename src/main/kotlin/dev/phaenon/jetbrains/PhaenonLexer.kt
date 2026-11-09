@@ -279,12 +279,14 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
      * class-like header — of a named class, interface, trait or enum, or of an anonymous class
      * after its arguments — opens a class body, any other `{` or `${` a block, and `}` closes the
      * innermost. An expression body (opened where its arrow goes out, [emit]) ends at a `;` of its
-     * own level, or with the scope around it on unfinished code. `Foo::class` and `$o->class`
-     * begin no header.
+     * own level, or with the scope around it on unfinished code. A class-like keyword that names
+     * something begins no header: `Foo::class`, `$o->class`, a method named `interface` or `trait`
+     * (`function interface(`, `&trait(`, or one without a keyword, after its empty `function`), a
+     * named argument `f(class: …)`.
      */
     private fun observe(type: IElementType) {
         when {
-            type in CLASS_LIKE_KEYWORDS && prevSig !in MEMBER_ACCESS -> {
+            type in CLASS_LIKE_KEYWORDS && !namesSomething() -> {
                 classHeader = true
                 headerParens = 0
             }
@@ -306,6 +308,12 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             classHeader && type === PhpTokenTypes.chRPAREN -> headerParens--
         }
     }
+
+    /** Whether the class-like keyword going out is a name: after `::` or `->`, `function` or `function &`, `(` or `,`. */
+    private fun namesSomething(): Boolean =
+        prevSig in MEMBER_ACCESS || prevSig === PhpTokenTypes.kwFUNCTION ||
+            prevSig === PhpTokenTypes.opBIT_AND && prevPrevSig === PhpTokenTypes.kwFUNCTION ||
+            prevSig === PhpTokenTypes.chLPAREN || prevSig === PhpTokenTypes.opCOMMA
 
     /**
      * Follows a named function's header as its tokens go out: the keyword, the name, the parameter

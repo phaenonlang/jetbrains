@@ -100,6 +100,26 @@ abstract class Base implements Shape
 
     public function readonly(): bool => true;
 
+    // Words PhpStorm lexes as keywords: as names they begin no class, and a call in the body stays one.
+    /** The interface. */
+    #[\Deprecated]
+    interface(): void
+    {
+        error_log('interface');
+    }
+
+    public function trait(): void
+    {
+        error_log('trait');
+    }
+
+    &class(): list<int>
+    {
+        error_log('class');
+
+        return $this->cache;
+    }
+
     function legacy(): void {}
 }
 

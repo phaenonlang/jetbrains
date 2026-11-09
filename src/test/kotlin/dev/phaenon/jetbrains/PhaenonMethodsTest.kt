@@ -61,7 +61,7 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
         assertEquals(
             listOf(
                 "__construct", "area", "perimeter", "unit", "scaled", "create", "quiet", "loud", "log", "kind", "describe", "registry", "ordered",
-                "rows", "__toString", "first", "pair", "list", "use", "new", "fun", "static", "readonly", "legacy",
+                "rows", "__toString", "first", "pair", "list", "use", "new", "fun", "static", "readonly", "interface", "trait", "class", "legacy",
             ),
             methods("Base").keys.toList(),
         )
@@ -79,7 +79,7 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
         val functions = PsiTreeUtil.findChildrenOfType(myFixture.file, Function::class.java).filter { it !is Method && !it.isClosure }.map { it.name }
         assertEquals(listOf("twice", "label"), functions)
         val calls = PsiTreeUtil.findChildrenOfType(myFixture.file, FunctionReference::class.java).map { it.name }
-        assertContainsElements(calls, "twice", "label", "sprintf")
+        assertContainsElements(calls, "twice", "label", "sprintf", "error_log")
     }
 
     fun testModifiersAreReadAndNoVisibilityIsPublic() {
@@ -117,7 +117,7 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
             .filter { "::" !in it.name }
             .associate { it.name to it.node.findChildByType(PhpTokenTypes.kwFUNCTION)?.text }
         assertEquals("every method has PHP's `function` leaf", emptyList<String>(), keywords.filterValues { it == null }.keys.toList())
-        assertEquals(listOf("static", "readonly", "legacy"), keywords.filterValues { !it.isNullOrEmpty() }.keys.toList())
+        assertEquals(listOf("static", "readonly", "trait", "legacy"), keywords.filterValues { !it.isNullOrEmpty() }.keys.toList())
         // `&` returns by reference, after the empty keyword as after PHP's.
         val rows = methods("Base").getValue("rows")
         assertEquals("&", rows.nameIdentifier?.let { PsiTreeUtil.prevVisibleLeaf(it) }?.text)
@@ -128,7 +128,8 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
 
     fun testTheParsersLexerInsertsAnEmptyFunctionOnlyAtMemberLevel() {
         val text = "class A { #[X] a() {} public static b<T>(): void { c(); } &d(): array { return []; } public int \$e { get => f(); set(int \$v) { g(); } }" +
-            " r(): void => s(); t(): int => match (1) { default => u() }; }" +
+            " r(): void => s(); t(): int => match (1) { default => u() };" +
+            " interface(): void { v(); } public function trait(): void { w(); } function &class(): void { x(); } }" +
             " function h() { return new class { i() {} }; } j(); interface K { l(); } trait M { n() {} } enum O { case P; q() {} case() {} }"
         val lexer = PhaenonLexer()
         lexer.start(text)
@@ -142,7 +143,7 @@ class PhaenonMethodsTest : BasePlatformTestCase() {
             lexer.advance()
         }
 
-        assertEquals(listOf("a", "b", "&d", "r", "t", "function", "i", "l", "n", "q", "case"), inserted)
+        assertEquals(listOf("a", "b", "&d", "r", "t", "interface", "function", "function", "function", "i", "l", "n", "q", "case"), inserted)
     }
 
     fun testFunIsAnIdentifierAndALeftoverDeclarationIsPhpsError() {
