@@ -4,6 +4,17 @@ From 0.2.1 on, release-please writes each entry from the Conventional Commits me
 previous release (`release-please-config.json`); the entry is the Marketplace's change notes for
 that version. The first release was written by hand.
 
+## [0.5.0](https://github.com/phaenonlang/jetbrains/compare/v0.4.0...v0.5.0) (2026-11-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* `fun`, `is`, `as` and `as?` are no longer read as Phaenon syntax; a `.phn` that still holds them shows PhpStorm's syntax errors until `phn fmt` rewrites it.
+
+### Features
+
+* methods without a keyword; fun, is and as leave ([464ce9b](https://github.com/phaenonlang/jetbrains/commit/464ce9bbdab2cd3faa0ce4f838a95d99140b6320))
+
 ## [0.4.0](https://github.com/phaenonlang/jetbrains/compare/v0.3.0...v0.4.0) (2026-11-09)
 
 
