@@ -5,15 +5,15 @@ use App\EventSourcing\Repository\AbstractEventSourcedRepository;
 
 final readonly class UserRepository extends AbstractEventSourcedRepository<UserId, User>
 {
-    protected static fun aggregateClass(): class<User> {
+    protected static aggregateClass(): class<User> {
         // TODO: Implement aggregateClass() method.
     }
 
-    fun load(UserId $id): User throws AggregateNotFound {
+    load(UserId $id): User throws AggregateNotFound {
         // TODO: Implement load() method.
     }
 
-    fun save(User $aggregate): void {
+    save(User $aggregate): void {
         // TODO: Implement save() method.
     }
 

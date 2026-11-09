@@ -30,7 +30,7 @@ import com.jetbrains.php.lang.psi.elements.PhpNamedElement
  * types each from the declaration. In Phaenon the signature carries the types the docblock would
  * spell (the compiler writes the docblock types PHPStan needs into the PHP it emits), and a type
  * PHP cannot spell is erased before PhpStorm's parser, so to PhpStorm the declaration looked
- * untyped and the stub said `@return mixed` for `fun aggregateClass(): class<T>`.
+ * untyped and the stub said `@return mixed` for `aggregateClass(): class<T>`.
  *
  * This delegate runs ahead of PhpStorm's PHP enter handler (`phpEnterHandler`), and only where
  * that handler would generate a stub (the caret right after the opening of a comment with nothing in

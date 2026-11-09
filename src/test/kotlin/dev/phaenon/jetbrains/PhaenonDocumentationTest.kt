@@ -40,11 +40,18 @@ class PhaenonDocumentationTest : BasePlatformTestCase() {
     }
 
     fun testAFunctionPrintsItsSignatureAsWritten() {
-        val signature = "protected static fun pick<T of User>(list<T> \$from, int \$limit = 3, string ...\$tags): ?T"
-        assertEquals(signature, myFixture.hint("fun pick", 5))
-        val doc = myFixture.quickDoc("fun pick", 5)
+        // A method without a keyword prints without one (design/functions.md §1.1).
+        val signature = "protected static pick<T of User>(list<T> \$from, int \$limit = 3, string ...\$tags): ?T"
+        assertEquals(signature, myFixture.hint("static pick", 8))
+        val doc = myFixture.quickDoc("static pick", 8)
         // One parameter per line in the popup, as PhpStorm lays a signature out; the docblock sections stay PhpStorm's.
-        assertTrue(doc, doc.contains("protected static fun pick<T of User>( list<T> \$from, int \$limit = 3, string ...\$tags ): ?T"))
+        assertTrue(doc, doc.contains("protected static pick<T of User>( list<T> \$from, int \$limit = 3, string ...\$tags ): ?T"))
         assertTrue(doc, doc.contains("how many"))
+    }
+
+    fun testTheKeywordIsPrintedWhereItIsWritten() {
+        // A function keeps PHP's `function`, and so does a method written the PHP way.
+        assertEquals("function firstOf<T>(list<T> \$xs): ?T", myFixture.hint("function firstOf", 10))
+        assertEquals("abstract public function named(list<User> \$users): ?User", myFixture.hint("function named", 10))
     }
 }

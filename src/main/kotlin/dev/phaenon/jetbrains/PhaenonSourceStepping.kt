@@ -17,8 +17,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Stepping by source line (design/line-map.md §4.2). Xdebug steps by the lines of the compiled
- * file, and some of those are one source line: an expression body `fun log(string $m): void =>
- * …;` stops on its statement and again on the closing brace the compiler wrote, both holds of the
+ * file, and some of those are one source line: an expression body `log(string $m): void => …;`
+ * stops on its statement and again on the closing brace the compiler wrote, both holds of the
  * source line. A step that lands on such a line in the same frame and the same source line as the
  * stop it started from is repeated, so the `.phn` never shows a stop on one line twice in a row.
  *

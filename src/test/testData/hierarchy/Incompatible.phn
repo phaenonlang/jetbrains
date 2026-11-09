@@ -2,53 +2,53 @@ namespace App;
 
 abstract class StringRepository<Id of AggregateId, T of EventSourcedAggregate> implements AggregateRepository<Id, T>
 {
-    fun get(Id $id): ?string
+    get(Id $id): ?string
     {
         return null;
     }
 
-    fun load(Id $id): T
+    load(Id $id): T
     {
         throw new \LogicException();
     }
 
-    fun save(string $aggregate): void
+    save(string $aggregate): void
     {
     }
 }
 
 interface PlainStore
 {
-    fun save(Aggregate $aggregate): void;
+    save(Aggregate $aggregate): void;
 }
 
 abstract class NarrowerBound<T of EventSourcedAggregate> implements PlainStore
 {
-    fun save(T $aggregate): void
+    save(T $aggregate): void
     {
     }
 }
 
 abstract class RawRepository implements AggregateRepository
 {
-    fun get(AggregateId $id): ?Aggregate
+    get(AggregateId $id): ?Aggregate
     {
         return null;
     }
 
-    fun load(AggregateId $id): Aggregate
+    load(AggregateId $id): Aggregate
     {
         throw new \LogicException();
     }
 
-    fun save(EventSourcedAggregate $aggregate): void
+    save(EventSourcedAggregate $aggregate): void
     {
     }
 }
 
 abstract class MissingParameter<Id of AggregateId, T of Aggregate> implements AggregateRepository<Id, T>
 {
-    fun save(): void
+    save(): void
     {
     }
 }

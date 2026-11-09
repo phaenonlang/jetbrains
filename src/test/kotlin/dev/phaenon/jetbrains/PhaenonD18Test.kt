@@ -96,13 +96,13 @@ class PhaenonD18Test : BasePlatformTestCase() {
         // No missing `return`, no value returned under void or never.
         assertEmpty(findings())
 
-        myFixture.configureByText("Bad.phn", "namespace App;\n\nfun bad(): array => new \\Exception();\n\nfun fine(): void => print('x');\n")
+        myFixture.configureByText("Bad.phn", "namespace App;\n\nfunction bad(): array => new \\Exception();\n\nfunction fine(): void => print('x');\n")
         // PhpStorm marks the statement the arrow stands for, from the arrow's `>` on.
         assertEquals(listOf("Return value is expected to be 'array', '\\Exception' returned @'> new \\Exception();'"), findings())
     }
 
     fun testCompletionInsideAnExpressionBody() {
-        myFixture.configureByText("C.phn", "namespace App;\n\nfinal class C {\n    private int \$total = 0;\n\n    fun total(): int => \$this->to<caret>;\n}\n")
+        myFixture.configureByText("C.phn", "namespace App;\n\nfinal class C {\n    private int \$total = 0;\n\n    total(): int => \$this->to<caret>;\n}\n")
 
         val items = myFixture.completeBasic()?.map { it.lookupString }
         assertTrue(items.toString(), items == null || "total" in items)
@@ -122,12 +122,12 @@ class PhaenonD18Test : BasePlatformTestCase() {
         assertTrue(myFixture.file.text.contains("use App\\Errors\\NotFound;\nuse App\\Errors\\Unavailable;\n"))
 
         myFixture.renameElement(target, "Missing")
-        assertTrue(myFixture.file.text, myFixture.file.text.contains("fun find(int \$id): ?string throws Missing;"))
-        assertTrue(myFixture.file.text, myFixture.file.text.contains("fun first(): string throws Missing|Unavailable =>"))
+        assertTrue(myFixture.file.text, myFixture.file.text.contains("    find(int \$id): ?string throws Missing;"))
+        assertTrue(myFixture.file.text, myFixture.file.text.contains("    first(): string throws Missing|Unavailable =>"))
     }
 
     fun testCompletionAfterThrowsOffersThrowables() {
-        myFixture.configureByText("T.phn", "namespace App\\Errors;\n\nfinal class Plain {\n}\n\nfun f(): void throws <caret> {\n}\n")
+        myFixture.configureByText("T.phn", "namespace App\\Errors;\n\nfinal class Plain {\n}\n\nfunction f(): void throws <caret> {\n}\n")
 
         val items = myFixture.completeBasic().orEmpty().map { it.lookupString }
         assertTrue(items.toString(), "NotFound" in items && "Unavailable" in items)
@@ -150,42 +150,42 @@ class PhaenonD18Test : BasePlatformTestCase() {
             use App\Errors\Unavailable;
 
             interface Finder {
-                fun find(int ${'$'}id): string throws NotFound;
+                find(int ${'$'}id): string throws NotFound;
             }
 
             final class U implements Finder {
-                fun declared(): void throws NotFound {
+                declared(): void throws NotFound {
                     throw new NotFound(1);
                 }
 
-                fun parent(): void throws \Exception {
+                parent(): void throws \Exception {
                     throw new Unavailable();
                 }
 
-                fun other(): void throws NotFound {
+                other(): void throws NotFound {
                     throw new Unavailable();
                 }
 
-                fun both(): void throws NotFound|Unavailable {
+                both(): void throws NotFound|Unavailable {
                     risky();
                 }
 
-                fun half(): void throws NotFound {
+                half(): void throws NotFound {
                     risky();
                 }
 
-                fun closure(): \Closure throws NotFound {
+                closure(): \Closure throws NotFound {
                     return function (): void {
                         throw new NotFound(2);
                     };
                 }
 
-                fun find(int ${'$'}id): string => throw new NotFound(${'$'}id);
+                find(int ${'$'}id): string => throw new NotFound(${'$'}id);
             }
 
             final class Documented implements Finder {
                 /** Finds nothing. */
-                fun find(int ${'$'}id): string => throw new NotFound(${'$'}id);
+                find(int ${'$'}id): string => throw new NotFound(${'$'}id);
             }
             """.trimIndent() + "\n",
         )
@@ -220,14 +220,14 @@ class PhaenonD18Test : BasePlatformTestCase() {
             use App\Errors\Unavailable;
 
             final class T {
-                fun caught(): void throws NotFound {
+                caught(): void throws NotFound {
                     try {
                         risky();
                     } catch (Unavailable ${'$'}e) {
                     }
                 }
 
-                fun uncaught(): void throws Unavailable {
+                uncaught(): void throws Unavailable {
                     try {
                         risky();
                     } catch (Unavailable ${'$'}e) {
@@ -253,12 +253,12 @@ class PhaenonD18Test : BasePlatformTestCase() {
 
             final class M {
                 /** Declared. */
-                fun declared(): void throws NotFound {
+                declared(): void throws NotFound {
                     throw new NotFound(1);
                 }
 
                 /** Not declared. */
-                fun other(): void throws NotFound {
+                other(): void throws NotFound {
                     throw new Unavailable();
                 }
             }
@@ -285,37 +285,37 @@ class PhaenonD18Test : BasePlatformTestCase() {
     }
 
     fun testEnterBeforeTheArrowWrapsItOneLevelIn() {
-        myFixture.configureByText("W.phn", "namespace App;\n\nfinal class W {\n    fun name(): string<caret> => 'w';\n}\n")
+        myFixture.configureByText("W.phn", "namespace App;\n\nfinal class W {\n    name(): string<caret> => 'w';\n}\n")
 
         myFixture.type("\n")
 
         val document = myFixture.editor.document.text
         val caret = myFixture.editor.caretModel.offset
-        assertEquals("namespace App;\n\nfinal class W {\n    fun name(): string\n        <caret>=> 'w';\n}\n", document.substring(0, caret) + "<caret>" + document.substring(caret).trimStart(' '))
+        assertEquals("namespace App;\n\nfinal class W {\n    name(): string\n        <caret>=> 'w';\n}\n", document.substring(0, caret) + "<caret>" + document.substring(caret).trimStart(' '))
     }
 
     fun testCompleteStatementOpensTheBodyOnTheDeclarationsLine() {
-        myFixture.configureByText("S.phn", "namespace App;\n\nfinal class S {\n    fun name(): string<caret>\n}\n")
+        myFixture.configureByText("S.phn", "namespace App;\n\nfinal class S {\n    name(): string<caret>\n}\n")
 
         myFixture.performEditorAction("EditorCompleteStatement")
 
-        assertTrue(myFixture.editor.document.text, myFixture.editor.document.text.startsWith("namespace App;\n\nfinal class S {\n    fun name(): string {\n"))
+        assertTrue(myFixture.editor.document.text, myFixture.editor.document.text.startsWith("namespace App;\n\nfinal class S {\n    name(): string {\n"))
         // The new body stays open to type into: an empty body becomes `{}` when Reformat Code runs over it.
         assertFalse(myFixture.editor.document.text, myFixture.editor.document.text.contains("string {}"))
     }
 
     fun testEnterBetweenTheBracesOfAnEmptyBodyOpensIt() {
-        myFixture.configureByText("O.phn", "namespace App;\n\nfinal class O\n{\n    fun __construct(private int \$n) {<caret>}\n}\n")
+        myFixture.configureByText("O.phn", "namespace App;\n\nfinal class O\n{\n    __construct(private int \$n) {<caret>}\n}\n")
 
         myFixture.type("\n")
 
-        myFixture.checkResult("namespace App;\n\nfinal class O\n{\n    fun __construct(private int \$n) {\n        <caret>\n    }\n}\n")
+        myFixture.checkResult("namespace App;\n\nfinal class O\n{\n    __construct(private int \$n) {\n        <caret>\n    }\n}\n")
     }
 
     fun testQuickDocumentationShowsTheClause() {
         bodies()
 
-        assertEquals("fun first(): string throws NotFound|Unavailable", myFixture.hint("fun first", 5))
+        assertEquals("first(): string throws NotFound|Unavailable", myFixture.hint("    first()", 5))
     }
 
     fun testAPhpFileKeepsItsSyntaxErrors() {

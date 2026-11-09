@@ -12,7 +12,7 @@ final class Converted {}
 final class GroupedErased {}
 final class GroupedNative {}
 
-fun helper(): int
+function helper(): int
 {
     return 1;
 }

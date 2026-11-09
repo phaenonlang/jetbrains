@@ -32,13 +32,13 @@ enum Level: int implements HasName
 
     case Low = 1;
 
-    public fun __debugInfo(): array
+    public __debugInfo(): array
     {
         return ['level' => $this->value];
     }
 }
 
-fun configure(int $level): void
+function configure(int $level): void
 {
     CONFIG->level = $level;
 }

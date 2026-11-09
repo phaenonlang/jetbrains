@@ -15,7 +15,6 @@ import com.jetbrains.php.lang.psi.elements.ConstantReference
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.FieldReference
 import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocComment
-import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.parser.PhpElementTypes
 import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.FunctionReference
@@ -45,9 +44,10 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * An import used only inside an erased type (`use App\Event\DomainEvent;` for
  * `list<DomainEvent>`) is "never used" to PhpStorm, which cannot see into the erased text.
  *
- * `fun` declares a public method (design/functions.md §1), a class constant without a visibility
- * is public, and so is a property with an asymmetric visibility and no main one: the PSR-12
- * "missing visibility" finding does not apply, and the compiler writes the `public` out.
+ * A method without a visibility is public (design/functions.md §1.1), whether it is written
+ * without a keyword or with PHP's `function`, and so are a class constant without one and a
+ * property with an asymmetric visibility and no main one: the PSR-12 "missing visibility" finding
+ * does not apply, and the compiler writes the `public` out.
  * A closure in a constant expression — an attribute argument, a constant, a default — is lowered
  * to the `static function` PHP 8.5 accepts there (§2), so it is not an invalid constant expression,
  * nor a closure-valued default that "must be declared static" (PhpStorm 2025.3).
@@ -198,12 +198,11 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         else -> emptyList()
     }
 
-    /** A `fun` method, a class constant, or a property or parameter with an asymmetric visibility and no main one, is public (design/functions.md §1). */
+    /** A method, a class constant, or a property or parameter with an asymmetric visibility and no main one, is public (design/functions.md §1.1). */
     private fun visibilityIsImplied(info: HighlightInfo, file: PsiFile): Boolean {
         val leaf = file.findElementAt(info.startOffset) ?: return false
         val declaration: PsiElement = PsiTreeUtil.getParentOfType(leaf, false, Method::class.java, Field::class.java, Parameter::class.java) ?: return false
-        if (declaration is Method) return declaration.node.findChildByType(PhpTokenTypes.kwFUNCTION)?.text == "fun"
-        if (declaration is Field && declaration.isConstant) return true
+        if (declaration is Method || declaration is Field && declaration.isConstant) return true
         return declaration.node.findChildByType(PhpElementTypes.MODIFIER_LIST)?.text?.contains("(set)") == true
     }
 

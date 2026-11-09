@@ -54,7 +54,7 @@ class PhaenonImportOptimizerTest : BasePlatformTestCase() {
         optimize("Kinds.phn")
         val phn = myFixture.file.text
 
-        val php = myFixture.configureByText("Kinds.php", "<?php\n" + source.replace("list<ReturnOnly>", "ReturnOnly").replace("fun of", "public function of"))
+        val php = myFixture.configureByText("Kinds.php", "<?php\n" + source.replace("list<ReturnOnly>", "ReturnOnly").replace("    of(", "    public function of("))
         OptimizeImportsProcessor(project, php).runWithoutProgress()
 
         assertEquals(phn.substringBefore("final class"), php.text.removePrefix("<?php\n").substringBefore("final class"))

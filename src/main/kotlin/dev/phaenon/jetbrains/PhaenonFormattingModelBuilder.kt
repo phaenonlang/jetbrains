@@ -130,12 +130,12 @@ class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
  * The spacing next to an erased construct, which PhpStorm's rules cannot judge.
  *
  * An erased leaf is one of two kinds. Some belong to their neighbour and are written against
- * it: a list in angle brackets (`Box<T>`, `fun map<U>(`, `new Box<int>(`, `implements I<T>`)
+ * it: a list in angle brackets (`Box<T>`, `map<U>(`, `new Box<int>(`, `implements I<T>`)
  * to the name before it and to the `(` of a call after it; a return type erased whole
  * (`: ?T`, `: list<User>`) to the `)` before it, as a PHP return type is; a union member erased
  * with its separator (`string|list<int>`, `list<T>|null`) to the member it is joined to.
  * Every other erased construct stands where a PHP token
- * would (`list<User> $users`, `$x as T`, `type Name = …;`): PhpStorm's rule for that
+ * would (`list<User> $users`, `type Name = …;`): PhpStorm's rule for that
  * spot applies, except that it never joins the construct to its neighbour where they were apart,
  * which would make one word of two (`$x as T` → `$xas T`) or glue a type to its variable. Where
  * PhpStorm has no rule, a construct apart from its neighbour is one space from it, or the line

@@ -7,7 +7,7 @@ use function App\Model\helper;
 
 final class Kinds
 {
-    fun of(Native $native): list<ReturnOnly>
+    of(Native $native): list<ReturnOnly>
     {
         return [helper()];
     }

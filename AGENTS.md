@@ -22,7 +22,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
 
 - JDK 21; Gradle provisions one if none is installed. `./gradlew test` is a no-op when nothing
   changed (build cache): `--rerun` forces it. The results are in `build/test-results/test/*.xml`.
-- `src/main/kotlin`: `PhaenonLexer` (erasure) and `PhaenonPsiBuilder` (no lazy bodies) feed the
+- `src/main/kotlin`: `PhaenonLexer` (erasure, and the empty `function` of a method without a
+  keyword, D27) and `PhaenonPsiBuilder` (no lazy bodies, that token read as `function`) feed the
   parser; `PhaenonErasedTypes`, `PhaenonTypeSyntax` and `PhaenonTypeText` read the erased text back
   for `PhaenonTypeProvider` (a type parameter as its bound, `class<T>` as `class-string<Bound>`,
   closure types with PhpStorm's signature encoding); `PhaenonErasure` and
@@ -75,7 +76,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   (`PhaenonTextMateBundleProvider`); its grammar and language configuration are verbatim copies of
   `../vscode`'s, which that repository's tests compare: refresh by copying, never edit.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
-  `syntax/Constructs.phn` uses every Phaenon construct; `types/` holds the erased-type fixtures,
+  `syntax/Constructs.phn` uses every Phaenon construct, `methods/Shapes.phn` every shape of a
+  method without a keyword (D27); `types/` holds the erased-type fixtures,
   `closure/` the closure-type ones, `classstring/` the `class<T>` ones, `php86/` the PHP 8.6 ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).
   Tests set the IDE's highest PHP level: the test project defaults to PHP 5.6. It also lacks
   PhpStorm's bundled PHP stubs (they are indexed only for a project with a PHP module), so a test

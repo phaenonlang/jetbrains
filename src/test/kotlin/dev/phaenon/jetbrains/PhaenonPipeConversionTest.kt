@@ -84,13 +84,13 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
     fun testAPhnFileGetsTheConversionThatKeepsTheMethods() {
         if (!pipesExist()) return
         phpStormsInspection()?.let { myFixture.enableInspections(it) }
-        myFixture.configureByText("Receipt.phn", body.replace("public function", "fun"))
+        myFixture.configureByText("Receipt.phn", body.replace("public function ", ""))
 
         assertEquals("PhpStorm's fix is replaced, not doubled", 1, conversions().size)
         myFixture.launchAction(myFixture.availableIntentions.single { it.text == "Convert nested function calls to a pipe expression" })
 
         val text = myFixture.editor.document.text
-        val pipe = text.substringAfter("fun run(string \$order): void\n    {\n").substringBefore("\n    }")
+        val pipe = text.substringAfter("    run(string \$order): void\n    {\n").substringBefore("\n    }")
         assertEquals("sprintf('✓ order %s', \$order) |> Style::line(...) |> \$this->output->writeln(...);", pipe.trim().replace(Regex("\\s*\\n\\s*"), " "))
     }
 
@@ -98,7 +98,7 @@ class PhaenonPipeConversionTest : BasePlatformTestCase() {
         if (!pipesExist()) return
         myFixture.configureByText(
             "Calls.phn",
-            "namespace App;\n\nfun f(string \$x): string\n{\n    return str_pad(tr<caret>im(strval(\$x)), 10);\n}\n",
+            "namespace App;\n\nfunction f(string \$x): string\n{\n    return str_pad(tr<caret>im(strval(\$x)), 10);\n}\n",
         )
 
         myFixture.launchAction(myFixture.availableIntentions.single { it.text == "Convert nested function calls to a pipe expression" })

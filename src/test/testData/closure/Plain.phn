@@ -2,7 +2,7 @@ namespace Acme\Shop\Payments;
 
 final class Plain
 {
-    fun run(Closure $callback): void
+    run(Closure $callback): void
     {
     }
 }

@@ -34,12 +34,24 @@ import com.jetbrains.php.lang.parser.parsing.functions.Function
  * An expression body, `=> expr;` (design/functions.md §3), reaches the parser as the block it
  * compiles to: [PhaenonLexer] hands over the arrow as `{` and `return`. The source has no `}` for
  * that block; it is closed here after its one statement, as the compiler's tree holds it.
+ *
+ * The empty token [PhaenonLexer] hands over before a method declared without a keyword,
+ * [PhaenonTokenTypes.FUNCTION], is `function` to the parser: the builder answers its type as
+ * PHP's keyword, and the leaf the platform builds of it is one ([PhaenonTokenTypes.FUNCTION]).
  */
 class PhaenonPsiBuilder(private val project: Project, delegate: PsiBuilder) : PsiBuilderAdapter(delegate) {
 
     private val php: PhpPsiBuilder by lazy { PhpPsiBuilder(project, this) }
 
     override fun mark(): PsiBuilder.Marker = Marker(super.mark())
+
+    override fun getTokenType(): IElementType? = asParserSees(super.getTokenType())
+
+    override fun lookAhead(steps: Int): IElementType? = asParserSees(super.lookAhead(steps))
+
+    override fun rawLookup(steps: Int): IElementType? = asParserSees(super.rawLookup(steps))
+
+    private fun asParserSees(type: IElementType?): IElementType? = if (type === PhaenonTokenTypes.FUNCTION) PhpTokenTypes.kwFUNCTION else type
 
     /** Parses the `{ … }` block at the current token into a non-lazy group statement. */
     private fun parseBlockNow() {

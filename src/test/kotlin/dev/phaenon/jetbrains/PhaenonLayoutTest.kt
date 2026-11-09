@@ -39,10 +39,10 @@ class PhaenonLayoutTest : BasePlatformTestCase() {
 
     fun testAPhnFileIndentsWithSpacesWhenPhpIndentsWithTabs() {
         CodeStyle.getSettings(project).getLanguageIndentOptions(PhpLanguage.INSTANCE).USE_TAB_CHARACTER = true
-        val phn = myFixture.configureByText("A.phn", "namespace App;\n\nfinal class A\n{\nfun f(): int {\nreturn 1;\n}\n}\n")
+        val phn = myFixture.configureByText("A.phn", "namespace App;\n\nfinal class A\n{\nf(): int {\nreturn 1;\n}\n}\n")
         assertFalse(CodeStyle.getIndentOptions(phn).USE_TAB_CHARACTER)
         reformat()
-        assertEquals("namespace App;\n\nfinal class A\n{\n    fun f(): int {\n        return 1;\n    }\n}\n", myFixture.editor.document.text)
+        assertEquals("namespace App;\n\nfinal class A\n{\n    f(): int {\n        return 1;\n    }\n}\n", myFixture.editor.document.text)
 
         val php = myFixture.configureByText("A.php", "<?php\nfinal class A\n{\npublic function f(): int\n{\nreturn 1;\n}\n}\n")
         assertTrue("a .php keeps the PHP style", CodeStyle.getIndentOptions(php).USE_TAB_CHARACTER)
@@ -50,26 +50,44 @@ class PhaenonLayoutTest : BasePlatformTestCase() {
 
     fun testWithoutAPhnReformatCodeIsPhpStormsAlone() {
         PhaenonSettings.of(project).binary = "/nonexistent/phn"
-        myFixture.configureByText("A.phn", "namespace App;\n\nfun f(): list < int > {\n    return [];\n}\n")
+        myFixture.configureByText("A.phn", "namespace App;\n\nfunction f(): list < int > {\n    return [];\n}\n")
         reformat()
         assertTrue(myFixture.editor.document.text.contains("list < int >"))
     }
 
     fun testReformatCodeWritesPhaenonsLayout() {
         if (phn == null) return
-        myFixture.configureByText("A.phn", "\n\nnamespace App;\n\nfinal class Box<T of \\Countable>\n{\n    /**\n     * The first.\n     */\n    fun first(list < T > \$xs): ?T throws  \\LogicException {\n        return \$xs[0] ?? null;\n    }\n}\n")
+        myFixture.configureByText("A.phn", "\n\nnamespace App;\n\nfinal class Box<T of \\Countable>\n{\n    /**\n     * The first.\n     */\n    first(list < T > \$xs): ?T throws  \\LogicException {\n        return \$xs[0] ?? null;\n    }\n}\n")
         reformat()
         assertEquals(
-            "namespace App;\n\nfinal class Box<T of \\Countable>\n{\n    /** The first. */\n    fun first(list<T> \$xs): ?T throws \\LogicException {\n        return \$xs[0] ?? null;\n    }\n}\n",
+            "namespace App;\n\nfinal class Box<T of \\Countable>\n{\n    /** The first. */\n    first(list<T> \$xs): ?T throws \\LogicException {\n        return \$xs[0] ?? null;\n    }\n}\n",
+            myFixture.editor.document.text,
+        )
+    }
+
+    fun testReformatCodeRespellsTheWithdrawnFunAndLiftsFunctionOffMethods() {
+        if (phn == null) return
+        // design/tooling.md §5.6: `fun` dropped before a method's name and `function` before a
+        // function's, `function` lifted off a method the grammar allows without it; a name that
+        // keeps the keyword keeps it, and the modifiers stay as written.
+        myFixture.configureByText(
+            "A.phn",
+            "namespace App;\n\nfinal class A\n{\n    fun f(): int => 1;\n\n    public static function g(): int => 2;\n\n" +
+                "    public function static(): int => 3;\n}\n\nfun h(): int => 4;\n",
+        )
+        reformat()
+        assertEquals(
+            "namespace App;\n\nfinal class A\n{\n    f(): int => 1;\n\n    public static g(): int => 2;\n\n" +
+                "    public function static(): int => 3;\n}\n\nfunction h(): int => 4;\n",
             myFixture.editor.document.text,
         )
     }
 
     fun testAReformatOfARangeLeavesTheRestAlone() {
         if (phn == null) return
-        val text = "namespace App;\n\nfun f(): list < int > {\n    return [];\n}\n\nfun g(): int {\nreturn 1;\n}\n"
+        val text = "namespace App;\n\nfunction f(): list < int > {\n    return [];\n}\n\nfunction g(): int {\nreturn 1;\n}\n"
         val file = myFixture.configureByText("A.phn", text)
-        val g = text.indexOf("fun g")
+        val g = text.indexOf("function g")
         WriteCommandAction.runWriteCommandAction(project) { CodeStyleManager.getInstance(project).reformatText(file, g, text.length) }
         PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
         val out = myFixture.editor.document.text

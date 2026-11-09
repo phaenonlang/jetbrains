@@ -101,8 +101,8 @@ class PhaenonClassStringTest : BasePlatformTestCase() {
     fun testHoverAndQuickDocumentationPrintPhaenonsSpelling() {
         myFixture.configureByFiles("hierarchy/Today.phn")
 
-        val declaration = "abstract protected static fun aggregateClass(): class<T>"
-        assertEquals("Ctrl+hover on the declaration", declaration, hint("fun aggregateClass", 6))
+        val declaration = "abstract protected static aggregateClass(): class<T>"
+        assertEquals("Ctrl+hover on the declaration", declaration, hint("static aggregateClass(", 9))
         assertEquals("Ctrl+hover on the call", declaration, hint("static::aggregateClass", 10))
         assertTrue(doc("static::aggregateClass", 10), doc("static::aggregateClass", 10).contains(declaration))
         assertEquals("\$class : class<EventSourcedAggregate>", hint("\$class =", 1))
@@ -116,17 +116,17 @@ class PhaenonClassStringTest : BasePlatformTestCase() {
         assertEquals("concrete parameter", "\$users : class<User>", hint("\$users::named", 1))
         assertEquals("class<User> property", "\$userClass : class<User>", hint("this->userClass", 7))
         assertEquals("class<T> property", "\$aggregateClass : class<T>", hint("this->aggregateClass", 7))
-        assertEquals("a method with an erased parameter", "fun make(class<User> \$users, AggregateId \$id): void", hint("fun make", 5))
+        assertEquals("a method with an erased parameter", "make(class<User> \$users, AggregateId \$id): void", hint("make(class<User>", 1))
     }
 
     fun testCtrlHoverAndCtrlClickOnTheGetterLandOnTheMethod() {
         myFixture.configureByFiles("hierarchy/Today.phn")
 
-        for ((needle, shift) in listOf("static::aggregateClass" to 10, "fun aggregateClass" to 6)) {
+        for ((needle, shift) in listOf("static::aggregateClass" to 10, "static aggregateClass(" to 9)) {
             val offset = myFixture.file.text.indexOf(needle) + shift
             myFixture.editor.caretModel.moveToOffset(offset)
             val text = CtrlMouseHandler.getGoToDeclarationOrUsagesText(myFixture.editor)?.let(::popupText)
-            assertEquals(needle, "abstract protected static fun aggregateClass(): class<T>", text)
+            assertEquals(needle, "abstract protected static aggregateClass(): class<T>", text)
         }
         val offset = myFixture.file.text.indexOf("static::aggregateClass") + 10
         val targets = GotoDeclarationAction.findAllTargetElements(project, myFixture.editor, offset)

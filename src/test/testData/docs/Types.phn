@@ -6,7 +6,7 @@ final class User
 
 final class Types
 {
-    fun run(list<User> $users, map<string, User> $byName, bytes $raw, ?class<User> $maybe, Closure(int): string $format, string $name): void
+    run(list<User> $users, map<string, User> $byName, bytes $raw, ?class<User> $maybe, Closure(int): string $format, string $name): void
     {
         $list = $users;
         $map = $byName;
@@ -19,8 +19,18 @@ final class Types
     /**
      * @param int $limit - how many
      */
-    protected static fun pick<T of User>(list<T> $from, int $limit = 3, string ...$tags): ?T
+    protected static pick<T of User>(list<T> $from, int $limit = 3, string ...$tags): ?T
     {
         return null;
     }
+}
+
+abstract class Legacy
+{
+    abstract public function named(list<User> $users): ?User;
+}
+
+function firstOf<T>(list<T> $xs): ?T
+{
+    return $xs[0] ?? null;
 }

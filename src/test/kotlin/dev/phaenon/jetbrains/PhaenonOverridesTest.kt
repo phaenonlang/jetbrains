@@ -2,7 +2,6 @@ package dev.phaenon.jetbrains
 
 import com.intellij.application.options.CodeStyle
 import com.intellij.codeInsight.lookup.LookupElementPresentation
-import com.intellij.codeInsight.template.impl.LiveTemplateCompletionContributor
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
@@ -10,9 +9,10 @@ import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
 
 /**
  * Code | Implement Methods, Code | Override Methods and the override items of completion write
- * Phaenon in a `.phn` class ([PhaenonOverrides]): `fun` for public, `protected fun`, the parent's
- * declared types from its source with its type parameters replaced by the class's type arguments,
- * the classes those types name imported. A `.php` file keeps PhpStorm's PHP.
+ * Phaenon in a `.phn` class ([PhaenonOverrides]): a method without a keyword, and without `public`
+ * (`protected` and `static` written), the parent's declared types from its source with its type
+ * parameters replaced by the class's type arguments, the classes those types name imported. A
+ * `.php` file keeps PhpStorm's PHP.
  *
  * The parents are `testData/implement/AggregateRepository.phn` (an interface with type parameters)
  * and `AbstractEventSourcedRepository.phn` (an abstract class implementing it); their classes are
@@ -29,7 +29,7 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         for (name in listOf("AggregateRepository.phn", "AbstractEventSourcedRepository.phn", "Model.phn")) myFixture.copyFileToProject("implement/$name")
     }
 
-    fun testImplementMethodsWritesFunAndTheTypesTheClassGives() {
+    fun testImplementMethodsWritesMethodsWithoutAKeywordAndTheTypesTheClassGives() {
         myFixture.configureByFile("implement/UserRepository.phn")
 
         myFixture.performEditorAction("ImplementMethods")
@@ -47,7 +47,7 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
 
         // `list<DomainEvent>` names a class the parent imports: the class imports it too, as it imports
         // what the parent's `throws` clause names. `mapped<U>` keeps its own type parameter;
-        // `protected fun eventStore()` its visibility. Braces stand on the declarations' lines.
+        // `protected eventStore()` its visibility. Braces stand on the declarations' lines.
         myFixture.checkResultByFile("implement/UserRepository.override.after.phn")
     }
 
@@ -74,9 +74,9 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
             myFixture.performEditorAction("ImplementMethods")
 
             val document = myFixture.editor.document.text
-            assertTrue(document, document.contains("    fun get(UserId \$id): ?User {}\n"))
-            assertTrue(document, document.contains("    fun load(UserId \$id): User throws AggregateNotFound {}\n"))
-            assertTrue(document, document.contains("    fun save(User \$aggregate): void {}\n"))
+            assertTrue(document, document.contains("    get(UserId \$id): ?User {}\n"))
+            assertTrue(document, document.contains("    load(UserId \$id): User throws AggregateNotFound {}\n"))
+            assertTrue(document, document.contains("    save(User \$aggregate): void {}\n"))
         } finally {
             template.text = text
         }
@@ -88,57 +88,57 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         myFixture.performEditorAction("ImplementMethods")
 
         val text = myFixture.editor.document.text
-        assertTrue(text, text.contains("    protected static fun aggregateClass(): class<T> {\n"))
+        assertTrue(text, text.contains("    protected static aggregateClass(): class<T> {\n"))
         // The interface's bare `@throws` tag is a `throws` clause in Phaenon (design/functions.md §4).
-        assertTrue(text, text.contains("    fun load(Id \$id): T throws AggregateNotFound {\n"))
+        assertTrue(text, text.contains("    load(Id \$id): T throws AggregateNotFound {\n"))
     }
 
     fun testCompletionOffersOverridesSpelledAsPhaenon() {
         myFixture.configureByFile("implement/Repo.phn")
-        myFixture.type("fun")
 
         val items = myFixture.completeBasic().orEmpty().filter { it.`object` is com.jetbrains.php.lang.psi.elements.Method }
         val shown = items.map { LookupElementPresentation.renderElement(it).let { p -> p.itemText + p.tailText } }
 
-        assertEquals(listOf("fun get(UserId \$id): ?User {...}", "fun load(UserId \$id): User {...}", "fun save(User \$aggregate): void {...}"), shown)
+        assertEquals(listOf("get(UserId \$id): ?User {...}", "load(UserId \$id): User {...}", "save(User \$aggregate): void {...}"), shown)
     }
 
     fun testAnOverrideItemInsertsAPhaenonMethod() {
         myFixture.configureByFile("implement/Repo.phn")
-        myFixture.type("fun")
-        val item = myFixture.completeBasic().orEmpty().single { it.lookupString == "fun load" }
+        myFixture.type("lo")
 
-        myFixture.lookup.currentItem = item
-        myFixture.finishLookup('\n')
+        // The one item that matches is inserted without a list.
+        myFixture.completeBasic()?.let { items ->
+            myFixture.lookup.currentItem = items.single { it.`object` is com.jetbrains.php.lang.psi.elements.Method && it.lookupString == "load" }
+            myFixture.finishLookup('\n')
+        }
 
         val text = myFixture.editor.document.text
-        assertTrue(text, text.contains("{\n    fun load(UserId \$id): User throws AggregateNotFound {\n        // TODO: Implement load() method.\n    }\n}"))
+        assertTrue(text, text.contains("{\n    load(UserId \$id): User throws AggregateNotFound {\n        // TODO: Implement load() method.\n    }\n}"))
     }
 
-    fun testCompletingTheNameAfterFunKeepsWhatWasWritten() {
+    fun testAProtectedOverrideItemIsShownWithItsModifiers() {
         myFixture.configureByText(
             "Child.phn",
             "namespace App\\User;\n\nuse App\\EventSourcing\\Repository\\AbstractEventSourcedRepository;\n\n" +
-                "final readonly class Child extends AbstractEventSourcedRepository<UserId, User> {\n    protected static fun aggregateClass(): class<User> {\n        return User::class;\n    }\n\n    fun ge<caret>\n}\n",
+                "final readonly class Child extends AbstractEventSourcedRepository<UserId, User> {\n    aggr<caret>\n}\n",
+        )
+
+        val items = myFixture.completeBasic().orEmpty().filter { it.`object` is com.jetbrains.php.lang.psi.elements.Method }
+
+        assertEquals(listOf("protected static aggregateClass"), items.map { it.lookupString })
+    }
+
+    fun testCompletingTheNameAfterFunctionKeepsWhatWasWritten() {
+        myFixture.configureByText(
+            "Child.phn",
+            "namespace App\\User;\n\nuse App\\EventSourcing\\Repository\\AbstractEventSourcedRepository;\n\n" +
+                "final readonly class Child extends AbstractEventSourcedRepository<UserId, User> {\n    protected static aggregateClass(): class<User> {\n        return User::class;\n    }\n\n    public function ge<caret>\n}\n",
         )
 
         myFixture.completeBasic()?.let { items -> myFixture.lookup.currentItem = items.first { it.lookupString == "get" }; myFixture.finishLookup('\n') }
 
         val text = myFixture.editor.document.text
-        assertTrue(text, text.contains("    fun get(UserId \$id): ?User {\n        return parent::get(\$id);"))
-    }
-
-    fun testFunIsOfferedOnceInAPhnFile() {
-        // PhpStorm's bundled PHP live template `fun` (it expands to `function …`) shows in completion
-        // beside the keyword; in a .phn file only the keyword is offered.
-        LiveTemplateCompletionContributor.setShowTemplatesInTests(true, testRootDisposable)
-        myFixture.configureByText("Fun.phn", "namespace App;\n\nfinal class Fun\n{\n    fun<caret>\n}\n")
-        val phn = myFixture.completeBasic()?.map { it.lookupString }.orEmpty()
-        myFixture.configureByText("Fun.php", "<?php\nnamespace App;\n\nfinal class Fun\n{\n    fun<caret>\n}\n")
-        val php = myFixture.completeBasic()?.map { it.lookupString }.orEmpty()
-
-        assertEquals(1, phn.count { it == "fun" })
-        assertEquals("the live template is PhpStorm's in a .php file", 1, php.count { it == "fun" })
+        assertTrue(text, text.contains("    public function get(UserId \$id): ?User {\n        return parent::get(\$id);"))
     }
 
     fun testAPhpFileKeepsPhpStormsMethods() {

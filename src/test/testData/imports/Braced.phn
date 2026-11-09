@@ -5,7 +5,7 @@ namespace App {
 
     final class Braced
     {
-        fun of(Native $native): list<ReturnOnly>
+        of(Native $native): list<ReturnOnly>
         {
             return [];
         }

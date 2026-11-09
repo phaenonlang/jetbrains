@@ -53,7 +53,7 @@ class PhaenonHierarchyTest : BasePlatformTestCase() {
             {
                 private ?T ${'$'}last = null;
 
-                fun union(int|T ${'$'}x, T|null ${'$'}y, U ${'$'}z, list<T> ${'$'}all): void
+                union(int|T ${'$'}x, T|null ${'$'}y, U ${'$'}z, list<T> ${'$'}all): void
                 {
                 }
             }

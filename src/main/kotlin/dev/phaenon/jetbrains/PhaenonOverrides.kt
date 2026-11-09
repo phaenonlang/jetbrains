@@ -44,19 +44,19 @@ import com.jetbrains.php.refactoring.PhpAliasImporter
  * spelling, with the parent's declared types.
  *
  * PhpStorm generates the method from the parent's PSI, where an erased type is a comment, and
- * writes PHP: `function get($id)` for `fun get(Id $id): ?T` (no visibility either, since the
- * parent's `fun` has none). The plugin lets PhpStorm generate the method as always — its member
- * chooser, its body and docblock options, its formatting and imports — and then rewrites the
- * method's head:
+ * writes PHP: `public function get($id)` for `get(Id $id): ?T`. The plugin lets PhpStorm
+ * generate the method as always — its member chooser, its body and docblock options, its
+ * formatting and imports — and then rewrites the method's head:
  *
- * - `fun` for a public method, `protected fun` for a protected one, `static` kept, as the compiler
- *   reads it and `phn migrate` writes it (design/functions.md §1);
+ * - no keyword and no `public`, `protected` for a protected method, `static` kept, as
+ *   `phn migrate` writes a method (design/functions.md §1.1, §1.3); a method named so that it keeps
+ *   PHP's `function` (`public function static()`) keeps the head PhpStorm wrote;
  * - the type of every parameter and the return type the parent declared with an erased part, taken
  *   from the parent's source text (`Id $id`, `?T`, `class<T>`, `list<User>`,
  *   `Closure(string...): (int, string)`), and the parent's own type-parameter list;
  * - the parent's type parameters replaced by what the implementing class gives them: in
  *   `final readonly class UserRepository extends AbstractEventSourcedRepository<UserId, User>`,
- *   `fun get(Id $id): ?T` becomes `fun get(UserId $id): ?User`. The arguments are followed through
+ *   `get(Id $id): ?T` becomes `get(UserId $id): ?User`. The arguments are followed through
  *   every `extends` and `implements` between the class and the declaring one, so an interface's
  *   method implemented two levels down gets the arguments of that path. A parameter the class
  *   does not give an argument for keeps the parent's spelling;
@@ -69,12 +69,17 @@ import com.jetbrains.php.refactoring.PhpAliasImporter
  */
 internal object PhaenonOverrides {
 
-    /** The head of a method that overrides [parent]: `fun`, `protected fun`, `static fun`, `protected static fun`. */
+    /**
+     * The modifiers before the name of a method that overrides [parent], each followed by a space:
+     * none, `protected `, `static `, `protected static `. A public method is written without
+     * `public`, as `phn migrate` writes one.
+     */
     fun head(parent: Method): String = buildString {
         if (parent.access.isProtected) append("protected ")
         if (parent.isStatic) append("static ")
-        append("fun")
     }
+
+    private fun bareName(name: String): Boolean = !keepsFunctionKeyword(name)
 
     /** `(UserId $id): ?User`: the parameter list and return type of [parent] as an override in [implementing] spells them. */
     fun signatureText(parent: Method, implementing: PhpClass): String {
@@ -140,11 +145,16 @@ internal object PhaenonOverrides {
         if (typeParameters != null && name != null && declarationList(method) == null) {
             edits.add(TextRange(name.textRange.endOffset, name.textRange.endOffset) to typeParameters.text)
         }
-        if (rewriteHead) {
+        if (rewriteHead && bareName(method.name)) {
+            // From the modifiers (or the keyword) to what follows the keyword, `&` or the name:
+            // `public function ` becomes the head.
             val keyword = method.node.findChildByType(PhpTokenTypes.kwFUNCTION)
             if (keyword != null) {
                 val modifiers = PsiTreeUtil.getChildOfType(method, PhpModifierList::class.java)?.takeIf { it.textLength > 0 }
-                edits.add(TextRange(modifiers?.textRange?.startOffset ?: keyword.startOffset, keyword.textRange.endOffset) to head(parent))
+                val chars = document.charsSequence
+                var end = keyword.textRange.endOffset
+                while (end < chars.length && chars[end].isWhitespace()) end++
+                edits.add(TextRange(modifiers?.textRange?.startOffset ?: keyword.startOffset, end) to head(parent))
             }
         }
 
@@ -493,10 +503,10 @@ internal object PhaenonOverrides {
 
     /**
      * PhpStorm's override or implement item of completion, made Phaenon's in a `.phn` file: shown
-     * and inserted as `fun get` (or with the modifiers the parent's visibility needs) where a whole
-     * declaration is completed, with the parameter list and return type an override writes; after
-     * `fun` the name is completed as before. Either way the inserted method is [rewrite]n.
-     * Anything else comes back unchanged.
+     * and inserted as `get` (or with the modifiers the parent's visibility needs, `protected
+     * eventStore`) where a whole declaration is completed, with the parameter list and return type
+     * an override writes; after `function` the name is completed as before. Either way the
+     * inserted method is [rewrite]n. Anything else comes back unchanged.
      */
     fun decorate(element: LookupElement, implementing: PhpClass, declarationStarts: Boolean): LookupElement {
         val parent = element.`object` as? Method ?: return element
@@ -511,7 +521,7 @@ internal object PhaenonOverrides {
         private val declarationStarts: Boolean,
     ) : LookupElementDecorator<LookupElement>(delegate) {
 
-        private val text: String = if (declarationStarts) head(parent) + " " + parent.name else delegate.lookupString
+        private val text: String = if (declarationStarts && bareName(parent.name)) head(parent) + parent.name else delegate.lookupString
 
         override fun getLookupString(): String = text
 

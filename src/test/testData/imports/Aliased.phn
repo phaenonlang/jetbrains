@@ -6,7 +6,7 @@ use App\Model\{GroupedErased, GroupedNative};
 
 final class Aliased
 {
-    fun of(GroupedNative $native, list<Target> $targets): list<GroupedErased>
+    of(GroupedNative $native, list<Target> $targets): list<GroupedErased>
     {
         return [];
     }

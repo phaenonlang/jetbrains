@@ -2,9 +2,9 @@ namespace App\Domain;
 
 final class Failing
 {
-    fun check(int $n): int => $n > 0 ? $n : throw new \DomainException('not positive: ' . $n);
+    check(int $n): int => $n > 0 ? $n : throw new \DomainException('not positive: ' . $n);
 
-    fun run(): int {
+    run(): int {
         return $this->check(-1);
     }
 }

@@ -9,7 +9,7 @@ final class Layout
     /**
      * @return DocOnly
      */
-    fun of(Native $native): object
+    of(Native $native): object
     {
         return new DocOnly();
     }

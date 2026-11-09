@@ -77,13 +77,13 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         // class-like's on a line of its own — moved there when it was written on the line.
         val phn = reformatted(
             "Braces.phn",
-            "namespace App;\n\nfinal class A\n{\n    fun f(): void\n    {\n        \$g = function ()\n        {\n            return 1;\n        };\n    }\n}\n\n" +
-                "interface I {\n    fun i(): void;\n}\n\ntrait T {\n    fun t(): void {}\n}\n\nenum E: int {\n    case One = 1;\n}\n\nfun g(): object\n{\n    return new class {\n    };\n}\n",
+            "namespace App;\n\nfinal class A\n{\n    f(): void\n    {\n        \$g = function ()\n        {\n            return 1;\n        };\n    }\n}\n\n" +
+                "interface I {\n    i(): void;\n}\n\ntrait T {\n    t(): void {}\n}\n\nenum E: int {\n    case One = 1;\n}\n\nfunction g(): object\n{\n    return new class {\n    };\n}\n",
         )
 
         assertEquals(
-            "namespace App;\n\nfinal class A\n{\n    fun f(): void {\n        \$g = function () {\n            return 1;\n        };\n    }\n}\n\n" +
-                "interface I\n{\n    fun i(): void;\n}\n\ntrait T\n{\n    fun t(): void {}\n}\n\nenum E: int\n{\n    case One = 1;\n}\n\nfun g(): object {\n    return new class {\n    };\n}\n",
+            "namespace App;\n\nfinal class A\n{\n    f(): void {\n        \$g = function () {\n            return 1;\n        };\n    }\n}\n\n" +
+                "interface I\n{\n    i(): void;\n}\n\ntrait T\n{\n    t(): void {}\n}\n\nenum E: int\n{\n    case One = 1;\n}\n\nfunction g(): object {\n    return new class {\n    };\n}\n",
             phn,
         )
         val php = reformatted("Braces.php", "<?php\nnamespace App;\n\nfinal class A {\n    public function f(): void {\n    }\n}\n")
@@ -104,42 +104,42 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
 
             final class Repository
             {
-                fun __construct(private EventStoreFactory ${'$'}eventStoreFactory) {
+                __construct(private EventStoreFactory ${'$'}eventStoreFactory) {
                 }
 
-                fun psr12(): void
+                psr12(): void
                 {
                 }
 
-                fun __clone(): void { }
+                __clone(): void { }
 
-                fun written(): void {}
+                written(): void {}
 
-                fun wide(
+                wide(
                     private A ${'$'}a,
                     private B ${'$'}b,
                 ) {
                 }
 
-                fun reset(): void throws Failure {
+                reset(): void throws Failure {
                 }
 
-                fun commented(): void {
+                commented(): void {
                     // nothing yet
                 }
 
-                fun busy(): void {
+                busy(): void {
                     ${'$'}this->reset();
                 }
 
-                fun annotated(): void // the reason
+                annotated(): void // the reason
                 {
                 }
 
-                abstract fun none(): void;
+                abstract none(): void;
             }
 
-            fun noBody(): void {
+            function noBody(): void {
             }
 
             ${'$'}closure = function () {
@@ -155,37 +155,37 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
 
             final class Repository
             {
-                fun __construct(private EventStoreFactory ${'$'}eventStoreFactory) {}
+                __construct(private EventStoreFactory ${'$'}eventStoreFactory) {}
 
-                fun psr12(): void {}
+                psr12(): void {}
 
-                fun __clone(): void {}
+                __clone(): void {}
 
-                fun written(): void {}
+                written(): void {}
 
-                fun wide(
+                wide(
                     private A ${'$'}a,
                     private B ${'$'}b,
                 ) {}
 
-                fun reset(): void throws Failure {}
+                reset(): void throws Failure {}
 
-                fun commented(): void {
+                commented(): void {
                     // nothing yet
                 }
 
-                fun busy(): void {
+                busy(): void {
                     ${'$'}this->reset();
                 }
 
-                fun annotated(): void // the reason
+                annotated(): void // the reason
                 {
                 }
 
-                abstract fun none(): void;
+                abstract none(): void;
             }
 
-            fun noBody(): void {}
+            function noBody(): void {}
 
             ${'$'}closure = function () {
             };
@@ -297,10 +297,10 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
         com.jetbrains.php.lang.formatter.ui.predefinedStyle.PERCodeStyle().apply(CodeStyle.getSettings(project))
         val phn = reformatted(
             "Per.phn",
-            "namespace App;\n\nfinal class A {}\n\nfinal class B\n{\n}\n\nfinal class C\n{\n    const X = 1;\n}\n\nfun f(): void {\n}\n\n\$g = function () {\n};\n\n\$o = new class {\n};\n",
+            "namespace App;\n\nfinal class A {}\n\nfinal class B\n{\n}\n\nfinal class C\n{\n    const X = 1;\n}\n\nfunction f(): void {\n}\n\n\$g = function () {\n};\n\n\$o = new class {\n};\n",
         )
         assertEquals(
-            "namespace App;\n\nfinal class A {}\n\nfinal class B {}\n\nfinal class C\n{\n    const X = 1;\n}\n\nfun f(): void {}\n\n\$g = function () {};\n\n\$o = new class {};\n",
+            "namespace App;\n\nfinal class A {}\n\nfinal class B {}\n\nfinal class C\n{\n    const X = 1;\n}\n\nfunction f(): void {}\n\n\$g = function () {};\n\n\$o = new class {};\n",
             phn,
         )
     }
@@ -335,16 +335,16 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
     }
 
     fun testANewLineIsIndented() {
-        myFixture.configureByText("E.phn", "namespace App;\n\nfinal class E\n{\n    fun f(): void\n    {\n        if (true) {<caret>\n    }\n}\n")
+        myFixture.configureByText("E.phn", "namespace App;\n\nfinal class E\n{\n    f(): void\n    {\n        if (true) {<caret>\n    }\n}\n")
 
         myFixture.type("\n")
 
-        myFixture.checkResult("namespace App;\n\nfinal class E\n{\n    fun f(): void\n    {\n        if (true) {\n            <caret>\n        }\n    }\n}\n")
+        myFixture.checkResult("namespace App;\n\nfinal class E\n{\n    f(): void\n    {\n        if (true) {\n            <caret>\n        }\n    }\n}\n")
     }
 
     fun testAnImportAddedByCompletionGetsALineOfItsOwn() {
         myFixture.addFileToProject("Model.phn", "namespace App\\Model;\n\nfinal class EventStoreFactory\n{\n}\n")
-        val text = "namespace App;\n\nfinal class A\n{\n    fun f(): void\n    {\n        \$x = new EventStoreFac<caret>\n    }\n}\n"
+        val text = "namespace App;\n\nfinal class A\n{\n    f(): void\n    {\n        \$x = new EventStoreFac<caret>\n    }\n}\n"
         myFixture.configureByText("A.phn", text)
 
         myFixture.completeBasic()?.let { myFixture.lookup.currentItem = it.first(); myFixture.finishLookup('\n') }

@@ -10,13 +10,13 @@ use Acme\Shop\Inventory\Ledger\LedgerRegistry;
 
 abstract readonly class AbstractLedgerBackedRepository<Code of ItemCode, T of StockedItem> implements ItemRepository<Code, T>
 {
-    abstract protected static fun itemClass(): class<T>;
+    abstract protected static itemClass(): class<T>;
 
-    fun __construct(private LedgerRegistry $ledgers)
+    __construct(private LedgerRegistry $ledgers)
     {
     }
 
-    fun find(Code $code): ?T
+    find(Code $code): ?T
     {
         $entries = $this->ledger()->entriesFor($code);
         if (!is_array($entries) && !$entries instanceof \Countable) {
@@ -33,12 +33,12 @@ abstract readonly class AbstractLedgerBackedRepository<Code of ItemCode, T of St
     /**
      * @throws ItemMissing
      */
-    fun get(Code $code): T
+    get(Code $code): T
     {
         return $this->find($code) ?? throw new ItemMissing(static::itemClass(), $code);
     }
 
-    fun store(T $item): void
+    store(T $item): void
     {
         $itemClass = static::itemClass();
         if (!$item instanceof $itemClass) {
@@ -55,7 +55,7 @@ abstract readonly class AbstractLedgerBackedRepository<Code of ItemCode, T of St
         $item->markEntriesRecorded();
     }
 
-    protected fun ledger(): Ledger
+    protected ledger(): Ledger
     {
         return $this->ledgers->ledgerOf(static::itemClass());
     }

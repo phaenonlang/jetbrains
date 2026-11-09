@@ -7,7 +7,7 @@ final class Only
 {
     private list<ArgOnly> $args = [];
 
-    fun returns(): list<ReturnOnly>
+    returns(): list<ReturnOnly>
     {
         return [];
     }

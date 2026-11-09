@@ -1,0 +1,159 @@
+namespace App\Shapes;
+
+use Closure;
+
+#[\Attribute(\Attribute::TARGET_CLASS)]
+final class Tag
+{
+    __construct(public readonly Closure $map) {}
+}
+
+interface Shape
+{
+    area(): float;
+
+    static unit(): string;
+
+    public scaled(float $by): static;
+}
+
+#[Tag(fn (int $x): int => $x * 2)]
+abstract class Base implements Shape
+{
+    public static (\Countable&\Traversable)|null $items = null;
+
+    public Closure(int): string $format;
+
+    private(set) int $count = 0;
+
+    protected readonly int $sides;
+
+    private list<int> $cache = [];
+
+    const int LIMIT = 10;
+
+    const Closure DOUBLE = fn (int $x): int => $x * 2;
+
+    __construct(int $sides = 3)
+    {
+        $this->sides = $sides;
+        $this->format = fn (int $n): string => (string) $n;
+    }
+
+    abstract area(): float;
+
+    abstract protected perimeter(): float;
+
+    static unit(): string => 'cm';
+
+    public scaled(float $by): static => $this;
+
+    protected static create(): static => new static();
+
+    private quiet(): void {}
+
+    protected loud(): void => $this->quiet();
+
+    // An expression body that begins with a call: no member there.
+    protected log(string $m): void => error_log($m);
+
+    protected kind(): string => match (true) {
+        default => strtolower(static::class),
+    };
+
+    final public describe(): string
+    {
+        function twice(int $n): int
+        {
+            return $n * 2;
+        }
+
+        return sprintf('%d sides', twice($this->sides)) . count($this->rows());
+    }
+
+    final protected static registry(): list<string> => [];
+
+    public final static ordered(): int => 1;
+
+    &rows(): list<int>
+    {
+        return $this->cache;
+    }
+
+    #[\Deprecated]
+    public __toString(): string => $this->describe();
+
+    /** The first row, or null. */
+    first<T>(list<T> $rows): ?T => $rows[0] ?? null;
+
+    protected static pair<K, V of object>(K $key, V $value): (K, V) => [$key, $value];
+
+    list(): list<int> => $this->cache;
+
+    use(): static => $this;
+
+    new(): static => $this;
+
+    fun(): string => 'a method named fun';
+
+    public function static(): string => static::class;
+
+    public function readonly(): bool => true;
+
+    function legacy(): void {}
+}
+
+trait Named
+{
+    public string $name {
+        get => strtoupper($this->name);
+        set(string $value) {
+            $this->name = trim($value);
+        }
+    }
+
+    name(): string => $this->name;
+
+    abstract label(): string;
+}
+
+enum Suit: string implements \JsonSerializable
+{
+    case Hearts = 'H';
+    case Spades = 'S';
+
+    const Suit Wild = Suit::Spades;
+
+    label(): string => ucfirst(strtolower($this->name));
+
+    static fromChar(string $c): self => self::from($c);
+
+    jsonSerialize(): mixed => $this->value;
+
+    case(): string => 'a method named case';
+}
+
+final class Square extends Base
+{
+    use Named;
+
+    __construct(private float $side)
+    {
+        parent::__construct(4);
+        $square = new class ($side, fn (): int => 1) {
+            __construct(public float $side, public Closure $one) {}
+
+            double(): float => $this->side * 2;
+        };
+        $this->side = $square->double() / 2;
+        label();
+    }
+
+    area(): float => $this->side ** 2;
+
+    protected perimeter(): float => 4 * $this->side;
+
+    label(): string => 'square';
+}
+
+function label(): string => 'a function';

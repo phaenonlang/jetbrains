@@ -17,12 +17,12 @@ final class Erased
     /**
      * @return list<DocOnly>
      */
-    fun docs(): array
+    docs(): array
     {
         return [];
     }
 
-    fun of(Native $native, string|list<UnionOnly> $union, Closure(SigOnly): bool $test, \Closure(QualifiedSigOnly): bool $other): list<ReturnOnly>
+    of(Native $native, string|list<UnionOnly> $union, Closure(SigOnly): bool $test, \Closure(QualifiedSigOnly): bool $other): list<ReturnOnly>
     {
         $box = new Box<ArgOnly>();
 
