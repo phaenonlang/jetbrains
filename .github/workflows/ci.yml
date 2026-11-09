@@ -10,7 +10,14 @@
 #     compiler's internal/format/testdata goldens (../phaenon from this
 #     checkout).
 #   - `./gradlew verifyPlugin`, the built zip against the PhpStorm the plugin
-#     is built against, failing at the levels build.gradle.kts sets.
+#     is built against and the newest build of every PhpStorm line from
+#     pluginSinceBuild on (EAP and RC included), the range the JetBrains
+#     Marketplace verifies an upload against. It fails at the levels
+#     build.gradle.kts sets, and verifyInternalApi after it on internal API
+#     that verifier/internal-api.txt does not name. The IDEs of the range
+#     are downloaded on every run, about 1 GB each, and kept out of the
+#     cache, which they would outgrow; the one the plugin is built against
+#     stays in it.
 #   - Skipped for want of their variables: the runs over whole Phaenon trees
 #     (PHAENON_TREES) and the line map against a real Xdebug (PHAENON_XDEBUG).
 #     The tests of a newer PhpStorm's behaviour return early on platformVersion;
@@ -40,7 +47,7 @@ jobs:
   plugin:
     name: Test and verify
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -61,6 +68,9 @@ jobs:
         run: |
           go build -o bin/phn ./cmd/phn
           echo "PHAENON_PHN=$GITHUB_WORKSPACE/phaenon/bin/phn" >> "$GITHUB_ENV"
+      - name: The PhpStorm the plugin is built against
+        working-directory: jetbrains
+        run: echo "PLATFORM_VERSION=$(sed -n 's/^platformVersion *= *//p' gradle.properties)" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -73,10 +83,18 @@ jobs:
             jetbrains/gradle.properties
             jetbrains/gradle/wrapper/gradle-wrapper.properties
           # Not the build cache: a test result from it would not have seen
-          # the compiler's main, which is no input of the test task.
+          # the compiler's main, which is no input of the test task. Nor the
+          # IDEs, downloaded and unpacked: the verifier's range of them would
+          # outgrow the repository's cache. The one the plugin is built and
+          # tested against (platformVersion) is cached all the same.
           cache-path: |
             ~/.gradle/caches
             !~/.gradle/caches/build-cache-1
+            !~/.gradle/caches/modules-2/files-2.1/webide
+            !~/.gradle/caches/*/transforms/*/transformed/PhpStorm-*
+            ~/.gradle/caches/modules-2/files-2.1/webide/PhpStorm/${{ env.PLATFORM_VERSION }}
+            ~/.gradle/caches/*/transforms/*/transformed/PhpStorm-${{ env.PLATFORM_VERSION }}
+            ~/.gradle/caches/*/transforms/*/transformed/PhpStorm-${{ env.PLATFORM_VERSION }}-*
           # main's caches are the ones every branch can restore.
           cache-read-only: ${{ github.event_name != 'push' }}
       - name: Test
@@ -92,4 +110,5 @@ jobs:
           path: |
             jetbrains/build/reports/tests/test
             jetbrains/build/test-results/test
+            jetbrains/build/reports/pluginVerifier
           if-no-files-found: ignore

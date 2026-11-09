@@ -201,6 +201,46 @@ class PhaenonD18Test : BasePlatformTestCase() {
         )
     }
 
+    /**
+     * A call in a `try` block: PhpStorm reports what the `catch` clauses around it leave, and the
+     * clause answers that. The filter takes off what they catch, as the inspection does.
+     */
+    fun testAnExceptionCaughtAroundTheCallIsNotAskedOfTheClause() {
+        myFixture.enableInspections(PhpUnhandledExceptionInspection::class.java)
+        myFixture.addFileToProject(
+            "risky.php",
+            "<?php\nnamespace App;\n\n/**\n * @throws Errors\\NotFound\n * @throws Errors\\Unavailable\n */\nfunction risky(): void {\n}\n",
+        )
+        myFixture.configureByText(
+            "T.phn",
+            """
+            namespace App;
+
+            use App\Errors\NotFound;
+            use App\Errors\Unavailable;
+
+            final class T {
+                fun caught(): void throws NotFound {
+                    try {
+                        risky();
+                    } catch (Unavailable ${'$'}e) {
+                    }
+                }
+
+                fun uncaught(): void throws Unavailable {
+                    try {
+                        risky();
+                    } catch (Unavailable ${'$'}e) {
+                    }
+                }
+            }
+            """.trimIndent() + "\n",
+        )
+
+        // `caught` declares what the catch leaves; `uncaught` declares what it already catches.
+        assertEquals(listOf("Unhandled Errors\\NotFound @'risky'"), findings())
+    }
+
     fun testAMissingThrowsTagTheClauseNamesIsNotReported() {
         myFixture.enableInspections(PhpDocMissingThrowsInspection().apply { SKIP_ON_EMPTY_PHPDOC = false })
         myFixture.configureByText(

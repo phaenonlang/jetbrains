@@ -61,7 +61,7 @@ jobs:
     needs: release
     if: ${{ !cancelled() && ((needs.release.result == 'success' && needs.release.outputs.created == 'true') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: write # the release's assets
     env:
@@ -75,6 +75,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
+      - name: The PhpStorm the plugin is built against
+        run: echo "PLATFORM_VERSION=$(sed -n 's/^platformVersion *= *//p' gradle.properties)" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -84,15 +86,23 @@ jobs:
             *.gradle.kts
             gradle.properties
             gradle/wrapper/gradle-wrapper.properties
+          # As ci.yml's, so that this restores what main's CI saved.
           cache-path: |
             ~/.gradle/caches
             !~/.gradle/caches/build-cache-1
+            !~/.gradle/caches/modules-2/files-2.1/webide
+            !~/.gradle/caches/*/transforms/*/transformed/PhpStorm-*
+            ~/.gradle/caches/modules-2/files-2.1/webide/PhpStorm/${{ env.PLATFORM_VERSION }}
+            ~/.gradle/caches/*/transforms/*/transformed/PhpStorm-${{ env.PLATFORM_VERSION }}
+            ~/.gradle/caches/*/transforms/*/transformed/PhpStorm-${{ env.PLATFORM_VERSION }}-*
           cache-read-only: true
       - name: Build and verify the plugin
         id: built
+        # Released PhpStorms only: an EAP of the next line is CI's to report, not a reason to hold
+        # a release back.
         run: |
           set -euo pipefail
-          ./gradlew buildPlugin verifyPlugin
+          ./gradlew buildPlugin verifyPlugin -PverifyReleasesOnly=true
           zip="build/distributions/phaenon-jetbrains-${TAG#v}.zip"
           if [ ! -f "$zip" ]; then
             echo "::error::$TAG built $(ls build/distributions), not $(basename "$zip"): the tag and build.gradle.kts's version differ"

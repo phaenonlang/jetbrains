@@ -67,8 +67,9 @@ class PhaenonCompiledTextEditor(
 
     // Kotlin's delegation forwards the interfaces' abstract methods only: each default method is
     // forwarded by hand, or the compiled file would lose its highlighting, structure view and state.
+    // Not isEditorLoaded(), which is internal API: its default (loaded) is what the platform's own
+    // TextEditorWithPreview reports too, and the platform reads the inner editor's loading itself.
     override fun getFile(): VirtualFile = compiled
-    override fun isEditorLoaded(): Boolean = inner.isEditorLoaded
     override fun getBackgroundHighlighter(): BackgroundEditorHighlighter? = inner.backgroundHighlighter
     override fun getStructureViewBuilder(): StructureViewBuilder? = inner.structureViewBuilder
     override fun getTabActions(): ActionGroup? = inner.tabActions

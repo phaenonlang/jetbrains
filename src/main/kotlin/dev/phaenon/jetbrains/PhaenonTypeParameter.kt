@@ -1,6 +1,7 @@
 package dev.phaenon.jetbrains
 
 import com.intellij.openapi.util.TextRange
+import com.intellij.pom.PsiDeclaredTarget
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.impl.FakePsiElement
@@ -9,9 +10,10 @@ import com.intellij.psi.impl.FakePsiElement
  * The declaration of a type parameter: the name `T` inside the erased list `<T of AggregateId>`
  * that follows a class's or function's name. The list is one comment-like leaf to PhpStorm, so
  * the declaration has no element of its own; this one stands in for it as a navigation target,
- * placed at the name's offset so that "go to declaration" on a use of `T` lands on it.
+ * placed at the name's offset so that "go to declaration" on a use of `T` lands on it. As a
+ * declared target it is what [PhaenonTypeParameterDeclarations] reports at the name.
  */
-class PhaenonTypeParameter(private val list: PsiElement, private val offsetInList: Int, private val name: String) : FakePsiElement() {
+class PhaenonTypeParameter(private val list: PsiElement, private val offsetInList: Int, private val name: String) : FakePsiElement(), PsiDeclaredTarget {
 
     override fun getParent(): PsiElement = list
 
@@ -26,6 +28,9 @@ class PhaenonTypeParameter(private val list: PsiElement, private val offsetInLis
     override fun getTextOffset(): Int = list.textRange.startOffset + offsetInList
 
     override fun getNavigationElement(): PsiElement = this
+
+    /** The name, relative to this element: all of it. */
+    override fun getNameIdentifierRange(): TextRange = TextRange(0, name.length)
 
     override fun isPhysical(): Boolean = true
 

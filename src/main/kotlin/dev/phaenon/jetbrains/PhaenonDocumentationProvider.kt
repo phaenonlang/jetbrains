@@ -195,13 +195,20 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
         } else if (!parameter.declaredType.isEmpty) {
             // A native type, linked as PhpStorm links it; a variadic's declared type is its array.
             val declared = parameter.declaredType
-            type(out, if (parameter.isVariadic) declared.map { if (PhpType.isPluralType(it)) PhpType.unpluralize(it) else it } else declared)
+            type(out, if (parameter.isVariadic) elements(declared) else declared)
             out.append(' ')
         }
         if (parameter.isPassByRef) out.append('&')
         if (parameter.isVariadic) out.append("...")
         styled(out, "$" + parameter.name, PhpHighlightingData.PARAMETER)
         parameter.defaultValue?.let { out.append(" = ").append(StringUtil.escapeXmlEntities(it.text.replace(Regex("\\s+"), " "))) }
+    }
+
+    /** A variadic's declared type, which PhpStorm holds as the array of it, as its elements. */
+    private fun elements(declared: PhpType): PhpType {
+        val elements = PhpType()
+        for (member in declared.typesWithParametrisedParts) elements.add(if (PhpType.isPluralType(member)) PhpType.unpluralize(member) else member)
+        return elements
     }
 
     /** A type PhpStorm holds, in Phaenon's spelling, classes linked as PhpStorm links them. */

@@ -1,7 +1,6 @@
 package dev.phaenon.jetbrains
 
 import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.execution.process.CapturingProcessHandler
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
@@ -17,6 +16,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.util.EnvironmentUtil
 import java.io.File
 import java.nio.charset.StandardCharsets
 
@@ -139,7 +139,31 @@ object PhaenonCompiler {
             val launcher = if (SystemInfo.isWindows) "vendor/bin/phn.bat" else "vendor/bin/phn"
             File(root.path, launcher).takeIf { it.isFile }?.let { return it.path }
         }
-        return PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("phn")?.path
+        return onPath("phn")
+    }
+
+    /**
+     * The first executable [name] in a directory of the PATH the IDE runs with (on macOS the login
+     * shell's), on Windows with each of PATHEXT's extensions. The platform's lookups changed in
+     * 2026.3 (`findExecutableInPathOnAnyOS` is scheduled for removal, its replacement is new), so
+     * the walk is done here, the same way in every supported IDE.
+     */
+    private fun onPath(name: String): String? {
+        val path = EnvironmentUtil.getValue("PATH") ?: return null
+        val names = if (SystemInfo.isWindows) {
+            (EnvironmentUtil.getValue("PATHEXT") ?: ".COM;.EXE;.BAT;.CMD").split(';').filter { it.isNotBlank() }.map { name + it.lowercase() }
+        } else {
+            listOf(name)
+        }
+        for (dir in path.split(File.pathSeparatorChar)) {
+            // A relative entry would resolve against the IDE's working directory: skipped, as the platform's lookup did.
+            if (dir.isBlank() || !File(dir).isAbsolute) continue
+            for (candidate in names) {
+                val file = File(dir, candidate)
+                if (file.isFile && file.canExecute()) return file.path
+            }
+        }
+        return null
     }
 
     /**

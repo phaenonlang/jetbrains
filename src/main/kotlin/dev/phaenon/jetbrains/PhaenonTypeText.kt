@@ -106,7 +106,7 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
     private fun classString(argument: PhpType?): PhpType {
         val classes = argument?.types?.filter { isClassName(it) }.orEmpty().sorted()
         if (classes.isEmpty()) return PhpType().add(PhpType.CLASS_STRING)
-        return PhpType().add(PhpType.createParametrizedType(PhpType._CLASS_STRING, classes))
+        return PhpType().add(PhpType.createParametrized(PhpType._CLASS_STRING, *classes.toTypedArray()))
     }
 
     /**
@@ -119,7 +119,7 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
     private fun closure(node: PhaenonType.Closure): PhpType {
         val parts = node.parameters.map { PhpExpressionImpl.serializeAdvancedClosureParameter("", serialized(type(it.type))) }
         val returnType = node.returnType?.let(::type) ?: PhpType.MIXED
-        return PhpType().add(PhpType.CLOSURE).add(PhpType.createParametrizedType(PhpType._CLOSURE, parts + serialized(returnType)))
+        return PhpType().add(PhpType.CLOSURE).add(PhpType.createParametrized(PhpType._CLOSURE, *(parts + serialized(returnType)).toTypedArray()))
     }
 
     private fun serialized(type: PhpType): String = Companion.serialized(type)
@@ -136,9 +136,15 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
     }
 
     private fun isClassName(type: String): Boolean =
-        type.startsWith("\\") && !PhpType.isPrimitiveType(type) && !PhpType.isPluralType(type) && !PhpType.hasParameterizedPart(type)
+        type.startsWith("\\") && !PhpType.isPrimitiveType(type) && !PhpType.isPluralType(type) && !hasTypeArguments(type)
 
     companion object {
+        /**
+         * Whether a member of a PhpType (`\Closure<…>`, `\class-string<\A>`, either as an array)
+         * carries type arguments, read with PhpType's public parser of them.
+         */
+        fun hasTypeArguments(member: String): Boolean = PhpType.getParametrizedParts(member).isNotEmpty()
+
         /** A union inside a closure signature is one part: its members joined as PhpStorm joins them, in a stable order. */
         fun serialized(type: PhpType): String =
             type.typesWithParametrisedParts.sorted().joinToString(PhpExpressionImpl.CALLABLE_PARAMS_TYPES_SEPARATOR)
@@ -146,7 +152,7 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         /** `\Closure` with the signature PhpStorm reads from the docblock `\Closure(A, B): R`, from types it holds. */
         fun closureType(parameters: List<PhpType>, returnType: PhpType): PhpType {
             val parts = parameters.map { PhpExpressionImpl.serializeAdvancedClosureParameter("", serialized(it)) }
-            return PhpType().add(PhpType.CLOSURE).add(PhpType.createParametrizedType(PhpType._CLOSURE, parts + serialized(returnType)))
+            return PhpType().add(PhpType.CLOSURE).add(PhpType.createParametrized(PhpType._CLOSURE, *(parts + serialized(returnType)).toTypedArray()))
         }
 
         private val PRIMITIVES: Map<String, PhpType> = mapOf(

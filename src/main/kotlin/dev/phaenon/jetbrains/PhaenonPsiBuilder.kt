@@ -8,7 +8,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.tree.IElementType
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.parser.PhpElementTypes
-import com.jetbrains.php.lang.parser.PhpParserErrors
 import com.jetbrains.php.lang.parser.PhpPsiBuilder
 import com.jetbrains.php.lang.parser.parsing.Namespace
 import com.jetbrains.php.lang.parser.parsing.Statement
@@ -63,7 +62,8 @@ class PhaenonPsiBuilder(private val project: Project, delegate: PsiBuilder) : Ps
             if (parsed === PhpElementTypes.EMPTY_INPUT && !php.eof()) parsed = Statement.parse(php)
             if (parsed === PhpElementTypes.EMPTY_INPUT || before == php.currentOffset) {
                 val unexpected = php.tokenType ?: break
-                php.error(PhpParserErrors.unexpected(unexpected))
+                // PhpStorm's wording for a token no statement takes (its message helper is internal API).
+                php.error("Unexpected: $unexpected")
                 php.advanceLexer()
             }
         }

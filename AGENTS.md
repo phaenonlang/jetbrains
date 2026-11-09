@@ -10,7 +10,7 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ```sh
 ./gradlew test           # inside a headless PhpStorm; the first run downloads it
 ./gradlew buildPlugin    # → build/distributions/phaenon-jetbrains-<version>.zip
-./gradlew verifyPlugin   # JetBrains Plugin Verifier
+./gradlew verifyPlugin   # JetBrains Plugin Verifier across the declared range, then verifyInternalApi
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
 ./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # tests against an installed, newer IDE
 
@@ -92,10 +92,12 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
 - Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
   `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
   element-array unions, a partial application is also its callee's result to PhpStorm; the
-  implied `strict_types` is not modelled; editor colouring uses the
-  internal extension point `com.jetbrains.php.baseLexerProvider`, and debugging the internal
-  `PhpTemplateLanguagePathMapper` (`com.intellij.php.debug.templateLanguage`); the Frames list labels
-  a compiled frame with the compiled name and line. Code a feature inserts is laid out
+  implied `strict_types` is not modelled; the lexer, the editor colouring
+  (`com.jetbrains.php.baseLexerProvider`), the parsing of bodies, debugging
+  (`PhpTemplateLanguagePathMapper`, `com.intellij.php.debug.templateLanguage`) and the docblock stub
+  on Enter use internal API of the PHP plugin, each use named in `verifier/internal-api.txt` with
+  its reason (README § Internal API): a new one fails `verifyPlugin` until it has a public
+  replacement or a line there; the Frames list labels a compiled frame with the compiled name and line. Code a feature inserts is laid out
   by PhpStorm's formatter, as in PHP: insert it unformatted and let the reformatting that follows
   the command do it. Behaviour of a newer PhpStorm (the PHP 8.5 pipe and its inspection) is tested
   with `-PtestIdePath`; on 2025.1 those tests return early.

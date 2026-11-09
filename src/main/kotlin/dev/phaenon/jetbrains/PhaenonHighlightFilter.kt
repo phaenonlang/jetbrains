@@ -15,7 +15,6 @@ import com.jetbrains.php.lang.psi.elements.ConstantReference
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.FieldReference
 import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocComment
-import com.jetbrains.php.lang.inspections.type.PhpParamsInspection
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.parser.PhpElementTypes
 import com.jetbrains.php.lang.psi.elements.Function
@@ -32,6 +31,7 @@ import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpReference
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import com.jetbrains.php.lang.psi.elements.PhpUse
+import com.jetbrains.php.lang.psi.resolve.types.PhpType
 
 /**
  * Drops the PhpStorm findings that Phaenon's compilation model provokes in a `.phn` file.
@@ -169,10 +169,18 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         return closures.any { closure ->
             val variadic = closure.parameters.indexOfFirst { it.variadic }
             val parameter = closure.parameters.getOrNull(index) ?: closure.parameters.getOrNull(variadic).takeIf { variadic in 0..index }
-            // The convertibility PhpStorm's own closure-signature check applies, strict as a Phaenon file is.
-            parameter != null && PhpParamsInspection.isCallTypeConvertibleFromDeclaredType(text.type(parameter.type).global(project), given, PhpIndex.getInstance(project))
+            parameter != null && convertible(text.type(parameter.type).global(project), given, PhpIndex.getInstance(project))
         }
     }
+
+    /**
+     * The convertibility PhpStorm's own closure-signature check applies, strict as a Phaenon file is
+     * (`PhpParamsInspection.isCallTypeConvertibleFromDeclaredType`, internal API, spelled out with
+     * PhpType's public operations): nothing given or an ambiguous declaration passes, otherwise the
+     * given type must convert from the declared one.
+     */
+    private fun convertible(declared: PhpType, given: PhpType, index: PhpIndex): Boolean =
+        given.isEmpty || declared.isAmbiguous || given.isConvertibleFrom(declared, index)
 
     /** The property or parameter a called expression reads: `($this->request)`, `$request`. */
     private fun closureDeclaration(callee: PsiElement?): PhpNamedElement? {

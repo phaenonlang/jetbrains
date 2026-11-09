@@ -164,11 +164,16 @@ class PhaenonNavigationTest : BasePlatformTestCase() {
         assertEquals(9, selected.caretModel.logicalPosition.line)
     }
 
-    /** Kotlin forwards an interface's abstract methods only: every default one must be forwarded by hand, today's and tomorrow's. */
+    /**
+     * Kotlin forwards an interface's abstract methods only: every default one must be forwarded by
+     * hand, today's and tomorrow's. `isEditorLoaded()` is the exception: internal API, whose
+     * default the wrapper keeps.
+     */
     fun testTheWrappedEditorForwardsEveryDefaultMethod() {
+        val kept = setOf("isEditorLoaded")
         val defaults = listOf(com.intellij.openapi.fileEditor.TextEditor::class.java).flatMap { type ->
             generateSequence(listOf<Class<*>>(type)) { level -> level.flatMap { it.interfaces.toList() }.takeIf { it.isNotEmpty() } }.flatten()
-        }.distinct().flatMap { it.declaredMethods.toList() }.filter { it.isDefault }
+        }.distinct().flatMap { it.declaredMethods.toList() }.filter { it.isDefault && it.name !in kept }
         val wrapper = PhaenonCompiledTextEditor::class.java
         val missing = defaults.filter { method ->
             runCatching { wrapper.getDeclaredMethod(method.name, *method.parameterTypes) }.isFailure

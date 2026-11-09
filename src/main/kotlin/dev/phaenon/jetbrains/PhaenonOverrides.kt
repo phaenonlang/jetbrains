@@ -5,7 +5,9 @@ import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.codeInsight.lookup.LookupElementDecorator
 import com.intellij.codeInsight.lookup.LookupElementPresentation
+import com.intellij.lang.CodeInsightActions
 import com.intellij.lang.LanguageCodeInsightActionHandler
+import com.intellij.lang.LanguageExtension
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
@@ -16,16 +18,14 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.SmartPointerManager
-import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtilCore
+import com.jetbrains.php.PhpClassHierarchyUtils
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.codeInsight.PhpCodeInsightUtil
 import com.jetbrains.php.completion.insert.PhpOverriddenMethodInsertHandler
-import com.jetbrains.php.lang.actions.generation.PhpImplementMethodsHandler
-import com.jetbrains.php.lang.actions.generation.PhpOverrideImplementMethodsHandlerBase
-import com.jetbrains.php.lang.actions.generation.PhpOverrideMethodsHandler
+import com.jetbrains.php.lang.PhpLanguage
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.psi.elements.ClassReference
 import com.jetbrains.php.lang.psi.elements.Function
@@ -436,16 +436,17 @@ internal object PhaenonOverrides {
 
     // ---------------------------------------------------------------- entry points
 
-    /** Code | Implement Methods and Code | Override Methods in a `.phn` class: PhpStorm's action, then [rewrite]. */
-    fun generate(php: PhpOverrideImplementMethodsHandlerBase, project: Project, editor: Editor, file: PsiFile) {
+    /**
+     * Code | Implement Methods and Code | Override Methods in a `.phn` class: PhpStorm's action, then
+     * [rewrite] of each method it added, against the method it implements or overrides.
+     */
+    fun generate(php: LanguageCodeInsightActionHandler, project: Project, editor: Editor, file: PsiFile) {
         val klass = classAtCaret(editor, file)
         if (klass == null) {
             php.invoke(project, editor, file)
             return
         }
         val pointers = SmartPointerManager.getInstance(project)
-        val parents: Map<String, SmartPsiElementPointer<Method>> =
-            php.getMethodsToOverride(project, klass).mapValues { pointers.createSmartPsiElementPointer(it.value) }
         val before = klass.ownMethods.map { it.name }.toSet()
         val klassPointer = pointers.createSmartPsiElementPointer(klass)
 
@@ -453,16 +454,38 @@ internal object PhaenonOverrides {
 
         PsiDocumentManager.getInstance(project).commitAllDocuments()
         val after = klassPointer.element ?: return
-        val generated = after.ownMethods.filter { it.name !in before && it.name in parents }.map { pointers.createSmartPsiElementPointer(it) }
+        val generated = after.ownMethods.filter { it.name !in before }.map { pointers.createSmartPsiElementPointer(it) }
         if (generated.isEmpty()) return
         ApplicationManager.getApplication().runWriteAction {
             for (pointer in generated) {
                 val method = pointer.element ?: continue
-                val parent = parents[method.name]?.element ?: continue
+                val parent = generatedFrom(method) ?: continue
                 rewrite(method, parent, rewriteHead = true)
             }
         }
     }
+
+    /**
+     * The declaration PhpStorm generated [method] from: the nearest method of its name in the
+     * class's supertypes, a constructor included (PhpStorm's dialogs offer the parent's).
+     */
+    private fun generatedFrom(method: Method): Method? {
+        var found: Method? = null
+        PhpClassHierarchyUtils.processSuperMethods(method) { parent, _, _ ->
+            if (parent !== method && parent.containingClass != null) found = parent
+            found == null
+        }
+        return found
+    }
+
+    /**
+     * PhpStorm's handler of [actions] for PHP: the one registered after the plugin's own. The
+     * platform asks only the first handler of a language, so the plugin's handler stands in for
+     * PhpStorm's in every PHP file and hands it the work; it is found in the extension point
+     * rather than by its class, which is the PHP plugin's own.
+     */
+    fun phpHandler(actions: LanguageExtension<LanguageCodeInsightActionHandler>, own: Class<*>): LanguageCodeInsightActionHandler? =
+        actions.allForLanguage(PhpLanguage.INSTANCE).firstOrNull { !own.isInstance(it) }
 
     private fun classAtCaret(editor: Editor, file: PsiFile): PhpClass? =
         PsiTreeUtil.getParentOfType(file.findElementAt(editor.caretModel.offset), PhpClass::class.java)
@@ -518,18 +541,22 @@ internal object PhaenonOverrides {
  * is PhpStorm's handler.
  */
 class PhaenonImplementMethodsHandler : LanguageCodeInsightActionHandler {
-    private val php = PhpImplementMethodsHandler()
-    override fun isValidFor(editor: Editor, file: PsiFile): Boolean = php.isValidFor(editor, file)
-    override fun invoke(project: Project, editor: Editor, file: PsiFile) =
+    private val php get() = PhaenonOverrides.phpHandler(CodeInsightActions.IMPLEMENT_METHOD, javaClass)
+    override fun isValidFor(editor: Editor, file: PsiFile): Boolean = php?.isValidFor(editor, file) == true
+    override fun invoke(project: Project, editor: Editor, file: PsiFile) {
+        val php = php ?: return
         if (PhaenonFiles.isPhaenonFile(file.viewProvider.virtualFile)) PhaenonOverrides.generate(php, project, editor, file) else php.invoke(project, editor, file)
-    override fun startInWriteAction(): Boolean = php.startInWriteAction()
+    }
+    override fun startInWriteAction(): Boolean = php?.startInWriteAction() == true
 }
 
 /** Code | Override Methods, as [PhaenonImplementMethodsHandler] is for implementing. */
 class PhaenonOverrideMethodsHandler : LanguageCodeInsightActionHandler {
-    private val php = PhpOverrideMethodsHandler()
-    override fun isValidFor(editor: Editor, file: PsiFile): Boolean = php.isValidFor(editor, file)
-    override fun invoke(project: Project, editor: Editor, file: PsiFile) =
+    private val php get() = PhaenonOverrides.phpHandler(CodeInsightActions.OVERRIDE_METHOD, javaClass)
+    override fun isValidFor(editor: Editor, file: PsiFile): Boolean = php?.isValidFor(editor, file) == true
+    override fun invoke(project: Project, editor: Editor, file: PsiFile) {
+        val php = php ?: return
         if (PhaenonFiles.isPhaenonFile(file.viewProvider.virtualFile)) PhaenonOverrides.generate(php, project, editor, file) else php.invoke(project, editor, file)
-    override fun startInWriteAction(): Boolean = php.startInWriteAction()
+    }
+    override fun startInWriteAction(): Boolean = php?.startInWriteAction() == true
 }
