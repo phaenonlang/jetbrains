@@ -334,7 +334,8 @@ the newest build of every PhpStorm line from `pluginSinceBuild` on, EAP and RC b
 the range the JetBrains Marketplace verifies an upload against. Each is downloaded once (about
 1 GB). It fails on compatibility problems and on API scheduled for removal; `verifyInternalApi`,
 which runs after it, fails on internal API that `verifier/internal-api.txt` does not name, and on
-a line there no IDE reports (see [Internal API](#internal-api)). On macOS the verifier does not resolve the XML plugin of PhpStorm
+a line there no IDE reports (see [Internal API](#internal-api)). `-PverifyReleasesOnly=true` leaves
+the EAP and RC builds out, as the release workflow does before it publishes. On macOS the verifier does not resolve the XML plugin of PhpStorm
 2026.3's macOS distribution, and reports the XML formatter classes the plugin builds on as missing,
 as it does the PHP plugin's own; the Linux distribution, which CI verifies, and IntelliJ IDEA 2026.3
 resolve it, and the plugin verifies as compatible there.

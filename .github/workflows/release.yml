@@ -95,9 +95,11 @@ jobs:
           cache-read-only: true
       - name: Build and verify the plugin
         id: built
+        # Released PhpStorms only: an EAP of the next line is CI's to report, not a reason to hold
+        # a release back.
         run: |
           set -euo pipefail
-          ./gradlew buildPlugin verifyPlugin
+          ./gradlew buildPlugin verifyPlugin -PverifyReleasesOnly=true
           zip="build/distributions/phaenon-jetbrains-${TAG#v}.zip"
           if [ ! -f "$zip" ]; then
             echo "::error::$TAG built $(ls build/distributions), not $(basename "$zip"): the tag and build.gradle.kts's version differ"

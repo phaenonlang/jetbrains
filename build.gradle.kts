@@ -1,4 +1,6 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 
@@ -103,7 +105,17 @@ intellijPlatform {
             current()
             // The newest build of every PhpStorm line in the declared range (sinceBuild up, EAP and
             // RC builds included): the range the Marketplace verifies an upload against.
-            recommended()
+            // -PverifyReleasesOnly=true leaves EAP and RC builds out: the release job's gate, which
+            // an EAP marking something internal must not hold up (CI still sees it first).
+            if (providers.gradleProperty("verifyReleasesOnly").orNull.toBoolean()) {
+                select {
+                    types = listOf(IntelliJPlatformType.PhpStorm)
+                    channels = listOf(ProductRelease.Channel.RELEASE)
+                    sinceBuild = providers.gradleProperty("pluginSinceBuild")
+                }
+            } else {
+                recommended()
+            }
             // Optionally verify against an installed IDE as well:
             //   ./gradlew verifyPlugin -PlocalIdePath=/Applications/PhpStorm.app/Contents
             providers.gradleProperty("localIdePath").orNull?.let { local(file(it)) }
