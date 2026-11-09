@@ -204,7 +204,6 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
         parameter.defaultValue?.let { out.append(" = ").append(StringUtil.escapeXmlEntities(it.text.replace(Regex("\\s+"), " "))) }
     }
 
-    /** A type PhpStorm holds, in Phaenon's spelling, classes linked as PhpStorm links them. */
     /** A variadic's declared type, which PhpStorm holds as the array of it, as its elements. */
     private fun elements(declared: PhpType): PhpType {
         val elements = PhpType()
@@ -212,6 +211,7 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
         return elements
     }
 
+    /** A type PhpStorm holds, in Phaenon's spelling, classes linked as PhpStorm links them. */
     private fun type(out: StringBuilder, type: PhpType) {
         PhaenonTypePresentation.print(type, object : PhaenonTypePresentation.Sink {
             override fun klass(fqn: String) {

@@ -335,10 +335,12 @@ the range the JetBrains Marketplace verifies an upload against. Each is download
 1 GB). It fails on compatibility problems and on API scheduled for removal; `verifyInternalApi`,
 which runs after it, fails on internal API that `verifier/internal-api.txt` does not name, and on
 a line there no IDE reports (see [Internal API](#internal-api)). `-PverifyReleasesOnly=true` leaves
-the EAP and RC builds out, as the release workflow does before it publishes. On macOS the verifier does not resolve the XML plugin of PhpStorm
-2026.3's macOS distribution, and reports the XML formatter classes the plugin builds on as missing,
-as it does the PHP plugin's own; the Linux distribution, which CI verifies, and IntelliJ IDEA 2026.3
-resolve it, and the plugin verifies as compatible there.
+the EAP and RC builds out, as the release workflow does before it publishes.
+
+On a Mac, `./gradlew verifyPlugin` fails for PhpStorm 2026.3: the verifier does not resolve the XML
+plugin of 2026.3's macOS distribution and reports the XML formatter classes the plugin builds on as
+missing, as it does the PHP plugin's own. The Linux distribution and IntelliJ IDEA 2026.3 resolve
+it, and the plugin verifies as compatible there; CI's run on Linux is the reference.
 
 To also verify against a locally installed IDE:
 
@@ -671,11 +673,12 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
 - **The pipe conversion replaces PhpStorm's quick-fix in the editor only.** Applying the fix from
   the Inspect Code results is PhpStorm's fix, which mistakes method calls in every file type.
 - The editor features above reach PhpStorm's own implementations through the extension points
-  they are registered in, the plugin's own registered ahead of them: the view provider factory of
-  PHP (`lang.fileViewProviderFactory`), its formatter (`lang.formatter`, a subclass of the
-  platform's XML template formatter, whose public `createTemplateFormattingModel` the plugin calls)
-  and its Implement / Override Methods handlers (`codeInsight.implementMethod`,
-  `codeInsight.overrideMethod`); the method a generated one was written from is found in the class
+  they are registered in: the view provider factory of PHP (`lang.fileViewProviderFactory`) and its
+  Implement / Override Methods handlers (`codeInsight.implementMethod`, `codeInsight.overrideMethod`),
+  which the plugin's own, registered ahead of them (`order="first"`), hand every other file to, and
+  its formatter (`lang.formatter`, a subclass of the platform's XML template formatter, whose public
+  `createTemplateFormattingModel` the plugin calls), which the plugin's custom formatter, asked first
+  for a `.phn`, builds on; the method a generated one was written from is found in the class
   hierarchy (`PhpClassHierarchyUtils`). Override items of completion are recognised by an
   `instanceof` of `PhpOverriddenMethodInsertHandler`, public API. PhpStorm's pipe quick-fix is
   matched by its class name, a string, because the class does not exist in 2025.3.
