@@ -8,13 +8,10 @@ import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.SmartPsiElementPointer
 import com.jetbrains.php.PhpBundle
 import com.jetbrains.php.codeInsight.PhpCodeInsightUtil
-import com.jetbrains.php.codeInsight.PhpImportOptimizer
 import com.jetbrains.php.lang.PhpLanguage
 import com.jetbrains.php.lang.psi.PhpFile
 import com.jetbrains.php.lang.psi.PhpGroupUseElement
-import com.jetbrains.php.lang.psi.PhpPsiElementFactory
 import com.jetbrains.php.lang.psi.elements.PhpPsiElement
-import com.jetbrains.php.lang.psi.elements.PhpUseList
 import com.jetbrains.php.refactoring.PhpAliasImporter
 
 /**
@@ -102,29 +99,18 @@ class PhaenonImportOptimizer : ImportOptimizer {
             }
 
         /**
-         * [import] as a statement of its own, before the first import the optimizer's ordering puts
-         * after it. A scope left without imports gets its block where PhpStorm puts a first import.
+         * [import] put back as PhpStorm's auto-import writes one: before the first import the
+         * optimizer's ordering puts after it, or where PhpStorm puts a first import when the scope
+         * has none left.
          */
         private fun insert(scope: PhpPsiElement, import: Import) {
-            val lists = ordered(scope)
-            if (lists.isEmpty()) {
-                PhpAliasImporter.insertUseStatementWithKeyword(import.keyword, import.fqn, import.alias, scope)
-                return
-            }
-            val statement = PhpPsiElementFactory.createUseStatementWithKeyword(scope.project, import.keyword, import.fqn, import.alias)
-            val order = PhpImportOptimizer.getComparator(scope.containingFile)
-            val element = PhpAliasImporter.getGroupUseElement(statement)
-            val next = element?.let { lists.firstOrNull { list -> PhpAliasImporter.getGroupUseElement(list)?.let { order.compare(element, it) < 0 } == true } }
-            if (next != null) next.parent.addBefore(statement, next) else lists.last().let { it.parent.addAfter(statement, it) }
+            PhpAliasImporter.insertUseStatementWithKeyword(import.keyword, import.fqn, import.alias, scope)
         }
     }
 
     private companion object {
         /** Where imports live, as PhpStorm's optimizer walks them: the file, then each namespace. */
         fun scopes(file: PhpFile): List<PhpPsiElement> = listOf<PhpPsiElement>(file) + PhpCodeInsightUtil.collectNamespaces(file)
-
-        /** The import statements of [scope] in document order. */
-        fun ordered(scope: PhpPsiElement): List<PhpUseList> = PhpCodeInsightUtil.collectImports(scope).sortedBy { it.textRange.startOffset }
 
         fun countImports(file: PhpFile): Int = scopes(file).sumOf { scope -> PhpCodeInsightUtil.collectImports(scope).sumOf { it.declarations.size } }
     }

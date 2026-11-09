@@ -62,7 +62,7 @@ object PhaenonTypePresentation {
 
     private fun isPhaenonMember(member: String): Boolean {
         val base = PhpType.removeParametrisedType(member)
-        return base == PhpType._CLASS_STRING || base == PhpType._CLOSURE && PhpType.hasParameterizedPart(member)
+        return base == PhpType._CLASS_STRING || base == PhpType._CLOSURE && PhaenonTypeText.hasTypeArguments(member)
     }
 
     private fun printMembers(raw: List<String>, sink: Sink) {
@@ -73,7 +73,7 @@ object PhaenonTypePresentation {
         val closures = HashSet<Int>()
         var nullable = false
 
-        if (members.any { PhpType.removeParametrisedType(it) == PhpType._CLOSURE && PhpType.hasParameterizedPart(it) }) {
+        if (members.any { PhpType.removeParametrisedType(it) == PhpType._CLOSURE && PhaenonTypeText.hasTypeArguments(it) }) {
             members.remove(PhpType._CLOSURE)
         }
         for (member in members) {
