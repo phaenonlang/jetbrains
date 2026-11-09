@@ -13,7 +13,7 @@ final class Checkout
     private Closure(string...): void $notify;
     private Closure(string, string...): (int, string) $post;
 
-    fun __construct(
+    __construct(
         ?Closure(string...): (int, string) $request = null,
         ?Closure(string, int=): void $log = null,
     ) {
@@ -24,7 +24,7 @@ final class Checkout
         $this->post = static fn (string $body, string ...$args): array => [0, ''];
     }
 
-    fun pay(string $order): int
+    pay(string $order): int
     {
         [$code] = ($this->request)('post', 'charges', $order);
         ($this->log)('charged');
@@ -36,13 +36,13 @@ final class Checkout
         return $code;
     }
 
-    fun wrong(): void
+    wrong(): void
     {
         ($this->request)([]);
         ($this->log)('charged', []);
     }
 
-    static fun first(Closure(string...): (int, string) $request): int
+    static first(Closure(string...): (int, string) $request): int
     {
         [$status] = $request('get', 'charges');
 

@@ -37,7 +37,8 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  *
  * - a function or method declared in a `.phn` with an erased part in its signature (a type
  *   parameter list, a parameter type, the return type, a `throws` clause): the signature as written,
- *   `abstract protected static fun aggregateClass(): class<T>`, `fun load(Id $id): T throws NotFound`;
+ *   `abstract protected static aggregateClass(): class<T>`, `load(Id $id): T throws NotFound`,
+ *   `function first<T>(list<T> $rows): ?T`, a method with `function` only where it was written;
  * - a parameter or property declared with an erased type: `$users: class<User>`, the type as
  *   written;
  * - a variable in a `.phn` file whose type holds a class-string or a closure signature: that type
@@ -117,9 +118,10 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
     }
 
     /**
-     * The signature of a Phaenon function as written: modifiers, `fun`, name, type parameters,
-     * one parameter per line as PhpStorm lays them out (all on one line in the hint), the
-     * return type. Without a written return type, the one PhpStorm infers.
+     * The signature of a Phaenon function as written: modifiers, `function` where the source has it
+     * (a function's, and a method's written the PHP way, not one without a keyword), name, type
+     * parameters, one parameter per line as PhpStorm lays them out (all on one line in the hint),
+     * the return type. Without a written return type, the one PhpStorm infers.
      */
     private fun function(function: Function, hint: Boolean): String? {
         val parameters = function.parameters
@@ -139,8 +141,11 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
             styled(out, it.replace(Regex("\\s+"), " "), PhpHighlightingData.KEYWORD)
             out.append(' ')
         }
-        styled(out, function.node.findChildByType(PhpTokenTypes.kwFUNCTION)?.text ?: "function", PhpHighlightingData.KEYWORD)
-        out.append(' ')
+        // A method declared without a keyword has an empty `function` leaf (PhaenonTokenTypes.FUNCTION).
+        function.node.findChildByType(PhpTokenTypes.kwFUNCTION)?.takeIf { it.textLength > 0 }?.let {
+            styled(out, it.text, PhpHighlightingData.KEYWORD)
+            out.append(' ')
+        }
         styled(out, function.name, PhpHighlightingData.FUNCTION)
         PhaenonErasedTypes.writtenTypeParameters(function)?.let { styled(out, it, PhpHighlightingData.PRIMITIVE_TYPE_HINT) }
         styled(out, "(", PhpHighlightingData.PARENTHESES)

@@ -41,19 +41,19 @@ class PhaenonUnreservedWordsTest : BasePlatformTestCase() {
 
         final class Task
         {
-            fun __construct(public readonly int ${'$'}value) {}
+            __construct(public readonly int ${'$'}value) {}
         }
 
         final class Pool
         {
             public const spawn = 2;
 
-            fun spawn(int ${'$'}value): Task
+            spawn(int ${'$'}value): Task
             {
                 return new Task(${'$'}value);
             }
 
-            static fun concurrently(Task ...${'$'}tasks): int
+            static concurrently(Task ...${'$'}tasks): int
             {
                 ${'$'}sum = 0;
                 foreach (${'$'}tasks as ${'$'}task) {
@@ -64,17 +64,17 @@ class PhaenonUnreservedWordsTest : BasePlatformTestCase() {
             }
         }
 
-        fun spawn(int ${'$'}value): Task
+        function spawn(int ${'$'}value): Task
         {
             return new Task(${'$'}value);
         }
 
-        fun concurrently(Task ...${'$'}tasks): int
+        function concurrently(Task ...${'$'}tasks): int
         {
             return Pool::concurrently(...${'$'}tasks);
         }
 
-        fun run(Pool ${'$'}pool): int
+        function run(Pool ${'$'}pool): int
         {
             ${'$'}first = spawn(1);
             ${'$'}second = ${'$'}pool->spawn(2);
@@ -134,7 +134,7 @@ class PhaenonUnreservedWordsTest : BasePlatformTestCase() {
     fun testTheRemovedBlockIsNoLongerSyntax() {
         // What was a block used as a value is now a name followed by braces: an error to PHP, and so
         // to PhpStorm, as it is to the compiler once the syntax has left it.
-        val file = myFixture.configureByText("Block.phn", "namespace App;\n\nfun f(): int\n{\n    \$x = concurrently {\n        return 1;\n    };\n\n    return \$x;\n}\n")
+        val file = myFixture.configureByText("Block.phn", "namespace App;\n\nfunction f(): int\n{\n    \$x = concurrently {\n        return 1;\n    };\n\n    return \$x;\n}\n")
 
         assertNotEmpty(PsiTreeUtil.findChildrenOfType(file, PsiErrorElement::class.java))
         assertEmpty(PsiTreeUtil.findChildrenOfType(file, Function::class.java).filter { it.isClosure })
@@ -142,7 +142,8 @@ class PhaenonUnreservedWordsTest : BasePlatformTestCase() {
 
     fun testBothLexersHandTheWordsOverAsIdentifiers() {
         val text = "concurrently { \$t = spawn f(); } \$x = concurrently (timeout: 1) { }; spawn { }; Api::concurrently(1); concurrently(1); \$o->spawn(); spawn(1); spawn = 1;"
-        for (lexer in listOf(PhaenonHighlightingLexer(PhpWithOptionalOpenTagLexer()), PhaenonLexer())) {
+        // The editor's lexer is PhpStorm's own (PhaenonBaseLexerProvider), the parser's is PhaenonLexer.
+        for (lexer in listOf(PhpWithOptionalOpenTagLexer(), PhaenonLexer())) {
             lexer.start(text)
             val seen = ArrayList<String>()
             while (lexer.tokenType != null) {

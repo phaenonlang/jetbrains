@@ -21,12 +21,12 @@ import com.jetbrains.php.lang.parser.parsing.functions.Function
  * PhpStorm skips over every `{ … }` block of a function, method, closure or `try` while parsing a
  * file and collapses it into a lazy node, which is expanded later by re-lexing the block's text
  * with a plain PHP lexer. For PHP that is an optimisation; for a Phaenon file it would throw away
- * [PhaenonLexer]'s erasures inside every body, so `$x is Foo` or `new Box<int>()` would come back
- * as syntax errors as soon as the body is looked at. Intercepting the collapse and parsing the
- * block there and then, with the same statement parser PhpStorm uses when it expands a lazy block,
- * keeps the whole file on one lexer. The block becomes PhpStorm's own non-lazy group statement,
- * the node type it uses for the top level of a file and for code fragments, which every feature
- * handles alongside the lazy one (`PhpElementTypes.ANY_GROUP_STATEMENT`).
+ * [PhaenonLexer]'s erasures inside every body, so `new Box<int>()` or `first<User>($rows)` would
+ * come back as syntax errors as soon as the body is looked at. Intercepting the collapse and
+ * parsing the block there and then, with the same statement parser PhpStorm uses when it expands
+ * a lazy block, keeps the whole file on one lexer. The block becomes PhpStorm's own non-lazy group
+ * statement, the node type it uses for the top level of a file and for code fragments, which every
+ * feature handles alongside the lazy one (`PhpElementTypes.ANY_GROUP_STATEMENT`).
  *
  * The price is that an edit inside a body reparses the file rather than the block, which is how
  * PhpStorm worked before lazy blocks existed.
@@ -34,12 +34,24 @@ import com.jetbrains.php.lang.parser.parsing.functions.Function
  * An expression body, `=> expr;` (design/functions.md §3), reaches the parser as the block it
  * compiles to: [PhaenonLexer] hands over the arrow as `{` and `return`. The source has no `}` for
  * that block; it is closed here after its one statement, as the compiler's tree holds it.
+ *
+ * The empty token [PhaenonLexer] hands over before a method declared without a keyword,
+ * [PhaenonTokenTypes.FUNCTION], is `function` to the parser: the builder answers its type as
+ * PHP's keyword, and the leaf the platform builds of it is one ([PhaenonTokenTypes.FUNCTION]).
  */
 class PhaenonPsiBuilder(private val project: Project, delegate: PsiBuilder) : PsiBuilderAdapter(delegate) {
 
     private val php: PhpPsiBuilder by lazy { PhpPsiBuilder(project, this) }
 
     override fun mark(): PsiBuilder.Marker = Marker(super.mark())
+
+    override fun getTokenType(): IElementType? = asParserSees(super.getTokenType())
+
+    override fun lookAhead(steps: Int): IElementType? = asParserSees(super.lookAhead(steps))
+
+    override fun rawLookup(steps: Int): IElementType? = asParserSees(super.rawLookup(steps))
+
+    private fun asParserSees(type: IElementType?): IElementType? = if (type === PhaenonTokenTypes.FUNCTION) PhpTokenTypes.kwFUNCTION else type
 
     /** Parses the `{ … }` block at the current token into a non-lazy group statement. */
     private fun parseBlockNow() {

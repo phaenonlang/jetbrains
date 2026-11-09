@@ -6,15 +6,15 @@ use App\Domain\Repository\AggregateRepository;
 final class Repo implements AggregateRepository<UserId, User>
 {
     /** The aggregate, or null when there is none. */
-    fun get(UserId $id): ?User {
+    get(UserId $id): ?User {
         // TODO: Implement get() method.
     }
 
-    fun load(UserId $id): User throws AggregateNotFound {
+    load(UserId $id): User throws AggregateNotFound {
         // TODO: Implement load() method.
     }
 
-    fun save(User $aggregate): void {
+    save(User $aggregate): void {
         // TODO: Implement save() method.
     }
 

@@ -4,15 +4,34 @@
   "fileTypes": [
     "phn"
   ],
-  "comment": "A Phaenon file is PHP code from byte 0: the PHP code grammar (source.php, which VS Code and JetBrains IDEs ship) without the text.html.php wrapper that waits for an open tag, plus injections for what Phaenon adds: fun declarations, type parameters and arguments, throws, type aliases, is / as and bytes. The injections reuse PHP's scope names wherever PHP has the construct, so themes colour them as PHP.",
+  "comment": "A Phaenon file is PHP code from byte 0: the PHP code grammar (source.php, which VS Code and JetBrains IDEs ship) without the text.html.php wrapper that waits for an open tag, plus what Phaenon adds: type parameters and arguments, list, map, bytes, tuple and closure types, throws, type aliases, expression bodies, and methods declared without a keyword. A method is told from a call only by where it stands, so the class-like declarations are this grammar's own rules, injected ahead of PHP's, and their bodies hold the member rules (#class-members) that apply nowhere else. The rules reuse PHP's scope names wherever PHP has the construct, so themes colour them as PHP.",
   "patterns": [
     {
       "include": "source.php"
     }
   ],
   "injections": {
+    "L:meta.class.body.php - meta.function.php - comment - string, L:meta.interface.body.php - meta.function.php - comment - string, L:meta.trait.body.php - meta.function.php - comment - string, L:meta.enum.body.php - meta.function.php - comment - string": {
+      "patterns": [
+        {
+          "include": "#generic-method"
+        }
+      ]
+    },
     "L:source.phaenon - comment - string - meta.use.php": {
       "patterns": [
+        {
+          "include": "#class"
+        },
+        {
+          "include": "#interface"
+        },
+        {
+          "include": "#trait"
+        },
+        {
+          "include": "#enum"
+        },
         {
           "include": "#function"
         },
@@ -21,9 +40,6 @@
         },
         {
           "include": "#type-alias"
-        },
-        {
-          "include": "#type-test"
         },
         {
           "include": "#generic-new"
@@ -41,44 +57,465 @@
           "include": "#bytes"
         },
         {
-          "include": "#readonly"
-        }
-      ]
-    },
-    "L:meta.class.php - meta.class.body.php - comment - string": {
-      "patterns": [
-        {
-          "include": "#type-parameters"
-        }
-      ]
-    },
-    "L:meta.interface.php - meta.interface.body.php - comment - string": {
-      "patterns": [
-        {
-          "include": "#type-parameters"
-        }
-      ]
-    },
-    "L:meta.trait.php - meta.trait.body.php - comment - string": {
-      "patterns": [
-        {
-          "include": "#type-parameters"
-        }
-      ]
-    },
-    "L:meta.enum.php - meta.enum.body.php - comment - string": {
-      "patterns": [
-        {
-          "include": "#type-parameters"
+          "include": "#placeholder"
         }
       ]
     }
   },
   "repository": {
+    "class": {
+      "comment": "A class or an anonymous class (new class(…)), PHP's rule with type parameters in its header and the member rules in its body.",
+      "name": "meta.class.php",
+      "begin": "(?i)(?<![$\\w\\\\]|->|::)(?=\\b(?:final|abstract|readonly|class|new)\\b)(?:\\b((?:(?:final|abstract|readonly)\\s+)*)(class)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)|\\b(new)\\b\\s*(\\#\\[.*\\])?\\s*(?:((readonly))\\s+)?\\b(class)\\b)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "match": "(?i)(final|abstract)|(readonly)",
+              "name": "storage.modifier.php",
+              "captures": {
+                "1": {
+                  "name": "storage.modifier.inheritance.${1:/downcase}.php"
+                },
+                "2": {
+                  "name": "storage.modifier.readonly.php"
+                }
+              }
+            }
+          ]
+        },
+        "2": {
+          "name": "storage.type.class.php"
+        },
+        "3": {
+          "name": "entity.name.type.class.php"
+        },
+        "4": {
+          "name": "keyword.other.new.php"
+        },
+        "5": {
+          "patterns": [
+            {
+              "include": "source.php#attribute"
+            }
+          ]
+        },
+        "6": {
+          "name": "storage.modifier.php"
+        },
+        "7": {
+          "name": "storage.modifier.readonly.php"
+        },
+        "8": {
+          "name": "storage.type.class.php"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.class.end.bracket.curly.php"
+        }
+      },
+      "patterns": [
+        {
+          "begin": "(?<=class)\\s*(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.arguments.begin.bracket.round.php"
+            }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.arguments.end.bracket.round.php"
+            }
+          },
+          "name": "meta.function-call.php",
+          "patterns": [
+            {
+              "include": "source.php#named-arguments"
+            },
+            {
+              "include": "source.php"
+            }
+          ]
+        },
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type-parameters"
+        },
+        {
+          "include": "source.php#class-extends"
+        },
+        {
+          "include": "source.php#class-implements"
+        },
+        {
+          "begin": "{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.class.begin.bracket.curly.php"
+            }
+          },
+          "end": "(?=})",
+          "contentName": "meta.class.body.php",
+          "patterns": [
+            {
+              "include": "#class-members"
+            },
+            {
+              "include": "source.php#class-constant"
+            },
+            {
+              "include": "source.php"
+            }
+          ]
+        }
+      ]
+    },
+    "interface": {
+      "comment": "An interface, PHP's rule with type parameters in its header and the member rules in its body.",
+      "name": "meta.interface.php",
+      "begin": "(?i)(?=\\binterface\\s)(?<![$\\w\\\\]|->|::)(?<!extends\\s|implements\\s|,\\s)\\b(interface)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.interface.php"
+        },
+        "2": {
+          "name": "entity.name.type.interface.php"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.interface.end.bracket.curly.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type-parameters"
+        },
+        {
+          "include": "source.php#interface-extends"
+        },
+        {
+          "begin": "{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.interface.begin.bracket.curly.php"
+            }
+          },
+          "end": "(?=})",
+          "contentName": "meta.interface.body.php",
+          "patterns": [
+            {
+              "include": "#class-members"
+            },
+            {
+              "include": "source.php#class-constant"
+            },
+            {
+              "include": "source.php"
+            }
+          ]
+        }
+      ]
+    },
+    "trait": {
+      "comment": "A trait, PHP's rule with type parameters in its header and the member rules in its body.",
+      "name": "meta.trait.php",
+      "begin": "(?i)(?=\\btrait\\s)(?<![$\\w\\\\]|->|::)(?<!extends\\s|implements\\s|,\\s)\\b(trait)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.trait.php"
+        },
+        "2": {
+          "name": "entity.name.type.trait.php"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.trait.end.bracket.curly.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type-parameters"
+        },
+        {
+          "begin": "{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.trait.begin.bracket.curly.php"
+            }
+          },
+          "end": "(?=})",
+          "contentName": "meta.trait.body.php",
+          "patterns": [
+            {
+              "include": "#class-members"
+            },
+            {
+              "include": "source.php"
+            }
+          ]
+        }
+      ]
+    },
+    "enum": {
+      "comment": "An enum, PHP's rule with the member rules in its body; case( begins a method named case.",
+      "name": "meta.enum.php",
+      "begin": "(?i)(?=\\benum\\s)(?<![$\\w\\\\]|->|::)(?<!extends\\s|implements\\s|,\\s)\\b(enum)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.type.enum.php"
+        },
+        "2": {
+          "name": "entity.name.type.enum.php"
+        }
+      },
+      "end": "}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.enum.end.bracket.curly.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type-parameters"
+        },
+        {
+          "match": "(?i)(:)\\s*(int|string)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.return-value.php"
+            },
+            "2": {
+              "name": "keyword.other.type.php"
+            }
+          }
+        },
+        {
+          "include": "source.php#class-implements"
+        },
+        {
+          "begin": "{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.enum.begin.bracket.curly.php"
+            }
+          },
+          "end": "(?=})",
+          "contentName": "meta.enum.body.php",
+          "patterns": [
+            {
+              "include": "#class-members"
+            },
+            {
+              "match": "(?i)\\b((case))\\s*([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+              "captures": {
+                "1": {
+                  "name": "storage.modifier.php"
+                },
+                "2": {
+                  "name": "storage.type.enum.case.php"
+                },
+                "3": {
+                  "name": "constant.enum.php"
+                }
+              }
+            },
+            {
+              "include": "source.php#class-constant"
+            },
+            {
+              "include": "source.php"
+            }
+          ]
+        }
+      ]
+    },
+    "class-members": {
+      "comment": "The rules that hold only at class-member level, ahead of PHP's own: a method, a property.",
+      "patterns": [
+        {
+          "include": "#method"
+        },
+        {
+          "include": "#property"
+        }
+      ]
+    },
+    "method": {
+      "comment": "A method (functions.md §1.1): at a member's start, its modifiers, then a name followed by ( or by a balanced <…> and (, either after PHP's function or with no keyword. Without function, a modifier, var, const, function, fn and Closure are no method's name: after the modifiers they begin a property's or a constant's type, or a closure. The rule owns the body, so a call in it is never read as a declaration. It begins at the member's start, its indentation included, ahead of the injections that would take name<T>( for a generic call: an injection wins a tie, so a generic method written at column 0 is #generic-method's.",
+      "name": "meta.function.php",
+      "begin": "(?:^|(?<=[{};\\]]|\\*/))\\s*((?:(?i:final|abstract|public|private|protected|static|readonly)\\s+)*)(?:((?i:function))\\s+(?:(&)\\s*)?([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)|(?:(&)\\s*)?(?!(?i:static|abstract|final|public|protected|private|readonly|var|const|function|fn)(?![A-Za-z0-9_\\x{7f}-\\x{10ffff}])|Closure(?![A-Za-z0-9_\\x{7f}-\\x{10ffff}]))([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*))(?=\\s*(?:<(?:[^<>;{}$]|<(?:[^<>;{}$]|<[^<>;{}$]*>)*>)*>)?\\s*\\()",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "#modifiers"
+            }
+          ]
+        },
+        "2": {
+          "name": "storage.type.function.php"
+        },
+        "3": {
+          "name": "storage.modifier.reference.php"
+        },
+        "4": {
+          "patterns": [
+            {
+              "include": "#function-name"
+            }
+          ]
+        },
+        "5": {
+          "name": "storage.modifier.reference.php"
+        },
+        "6": {
+          "patterns": [
+            {
+              "include": "#function-name"
+            }
+          ]
+        }
+      },
+      "end": "(?<=[};])|(;)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.terminator.expression.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#function-tail"
+        }
+      ]
+    },
+    "generic-method": {
+      "comment": "A generic method at column 0, #method with its <…> required: there a generic call's injection starts where #method does and wins the tie, so this rule is injected ahead of it into the class-like bodies, outside any function's. The <…> is required because a property hook's set(…), inside the property's braces, has no scope that would keep it out. A generic method at column 0 in an anonymous class inside a function still reads as a call.",
+      "name": "meta.function.php",
+      "begin": "^((?:(?i:final|abstract|public|private|protected|static|readonly)\\s+)*)(?:((?i:function))\\s+(?:(&)\\s*)?([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)|(?:(&)\\s*)?(?!(?i:static|abstract|final|public|protected|private|readonly|var|const|function|fn)(?![A-Za-z0-9_\\x{7f}-\\x{10ffff}])|Closure(?![A-Za-z0-9_\\x{7f}-\\x{10ffff}]))([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*))(?=\\s*<(?:[^<>;{}$]|<(?:[^<>;{}$]|<[^<>;{}$]*>)*>)*>\\s*\\()",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "#modifiers"
+            }
+          ]
+        },
+        "2": {
+          "name": "storage.type.function.php"
+        },
+        "3": {
+          "name": "storage.modifier.reference.php"
+        },
+        "4": {
+          "patterns": [
+            {
+              "include": "#function-name"
+            }
+          ]
+        },
+        "5": {
+          "name": "storage.modifier.reference.php"
+        },
+        "6": {
+          "patterns": [
+            {
+              "include": "#function-name"
+            }
+          ]
+        }
+      },
+      "end": "(?<=[};])|(;)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.terminator.expression.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#function-tail"
+        }
+      ]
+    },
+    "property": {
+      "comment": "A property: at a member's start, its modifiers, then a type, read by #type (tuples, closure types, generics, DNF), up to the variable. It ends at whatever cannot be in a type, so that a member it misread cannot take the class's brace.",
+      "begin": "(?:^|(?<=[{};\\]]|\\*/))\\s*((?:(?i:(?:public|private|protected)(?:\\(set\\))?|static|readonly|var|final|abstract)(?:\\s+|(?=\\?)))+)(?=[^;={}$]*\\$)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "#modifiers"
+            }
+          ]
+        }
+      },
+      "end": "(?=[$;={])",
+      "patterns": [
+        {
+          "include": "source.php#comments"
+        },
+        {
+          "include": "#type"
+        }
+      ]
+    },
+    "modifiers": {
+      "comment": "A member's modifiers, scoped as PHP's property and method rules scope them.",
+      "patterns": [
+        {
+          "match": "(?i)\\b((public|private|protected)\\(set\\))",
+          "name": "storage.modifier.php",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.visibility.set.${2:/downcase}.php"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\b(?:(final|abstract)|(public|private|protected)|(static)|(readonly))\\b",
+          "name": "storage.modifier.php",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.inheritance.${1:/downcase}.php"
+            },
+            "2": {
+              "name": "storage.modifier.visibility.${2:/downcase}.php"
+            },
+            "3": {
+              "name": "storage.modifier.static.php"
+            },
+            "4": {
+              "name": "storage.modifier.readonly.php"
+            }
+          }
+        },
+        {
+          "match": "(?i)\\bvar\\b",
+          "name": "storage.type.php"
+        }
+      ]
+    },
     "function": {
-      "comment": "A named function or method: fun, the name, its type parameters, parameters, return type and throws clause, up to the body ({ or =>) or the ; of a declaration without one.",
-      "name": "meta.function.phaenon",
-      "begin": "(?<![$\\w\\\\]|->|::)\\b(fun)\\s+(?:(&)\\s*)?([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+      "comment": "A named function: PHP's function, the name, its type parameters, parameters, return type, throws clause and body, as #method reads a method.",
+      "name": "meta.function.php",
+      "begin": "(?i)(?<![$\\w\\\\]|->|::)\\b(function)\\s+(?:(&)\\s*)?([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)(?=\\s*(?:<(?:[^<>;{}$]|<(?:[^<>;{}$]|<[^<>;{}$]*>)*>)*>)?\\s*\\()",
       "beginCaptures": {
         "1": {
           "name": "storage.type.function.php"
@@ -89,21 +526,41 @@
         "3": {
           "patterns": [
             {
-              "match": "(?i)\\b__construct\\b",
-              "name": "support.function.constructor.php"
-            },
-            {
-              "match": "(?i)\\b__(?:call|callStatic|debugInfo|destruct|get|set|isset|unset|toString|clone|set_state|sleep|wakeup|invoke|serialize|unserialize)\\b",
-              "name": "support.function.magic.php"
-            },
-            {
-              "match": ".+",
-              "name": "entity.name.function.php"
+              "include": "#function-name"
             }
           ]
         }
       },
-      "end": "(?=[{;]|=>)",
+      "end": "(?<=[};])|(;)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.terminator.expression.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#function-tail"
+        }
+      ]
+    },
+    "function-name": {
+      "patterns": [
+        {
+          "match": "(?i)\\b__construct\\b",
+          "name": "support.function.constructor.php"
+        },
+        {
+          "match": "(?i)\\b__(?:call|callStatic|debugInfo|destruct|get|set|isset|unset|toString|clone|set_state|sleep|wakeup|invoke|serialize|unserialize)\\b",
+          "name": "support.function.magic.php"
+        },
+        {
+          "match": ".+",
+          "name": "entity.name.function.php"
+        }
+      ]
+    },
+    "function-tail": {
+      "comment": "What follows a function's or a method's name: type parameters, parameters, return type, throws, then a block, an expression body or the ; of a declaration without one.",
       "patterns": [
         {
           "include": "source.php#comments"
@@ -119,6 +576,51 @@
         },
         {
           "include": "#throws"
+        },
+        {
+          "include": "#function-body"
+        },
+        {
+          "include": "#expression-body"
+        }
+      ]
+    },
+    "function-body": {
+      "begin": "\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.begin.bracket.curly.php"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.end.bracket.curly.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.php"
+        }
+      ]
+    },
+    "expression-body": {
+      "comment": "=> expr; (functions.md §3): the arrow as PHP's arrow functions scope theirs.",
+      "begin": "=>",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.arrow.php"
+        }
+      },
+      "end": ";",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.expression.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.php"
         }
       ]
     },
@@ -402,41 +904,6 @@
         }
       ]
     },
-    "type-test": {
-      "comment": "$x is T, $x as T, $x as? T (structural, generics.md). A foreach's as $v and a trait adaptation's as protected stay PHP's.",
-      "patterns": [
-        {
-          "match": "(?<![$\\w\\\\]|->|::)\\b(is)\\s+(\\??\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*(?:<(?:[^<>;{}$'\"]|<(?:[^<>;{}$'\"]|<[^<>;{}$'\"]*>)*>)*>)?)",
-          "captures": {
-            "1": {
-              "name": "keyword.operator.is.phaenon"
-            },
-            "2": {
-              "patterns": [
-                {
-                  "include": "#type"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "match": "(?<![$\\w\\\\]|->|::)\\b(as\\??)\\s+(?!(?:public|protected|private)\\b)(\\??\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*(?:<(?:[^<>;{}$'\"]|<(?:[^<>;{}$'\"]|<[^<>;{}$'\"]*>)*>)*>)?)",
-          "captures": {
-            "1": {
-              "name": "keyword.operator.as.php"
-            },
-            "2": {
-              "patterns": [
-                {
-                  "include": "#type"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
     "bytes": {
       "match": "(?<![$\\w\\\\]|->|::)\\bbytes\\b(?![\\w\\\\]|\\s*\\()",
       "name": "keyword.other.type.phaenon"
@@ -575,15 +1042,15 @@
         }
       ]
     },
-    "readonly": {
-      "comment": "readonly before a type PHP's property rule cannot read (map<string, int>).",
-      "match": "(?<![$\\w\\\\]|->|::)\\breadonly\\b(?=\\s)",
-      "name": "storage.modifier.php"
-    },
     "nullable-generic": {
       "comment": "The ? of a property's ?map<string, int>: PHP's property rule cannot read the type, and its ternary rule would take the ? and wait for a : that never comes.",
       "match": "\\?(?=\\s*\\\\?(?:[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*\\\\)*[A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*<[^;{}$'\\\"]*>)",
       "name": "keyword.operator.nullable-type.php"
+    },
+    "placeholder": {
+      "comment": "The ? of a partial application, f(?, 1) or f(x: ?) (PHP 8.6, php-versions.md §5): an argument that is a ? alone. PHP's grammar would open a ternary on it and wait for a : that never comes.",
+      "match": "\\?(?=\\s*[,)])",
+      "name": "keyword.operator.placeholder.phaenon"
     }
   }
 }

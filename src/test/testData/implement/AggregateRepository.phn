@@ -8,12 +8,12 @@ interface AggregateRepository<Id of AggregateId, T of Aggregate>
     /**
      * The aggregate, or null when there is none.
      */
-    fun get(Id $id): ?T;
+    get(Id $id): ?T;
 
     /**
      * @throws AggregateNotFound
      */
-    fun load(Id $id): T;
+    load(Id $id): T;
 
-    fun save(T $aggregate): void;
+    save(T $aggregate): void;
 }

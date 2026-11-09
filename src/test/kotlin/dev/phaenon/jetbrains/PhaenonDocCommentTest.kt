@@ -34,11 +34,11 @@ class PhaenonDocCommentTest : BasePlatformTestCase() {
     fun testAStubOverATypedMethodIsEmpty() {
         val result = enter(
             "A.phn",
-            "namespace App;\n\nabstract class A<T of object>\n{\n    /**<caret>\n    abstract protected static fun aggregateClass(): class<T>;\n}\n",
+            "namespace App;\n\nabstract class A<T of object>\n{\n    /**<caret>\n    abstract protected static aggregateClass(): class<T>;\n}\n",
         )
 
         assertEquals(
-            "namespace App;\n\nabstract class A<T of object>\n{\n    /** <caret> */\n    abstract protected static fun aggregateClass(): class<T>;\n}\n",
+            "namespace App;\n\nabstract class A<T of object>\n{\n    /** <caret> */\n    abstract protected static aggregateClass(): class<T>;\n}\n",
             result,
         )
     }
@@ -46,11 +46,11 @@ class PhaenonDocCommentTest : BasePlatformTestCase() {
     fun testOnlyAnUntypedParameterKeepsItsTag() {
         val result = enter(
             "B.phn",
-            "namespace App;\n\nfinal class B<T of object>\n{\n    /**<caret>\n    fun get(Id \$id, \$raw, list<int> \$xs, string|list<int> \$e, int ...\$n): ?T\n    {\n        return null;\n    }\n}\n",
+            "namespace App;\n\nfinal class B<T of object>\n{\n    /**<caret>\n    get(Id \$id, \$raw, list<int> \$xs, string|list<int> \$e, int ...\$n): ?T\n    {\n        return null;\n    }\n}\n",
         )
 
         assertEquals(
-            "namespace App;\n\nfinal class B<T of object>\n{\n    /** @param \$raw<caret> */\n    fun get(Id \$id, \$raw, list<int> \$xs, string|list<int> \$e, int ...\$n): ?T\n    {\n        return null;\n    }\n}\n",
+            "namespace App;\n\nfinal class B<T of object>\n{\n    /** @param \$raw<caret> */\n    get(Id \$id, \$raw, list<int> \$xs, string|list<int> \$e, int ...\$n): ?T\n    {\n        return null;\n    }\n}\n",
             result,
         )
     }
@@ -65,10 +65,10 @@ class PhaenonDocCommentTest : BasePlatformTestCase() {
         myFixture.addFileToProject("Errors.phn", "namespace App;\n\nfinal class Boom extends \\Exception {\n}\n")
         val result = enter(
             "T.phn",
-            "namespace App;\n\nfinal class T {\n    /**<caret>\n    fun go(int \$n, \$raw): void throws Boom {\n        throw new Boom();\n    }\n}\n",
+            "namespace App;\n\nfinal class T {\n    /**<caret>\n    go(int \$n, \$raw): void throws Boom {\n        throw new Boom();\n    }\n}\n",
         )
 
-        assertEquals("namespace App;\n\nfinal class T {\n    /** @param \$raw<caret> */\n    fun go(int \$n, \$raw): void throws Boom {\n        throw new Boom();\n    }\n}\n", result)
+        assertEquals("namespace App;\n\nfinal class T {\n    /** @param \$raw<caret> */\n    go(int \$n, \$raw): void throws Boom {\n        throw new Boom();\n    }\n}\n", result)
     }
 
     fun testATagForAnExceptionTheClauseDoesNotNameStays() {
@@ -77,7 +77,7 @@ class PhaenonDocCommentTest : BasePlatformTestCase() {
         myFixture.addFileToProject("Errors.phn", "namespace App;\n\nfinal class Boom extends \\Exception {\n}\n\nfinal class Other extends \\Exception {\n}\n")
         val result = enter(
             "T.phn",
-            "namespace App;\n\nfinal class T {\n    /**<caret>\n    fun go(int \$n, \$raw): void throws Boom {\n        if (\$n > 0) {\n            throw new Boom();\n        }\n        throw new Other();\n    }\n}\n",
+            "namespace App;\n\nfinal class T {\n    /**<caret>\n    go(int \$n, \$raw): void throws Boom {\n        if (\$n > 0) {\n            throw new Boom();\n        }\n        throw new Other();\n    }\n}\n",
         )
 
         assertTrue(result, result.contains("    /**\n     * @param \$raw") && result.contains("     * @throws Other") && !result.contains("@throws Boom"))

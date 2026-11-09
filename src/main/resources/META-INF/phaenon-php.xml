@@ -23,7 +23,7 @@
         <postFormatProcessor implementation="dev.phaenon.jetbrains.PhaenonPostFormatProcessor"/>
         <fileIndentOptionsProvider implementation="dev.phaenon.jetbrains.PhaenonIndentOptionsProvider" order="first"/>
 
-        <!-- Implement / Override Methods in a .phn class: `fun`, the parent's declared types, its type parameters substituted. -->
+        <!-- Implement / Override Methods in a .phn class: no keyword, the parent's declared types, its type parameters substituted. -->
         <codeInsight.implementMethod language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonImplementMethodsHandler"/>
         <codeInsight.overrideMethod language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonOverrideMethodsHandler"/>
 
@@ -56,8 +56,8 @@
 
         <!-- Class names inside erased constructs (`list<User>`) are references, complete, and are not prose. -->
         <psi.referenceContributor language="PHP" implementation="dev.phaenon.jetbrains.PhaenonErasedReferenceContributor"/>
-        <!-- Before the live-template contributor, which wraps every contributor after it: in .phn files this one drops
-             PhpStorm's `fun` live template (a second `fun`, expanding to `function`) and makes override items Phaenon's. -->
+        <!-- Before the live-template contributor, which wraps every contributor after it: in .phn files this one makes
+             the override items of the contributors after it Phaenon's. -->
         <completion.contributor language="PHP" order="first, before liveTemplates"
                                 implementationClass="dev.phaenon.jetbrains.PhaenonErasedCompletionContributor"/>
         <spellchecker.support language="PHP" order="first"

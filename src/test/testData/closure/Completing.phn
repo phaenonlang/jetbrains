@@ -2,11 +2,11 @@ namespace Acme\Shop\Payments;
 
 final class Completing
 {
-    fun __construct(private readonly Closure(string...): (int, string) $request)
+    __construct(private readonly Closure(string...): (int, string) $request)
     {
     }
 
-    fun run(): void
+    run(): void
     {
         $this->request-><caret>
     }

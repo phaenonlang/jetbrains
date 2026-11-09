@@ -20,7 +20,6 @@ import com.jetbrains.php.lang.psi.elements.BinaryExpression
 import com.jetbrains.php.lang.psi.elements.If
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import com.jetbrains.php.lang.psi.elements.UnaryExpression
-import com.jetbrains.php.lang.psi.elements.Variable
 
 /**
  * Phaenon syntax reaches PhpStorm's PHP parser through [PhaenonLexer] and [PhaenonPsiBuilder];
@@ -68,9 +67,6 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
             ": Closure(int): bool",
             "Closure(string, int=): void",
             ": Closure(string, string...): (int, string)",
-            "is list<int>",
-            "as map<string, Money>",
-            "as? Money",
             "<User>",
             "<Address>",
         )
@@ -81,15 +77,24 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
         assertEmpty(PsiTreeUtil.collectElementsOfType(file, PsiWhiteSpace::class.java).filter { it.text.isNotBlank() })
     }
 
-    fun testIsOnAClassNameIsInstanceof() {
-        val file = myFixture.configureByText("Is.phn", "function f(mixed \$x): bool { return \$x is \\App\\User; }\n")
+    fun testIsAndAsAreReadAsPhpReadsThem() {
+        // D26 withdrew the operators: a type test is PHP's own, `is` is a name like any other, and
+        // a test left over is the syntax error PHP makes of it, in `.phn` and `.php` alike (the
+        // compiler's P1001 names the replacement, through `phn lsp`).
+        val source = "function is(mixed \$x): bool { return \$x instanceof \\App\\User; }\n\n" +
+            "function f(mixed \$x): bool { return is(\$x) && \$x is \\App\\User; }\n\n" +
+            "function g(mixed \$x): mixed { return \$x as? \\App\\User; }\n"
+        val phn = myFixture.configureByText("Is.phn", source)
+        val php = myFixture.configureByText("Is.php", "<?php\n$source")
 
-        val test = PsiTreeUtil.collectElementsOfType(file, BinaryExpression::class.java)
-            .singleOrNull { it.node.elementType === PhpElementTypes.INSTANCEOF_EXPRESSION }
-        assertNotNull("`\$x is User` should parse as an instanceof expression", test)
-        assertEquals("\$x is \\App\\User", test!!.text)
+        assertEmpty(PsiTreeUtil.collectElementsOfType(phn, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) })
+        val phnErrors = PsiTreeUtil.collectElementsOfType(phn, PsiErrorElement::class.java).map { it.errorDescription to it.textOffset }
+        val phpErrors = PsiTreeUtil.collectElementsOfType(php, PsiErrorElement::class.java).map { it.errorDescription to it.textOffset - "<?php\n".length }
+        assertNotEmpty(phnErrors)
+        assertEquals(phpErrors, phnErrors)
+        val test = PsiTreeUtil.collectElementsOfType(phn, BinaryExpression::class.java)
+            .single { it.node.elementType === PhpElementTypes.INSTANCEOF_EXPRESSION }
         assertEquals(PhpTokenTypes.kwINSTANCEOF, test.operationType)
-        assertEquals("\\App\\User", test.rightOperand?.text)
     }
 
     fun testBytesCastIsAStringCast() {
@@ -105,15 +110,15 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
     fun testFunctionBodiesAreParsedEagerlyWithTheSameLexer() {
         val file = myFixture.configureByText(
             "Body.phn",
-            "function f(mixed \$x): void {\n    if (\$x is list<int>) {\n        \$y = new Box<int>(1);\n        \$z = first<User>(\$y);\n    }\n}\n",
+            "function f(mixed \$x): void {\n    if (\$x) {\n        \$y = new Box<int>(1);\n        \$z = first<User>(\$y);\n    }\n}\n",
         )
 
         assertEmpty(PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java))
         val lazy = PsiTreeUtil.collectElements(file) { it.node.elementType === PhpElementTypes.GROUP_STATEMENT }.toList()
         assertEmpty("a lazily parsed block would lose the erasures when expanded", lazy)
-        val condition = PsiTreeUtil.findChildOfType(file, If::class.java)!!.condition
-        assertInstanceOf(condition, Variable::class.java)
-        assertEquals("\$x", condition!!.text)
+        val branch = PsiTreeUtil.findChildOfType(file, If::class.java)!!.statement!!
+        val erased = PsiTreeUtil.collectElementsOfType(branch, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }.map { it.text }
+        assertEquals(listOf("<int>", "<User>"), erased)
     }
 
     fun testKeywordNamedMethodsTakeTypeParameters() {
@@ -134,13 +139,13 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
     fun testPropertyHooksKeepTheirErasedTypes() {
         val file = myFixture.configureByText(
             "Hooks.phn",
-            "final class User\n{\n    public list<string> \$roles {\n        get => array_unique([\$this->role, ...\$this->extra]);\n    }\n\n    public map<string, int> \$counts {\n        get {\n            return \$this->counts is map<string, int> ? \$this->counts : [];\n        }\n        set(map<string, int> \$value) => \$value;\n    }\n\n    public string \$name { get => \$this->first . ' ' . \$this->last; }\n}\n",
+            "final class User\n{\n    public list<string> \$roles {\n        get => array_unique([\$this->role, ...\$this->extra]);\n    }\n\n    public map<string, int> \$counts {\n        get {\n            return is_array(\$this->counts) ? \$this->counts : [];\n        }\n        set(map<string, int> \$value) => \$value;\n    }\n\n    public string \$name { get => \$this->first . ' ' . \$this->last; }\n}\n",
         )
 
         val errors = PsiTreeUtil.collectElementsOfType(file, PsiErrorElement::class.java)
         assertEmpty("syntax errors: " + errors.map { "'${it.errorDescription}' at ${it.textOffset} near '${it.parent.text.take(40)}'" }, errors)
         val erased = PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }.map { it.text.trim() }
-        assertContainsElements(erased, "list<string>", "map<string, int>", "is map<string, int>")
+        assertContainsElements(erased, "list<string>", "map<string, int>")
     }
 
     fun testPhpSyntaxUnknownToTheIdeIsReportedAsInPhpFiles() {

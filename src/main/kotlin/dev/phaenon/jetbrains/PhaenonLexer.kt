@@ -33,9 +33,6 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  * - `Closure(T): U` is erased whole: a bare `Closure` with a signature is `\Closure` whatever the
  *   namespace and imports (the compiler's reading), where PhpStorm would resolve the name in the
  *   file's namespace. `\Closure(T): U` keeps its name and erases the signature.
- * - `$x is T` becomes `$x instanceof T` when `T` is a plain class name (the `is` token is re-typed,
- *   its text stays); every other `is`/`as`/`as?` test is erased together with its type, so the
- *   expression degrades to its operand.
  * - `type Name = …;` aliases are erased whole.
  * - `(bytes)` is re-typed as a `(string)` cast: one token spanning the parentheses.
  * - PHP 8.6's argument placeholders (`f(?, 1)`, `f(b: ?)`, `$o->m(?)`, design/php-versions.md
@@ -50,14 +47,25 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  *   `{` and `return` (`{` and an erased `>` under `void` or `never`), and [PhaenonPsiBuilder] closes
  *   that block after its one statement, where the source has no `}`.
  *
+ * Not erased but added: a method declared without a keyword (design/functions.md §1.1, roadmap
+ * D27), `[modifiers] [&]name[<…>](`, at the member level of a class, interface, trait or enum
+ * body, gets a `function` token before its `&` or name ([tryMethod]). The token is empty, so the
+ * text and the offsets stay the source's: the parser reads PHP's method head, and the method's
+ * `function` leaf has no text where the source wrote no keyword ([PhaenonTokenTypes.FUNCTION]).
+ * Nothing in a method's body or a property's hooks is a member, and a bare `name(` there is a
+ * call or a hook; the lexer tells them apart by the scopes it has handed over: each `{` opens a
+ * class-like body or a block, and an expression body's arrow a scope of its own up to its `;`.
+ *
  * The decision to read `Name<` as a type-argument list is the compiler's: PHP's relational
  * operators are non-associative, so `A < B > C` has no PHP reading, and a `<…>` that scans as a
  * type list is committed to. The one PHP shape this misreads, `f(A < B, C > ($d))`, is one the
  * compiler misreads as well (`generics.md` §2.4).
  *
  * The lexer is not restartable: it buffers tokens ahead of the base lexer and does not keep
- * per-offset states. It serves the parser, which lexes a whole file; the editor highlighter keeps
- * the plain PHP lexer (see [PhaenonBaseLexerProvider]).
+ * per-offset states, the open scopes among them. It serves the parser, which lexes a whole file
+ * from its first byte, a reparse included ([PhaenonPsiBuilder] leaves no block to be reparsed on
+ * its own); the editor highlighter keeps the plain PHP lexer, which needs no `function` to colour a
+ * method's name (see [PhaenonBaseLexerProvider]).
  */
 class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : LookAheadLexer(base) {
 
@@ -80,6 +88,23 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     private val typeParams = HashSet<String>()
     private var buffer: CharSequence = ""
 
+    /** A scope the lexer has handed over: whether its level is where a method may go without a keyword. */
+    private enum class Scope {
+        /** A class, interface, trait or enum body, an anonymous class's included. */
+        CLASS_BODY,
+        /** Any other `{ … }` or `${ … }`: a body, a property's hooks, a trait adaptation, a `match`, a string's interpolation. */
+        BLOCK,
+        /** An expression body, from the arrow to its `;`, which has no braces in the source. */
+        EXPRESSION_BODY,
+    }
+
+    /** The scopes handed over and not yet closed, innermost last. */
+    private val scopes = ArrayList<Scope>()
+    /** A class-like keyword went out, and the `{` of its body is still to come. */
+    private var classHeader = false
+    /** The parentheses open in that header: an anonymous class's arguments, whose closures have braces of their own. */
+    private var headerParens = 0
+
     override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {
         this.buffer = buffer
         pending.clear()
@@ -90,6 +115,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         headerDepth = 0
         returnTypeWords.clear()
         typeParams.clear()
+        scopes.clear()
+        classHeader = false
+        headerParens = 0
         super.start(buffer, startOffset, endOffset, initialState)
     }
 
@@ -106,10 +134,8 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         }
         val plan = tryThrows(c)
             ?: tryExpressionBody(c)
-            ?: tryFun(c)
+            ?: tryMethod(c)
             ?: tryPlaceholder(c)
-            ?: tryIs(c)
-            ?: tryAs(c)
             ?: tryTypeAlias(c)
             ?: tryDeclarationTypeParams(c)
             ?: tryBytesCast(c)
@@ -158,6 +184,13 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         val joinWithPrev = BooleanArray(count)
         /** Tokens handed over as several: the end offset and type of each part, in order. */
         val splits = HashMap<Int, List<Pair<Int, IElementType>>>()
+        /** Whether an empty [PhaenonTokenTypes.FUNCTION] goes out before the pending tokens: a method without a keyword. */
+        var function = false
+
+        fun insertFunction(): Plan {
+            function = true
+            return this
+        }
 
         fun erase(range: IntRange): Plan {
             for (i in range) types[i] = PhaenonTokenTypes.ERASED
@@ -195,6 +228,15 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     }
 
     private fun emit(plan: Plan) {
+        if (plan.function) {
+            addToken(pending[0].start, PhaenonTokenTypes.FUNCTION)
+            // Followed as the keyword it stands for: the header of a named function begins.
+            observe(PhpTokenTypes.kwFUNCTION)
+            prevPrevSig = prevSig
+            prevSig = PhpTokenTypes.kwFUNCTION
+            prevSigText = ""
+            track(PhpTokenTypes.kwFUNCTION, "")
+        }
         var i = 0
         while (i < plan.count) {
             val parts = plan.splits[i]
@@ -203,6 +245,8 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                     addToken(end, partType)
                     if (partType !in SKIPPABLE) track(partType, "")
                 }
+                // The one split token is an expression body's arrow: its `{` has no `}` in the source.
+                scopes.add(Scope.EXPRESSION_BODY)
                 prevPrevSig = prevSig
                 prevSig = parts.last { it.second !in SKIPPABLE }.second
                 prevSigText = ""
@@ -219,6 +263,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             }
             addToken(end, type)
             if (type !in SKIPPABLE) {
+                observe(type)
                 prevPrevSig = prevSig
                 prevSig = type
                 prevSigText = if (type == PhpTokenTypes.IDENTIFIER) buffer.subSequence(pending[i].start, end).toString() else ""
@@ -228,6 +273,47 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         }
         pending.subList(0, plan.count).clear()
     }
+
+    /**
+     * Follows the scopes as the tokens go out, before [prevSig] moves on: the `{` that ends a
+     * class-like header — of a named class, interface, trait or enum, or of an anonymous class
+     * after its arguments — opens a class body, any other `{` or `${` a block, and `}` closes the
+     * innermost. An expression body (opened where its arrow goes out, [emit]) ends at a `;` of its
+     * own level, or with the scope around it on unfinished code. A class-like keyword that names
+     * something begins no header: `Foo::class`, `$o->class`, a method named `interface` or `trait`
+     * (`function interface(`, `&trait(`, or one without a keyword, after its empty `function`), a
+     * named argument `f(class: …)`.
+     */
+    private fun observe(type: IElementType) {
+        when {
+            type in CLASS_LIKE_KEYWORDS && !namesSomething() -> {
+                classHeader = true
+                headerParens = 0
+            }
+            type === PhpTokenTypes.chLBRACE || type === PhpTokenTypes.DOLLAR_LBRACE -> {
+                val body = classHeader && headerParens == 0 && type === PhpTokenTypes.chLBRACE
+                scopes.add(if (body) Scope.CLASS_BODY else Scope.BLOCK)
+                if (body) classHeader = false
+            }
+            type === PhpTokenTypes.chRBRACE -> {
+                while (scopes.lastOrNull() == Scope.EXPRESSION_BODY) scopes.removeAt(scopes.size - 1)
+                if (scopes.isNotEmpty()) scopes.removeAt(scopes.size - 1)
+            }
+            type === PhpTokenTypes.opSEMICOLON -> {
+                if (scopes.lastOrNull() == Scope.EXPRESSION_BODY) scopes.removeAt(scopes.size - 1)
+                // A header that ends before a body is not one: unfinished code.
+                if (classHeader && headerParens <= 0) classHeader = false
+            }
+            classHeader && type === PhpTokenTypes.chLPAREN -> headerParens++
+            classHeader && type === PhpTokenTypes.chRPAREN -> headerParens--
+        }
+    }
+
+    /** Whether the class-like keyword going out is a name: after `::` or `->`, `function` or `function &`, `(` or `,`. */
+    private fun namesSomething(): Boolean =
+        prevSig in MEMBER_ACCESS || prevSig === PhpTokenTypes.kwFUNCTION ||
+            prevSig === PhpTokenTypes.opBIT_AND && prevPrevSig === PhpTokenTypes.kwFUNCTION ||
+            prevSig === PhpTokenTypes.chLPAREN || prevSig === PhpTokenTypes.opCOMMA
 
     /**
      * Follows a named function's header as its tokens go out: the keyword, the name, the parameter
@@ -321,17 +407,54 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     }
 
     /**
-     * `fun name(`: the `function` keyword spelled short, `public` implied (design/functions.md §1).
-     * The token keeps its text and takes the keyword's type; a method without a visibility is
-     * public to PhpStorm's parser as it is to PHP. `fun(` and `fun =` stay identifiers.
+     * A method without a keyword (design/functions.md §1.1): at a class body's member level, after
+     * the attributes and modifiers, `[&]name(` or `[&]name<…>(`, the `<…>` balanced. An empty
+     * [PhaenonTokenTypes.FUNCTION] goes out before the `&` or the name, and the parser reads PHP's
+     * method; a method without a visibility is public to it as to PHP. The names that keep PHP's
+     * `function` ([keepsFunctionKeyword]) begin something else there: a modifier before a
+     * property's DNF type, `Closure(int): string $f`, a constant, a closure. After them, as after
+     * any name not followed by its parameters, the member is a property or a constant.
      */
-    private fun tryFun(c: Tok): Plan? {
-        if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "fun" || prevSig !in FUN_PREDECESSORS) return null
-        var next = sig(1)
-        if (typeAt(next) == PhpTokenTypes.opBIT_AND) next = sig(next + 1)
-        val t = typeAt(next) ?: return null
-        if (t != PhpTokenTypes.IDENTIFIER && t !in PhpTokenTypes.tsKEYWORDS) return null
-        return Plan(1).replace(0, PhpTokenTypes.kwFUNCTION)
+    private fun tryMethod(c: Tok): Plan? {
+        if (scopes.lastOrNull() != Scope.CLASS_BODY || !atMemberStart()) return null
+        val name = if (c.type === PhpTokenTypes.opBIT_AND) sig(1) else 0
+        if (!isBareMethodName(name)) return null
+        var next = sig(name + 1)
+        if (typeAt(next) === PhpTokenTypes.opLESS) next = sig(afterTypeParameters(next) ?: return null)
+        if (typeAt(next) !== PhpTokenTypes.chLPAREN) return null
+        return Plan(0).insertFunction()
+    }
+
+    /** Where a member begins: after the `{` of the body, the end of a member, an attribute or a modifier. */
+    private fun atMemberStart(): Boolean =
+        prevSig in MEMBER_PREDECESSORS || prevSig === PhpTokenTypes.IDENTIFIER && prevSigText.equals("readonly", ignoreCase = true)
+
+    /** A name a method may have without a keyword, PHP's reserved words included (`list()`, `use()`, `case()`). */
+    private fun isBareMethodName(i: Int): Boolean {
+        if (i < 0) return false
+        val t = tok(i) ?: return false
+        if (t.type !== PhpTokenTypes.IDENTIFIER && t.type !in PhpTokenTypes.tsKEYWORDS) return false
+        return !keepsFunctionKeyword(text(t))
+    }
+
+    /**
+     * The index after a balanced `<…>` at [lt], or null: the compiler's scan, which ends without a
+     * list at a `;`, a brace, a variable or the end of the file.
+     */
+    private fun afterTypeParameters(lt: Int): Int? {
+        var depth = 0
+        var i = lt
+        while (i >= 0) {
+            when (typeAt(i)) {
+                null, PhpTokenTypes.opSEMICOLON, PhpTokenTypes.chLBRACE, PhpTokenTypes.chRBRACE, PhpTokenTypes.VARIABLE -> return null
+                PhpTokenTypes.opLESS -> depth++
+                PhpTokenTypes.opGREATER -> depth--
+                PhpTokenTypes.opSHIFT_RIGHT -> depth -= 2
+            }
+            if (depth <= 0) return i + 1
+            i = sig(i + 1)
+        }
+        return null
     }
 
     /**
@@ -349,29 +472,6 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         val next = typeAt(sig(1))
         if (next != PhpTokenTypes.opCOMMA && next != PhpTokenTypes.chRPAREN) return null
         return Plan(1).replace(0, PhpTokenTypes.IDENTIFIER)
-    }
-
-    /** `$x is T`: `instanceof` for a class name, erased otherwise. */
-    private fun tryIs(c: Tok): Plan? {
-        if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "is" || prevSig !in EXPRESSION_END) return null
-        val s = Scan()
-        val u = scanUnion(sig(1), s) ?: return null
-        if (s.extraClosers > 0) return null
-        val single = u.members.singleOrNull()
-        return if (single != null && single.classLike && !u.nullable) {
-            Plan(u.end).replace(0, PhpTokenTypes.kwINSTANCEOF).erase(s.erase)
-        } else {
-            Plan(u.end).erase(0 until u.end)
-        }
-    }
-
-    /** `$x as T`, `$x as? T`: erased, the expression keeps its operand. */
-    private fun tryAs(c: Tok): Plan? {
-        if (c.type != PhpTokenTypes.kwAS || prevSig !in VALUE_END) return null
-        val s = Scan()
-        val u = scanUnion(sig(1), s) ?: return null
-        if (s.extraClosers > 0) return null
-        return Plan(u.end).erase(0 until u.end)
     }
 
     /** `type Name<…> = T;` at statement level: erased whole. */
@@ -481,9 +581,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         var extraClosers = 0
     }
 
-    private class Member(val start: Int, val end: Int, val native: Boolean, val classLike: Boolean)
+    private class Member(val start: Int, val end: Int, val native: Boolean)
 
-    private class Union(val end: Int, val members: List<Member>, val nullable: Boolean, val allErased: Boolean)
+    private class Union(val end: Int, val allErased: Boolean)
 
     /**
      * Scans a type at [i0]: `?T`, `A|B`, `A&B`, DNF groups, tuples, generics. Returns null when the
@@ -493,11 +593,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     private fun scanUnion(i0: Int, s: Scan): Union? {
         if (i0 < 0) return null
         var i = i0
-        var nullable = false
-        if (typeAt(i) == PhpTokenTypes.opQUEST) {
-            nullable = true
-            i = sig(i + 1)
-        }
+        if (typeAt(i) == PhpTokenTypes.opQUEST) i = sig(i + 1)
         val members = ArrayList<Member>()
         val separators = ArrayList<Int>()
         while (true) {
@@ -526,7 +622,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 if (k < separators.size) s.erase.add(m.start..separators[k]) else s.erase.add(separators[k - 1] until m.end)
             }
         }
-        return Union(end, members, nullable, allErased)
+        return Union(end, allErased)
     }
 
     private fun scanAtom(i: Int, s: Scan): Member? {
@@ -548,20 +644,20 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                         continue
                     }
                     if (typeAt(next) != PhpTokenTypes.chRPAREN) return null
-                    return Member(i, next + 1, native && !tuple, classLike = false)
+                    return Member(i, next + 1, native && !tuple)
                 }
             }
             PhpTokenTypes.kwLIST -> {
                 val lt = sig(i + 1)
                 if (typeAt(lt) != PhpTokenTypes.opLESS) return null
                 val end = scanTypeArguments(lt, s, declaration = false) ?: return null
-                return Member(i, end, native = false, classLike = false)
+                return Member(i, end, native = false)
             }
             PhpTokenTypes.kwCLASS -> {
                 val lt = sig(i + 1)
-                if (typeAt(lt) != PhpTokenTypes.opLESS) return Member(i, i + 1, native = false, classLike = false)
+                if (typeAt(lt) != PhpTokenTypes.opLESS) return Member(i, i + 1, native = false)
                 val end = scanTypeArguments(lt, s, declaration = false) ?: return null
-                return Member(i, end, native = false, classLike = false)
+                return Member(i, end, native = false)
             }
             PhpTokenTypes.kwARRAY, PhpTokenTypes.kwCALLABLE, PhpTokenTypes.kwSTATIC -> {
                 // `array<K, V>` is the M3 spelling still found in migrated sources: PHP's array, arguments erased.
@@ -569,9 +665,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 if (t.type == PhpTokenTypes.kwARRAY && typeAt(lt) == PhpTokenTypes.opLESS) {
                     val end = scanTypeArguments(lt, s, declaration = false) ?: return null
                     s.erase.add(lt until end)
-                    return Member(i, end, native = true, classLike = false)
+                    return Member(i, end, native = true)
                 }
-                return Member(i, i + 1, native = true, classLike = false)
+                return Member(i, i + 1, native = true)
             }
             PhpTokenTypes.IDENTIFIER, PhpTokenTypes.NAMESPACE_RESOLUTION -> {
                 // A qualified name: tokens are adjacent, no whitespace inside.
@@ -582,7 +678,6 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 }
                 while (typeAt(j + 1) == PhpTokenTypes.NAMESPACE_RESOLUTION && typeAt(j + 2) == PhpTokenTypes.IDENTIFIER) j += 2
                 val name = buffer.subSequence(t.start, tok(j)!!.end).toString()
-                val simple = name.substringAfterLast('\\')
                 val next = sig(j + 1)
                 if ((name == "Closure" || name == "\\Closure") && (typeAt(next) == PhpTokenTypes.chLPAREN || typeAt(next) in PhpTokenTypes.tsCAST_OPS)) {
                     val end = scanClosureSignature(next, s) ?: return null
@@ -590,18 +685,18 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                     // `Closure(` as a type form and the emitter writes `\Closure`), but a `Closure`
                     // left to PhpStorm resolves in the file's namespace: erased whole, like `list<…>`,
                     // and typed back by PhaenonTypeText. `\Closure(…)` means the same in PHP's reading.
-                    if (name == "Closure") return Member(i, end, native = false, classLike = false)
+                    if (name == "Closure") return Member(i, end, native = false)
                     s.erase.add(next until end)
-                    return Member(i, end, native = true, classLike = false)
+                    return Member(i, end, native = true)
                 }
                 if (typeAt(next) == PhpTokenTypes.opLESS) {
                     val end = scanTypeArguments(next, s, declaration = false) ?: return null
-                    val generic = simple == "map" || name in typeParams
+                    val generic = name.substringAfterLast('\\') == "map" || name in typeParams
                     if (!generic) s.erase.add(next until end)
-                    return Member(i, end, native = !generic, classLike = !generic && simple !in PRIMITIVE_NAMES)
+                    return Member(i, end, native = !generic)
                 }
                 val erased = name == "bytes" || name in typeParams
-                return Member(i, j + 1, native = !erased, classLike = !erased && simple !in PRIMITIVE_NAMES)
+                return Member(i, j + 1, native = !erased)
             }
             else -> return null
         }
@@ -693,30 +788,19 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         /** Trivia between significant tokens: whitespace, erased text, comments — a docblock is a token of its own, outside COMMENTS. */
         val SKIPPABLE: TokenSet = TokenSet.orSet(TokenSet.create(PhpTokenTypes.WHITE_SPACE, PhaenonTokenTypes.ERASED, PhpDocElementTypes.DOC_COMMENT), PhpTokenTypes.COMMENTS)
 
-        /** What `$x is T` may follow: a value. */
-        val EXPRESSION_END: TokenSet = TokenSet.orSet(
-            TokenSet.create(
-                PhpTokenTypes.VARIABLE, PhpTokenTypes.chRPAREN, PhpTokenTypes.chRBRACKET, PhpTokenTypes.IDENTIFIER,
-                PhpTokenTypes.STRING_LITERAL, PhpTokenTypes.STRING_LITERAL_SINGLE_QUOTE, PhpTokenTypes.chRDOUBLE_QUOTE,
-            ),
-            PhpTokenTypes.tsNUMBERS,
-        )
-
-        /** What `$x as T` may follow; an identifier is left out because of `use Foo as Bar`. */
-        val VALUE_END: TokenSet = TokenSet.orSet(
-            TokenSet.create(
-                PhpTokenTypes.VARIABLE, PhpTokenTypes.chRPAREN, PhpTokenTypes.chRBRACKET,
-                PhpTokenTypes.STRING_LITERAL, PhpTokenTypes.STRING_LITERAL_SINGLE_QUOTE, PhpTokenTypes.chRDOUBLE_QUOTE,
-            ),
-            PhpTokenTypes.tsNUMBERS,
-        )
-
         val STATEMENT_START: Set<IElementType?> = setOf(null, PhpTokenTypes.opSEMICOLON, PhpTokenTypes.chRBRACE, PhpTokenTypes.chLBRACE)
 
-        /** Where a declaration may start: a statement boundary, a modifier, the `]` of an attribute. */
-        val FUN_PREDECESSORS: Set<IElementType?> = STATEMENT_START + PhpTokenTypes.tsMODIFIERS.types + PhpTokenTypes.chRBRACKET
+        /** Where a class member may start: after the body's `{`, the `;` or `}` of a member, a modifier, an attribute's `]`. */
+        val MEMBER_PREDECESSORS: Set<IElementType?> = setOf(
+            PhpTokenTypes.chLBRACE, PhpTokenTypes.chRBRACE, PhpTokenTypes.opSEMICOLON, PhpTokenTypes.chRBRACKET,
+        ) + PhpTokenTypes.tsMODIFIERS.types
 
-        /** `::` and `->`: after them a keyword is a member name. */
+        /** The keywords whose `{` opens a class-like body. */
+        val CLASS_LIKE_KEYWORDS: TokenSet = TokenSet.create(
+            PhpTokenTypes.kwCLASS, PhpTokenTypes.kwINTERFACE, PhpTokenTypes.kwTRAIT, PhpTokenTypes.kwENUM,
+        )
+
+        /** `::` and `->` (`?->` is `?` and `->` to PhpStorm): after them a keyword is a member name. */
         val MEMBER_ACCESS: TokenSet = TokenSet.create(PhpTokenTypes.SCOPE_RESOLUTION, PhpTokenTypes.ARROW)
 
         val DECLARATION_KEYWORDS: TokenSet = TokenSet.create(
@@ -755,10 +839,19 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
 
         /** After `&` in a type, these mean a by-reference parameter rather than an intersection. */
         val BY_REF_FOLLOWERS: TokenSet = TokenSet.create(PhpTokenTypes.VARIABLE, PhpTokenTypes.opVARIADIC)
-
-        val PRIMITIVE_NAMES: Set<String> = setOf(
-            "int", "float", "string", "bool", "null", "mixed", "void", "never", "object", "iterable", "true", "false",
-            "self", "parent", "integer", "boolean", "double",
-        )
     }
 }
+
+/**
+ * Whether a method named [name] keeps PHP's `function` (design/functions.md §1.1): a modifier or
+ * `var`, which before a parenthesis begin a property's DNF type (`public static (A&B)|null $x`);
+ * `const`, a constant's; `function` and `fn`, whose bare forms are closures; all of them in any
+ * case, as PHP's keywords are. And the unqualified `Closure` as written, which before a
+ * parenthesis is a closure type (`Closure(int): string $f`). Every other name, PHP's reserved
+ * words included, needs no keyword.
+ */
+internal fun keepsFunctionKeyword(name: String): Boolean = name.lowercase() in KEYWORD_REQUIRED || name == "Closure"
+
+private val KEYWORD_REQUIRED: Set<String> = setOf(
+    "static", "abstract", "final", "public", "protected", "private", "readonly", "var", "const", "function", "fn",
+)

@@ -4,7 +4,7 @@ use Closure;
 
 final class Imported
 {
-    fun __construct(private readonly Closure(string...): (int, string) $request)
+    __construct(private readonly Closure(string...): (int, string) $request)
     {
     }
 }

@@ -130,16 +130,16 @@ class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
  * The spacing next to an erased construct, which PhpStorm's rules cannot judge.
  *
  * An erased leaf is one of two kinds. Some belong to their neighbour and are written against
- * it: a list in angle brackets (`Box<T>`, `fun map<U>(`, `new Box<int>(`, `implements I<T>`)
+ * it: a list in angle brackets (`Box<T>`, `map<U>(`, `new Box<int>(`, `implements I<T>`)
  * to the name before it and to the `(` of a call after it; a return type erased whole
  * (`: ?T`, `: list<User>`) to the `)` before it, as a PHP return type is; a union member erased
  * with its separator (`string|list<int>`, `list<T>|null`) to the member it is joined to.
- * Every other erased construct stands where a PHP token
- * would (`list<User> $users`, `$x as T`, `type Name = …;`): PhpStorm's rule for that
- * spot applies, except that it never joins the construct to its neighbour where they were apart,
- * which would make one word of two (`$x as T` → `$xas T`) or glue a type to its variable. Where
- * PhpStorm has no rule, a construct apart from its neighbour is one space from it, or the line
- * breaks it was, and one written against its neighbour stays so.
+ * Every other erased construct stands where a PHP token would (`list<User> $users`,
+ * `type Name = …;`): PhpStorm's rule for that spot applies, except that it never joins the
+ * construct to its neighbour where they were apart, which would make one word of two
+ * (`private bytes $raw` → `privatebytes $raw`) or glue a type to its variable. Where PhpStorm has
+ * no rule, a construct apart from its neighbour is one space from it, or the line breaks it was,
+ * and one written against its neighbour stays so.
  */
 internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSettings) {
 
@@ -232,7 +232,7 @@ internal class ErasedSpacing(private val file: PsiFile, settings: CodeStyleSetti
         // No rule for a token of unknown kind: as written when written together, else one space.
         if (spacing == null) return if (gap.isEmpty()) GLUED else apart
         if (gap.isEmpty()) return spacing
-        // Apart, and both sides word-like (`$x as T`, `list<User> $users`): a rule meant
+        // Apart, and both sides word-like (`private bytes`, `list<User> $users`): a rule meant
         // for other tokens could join them, so they stay one space or their line breaks apart. Elsewhere
         // (punctuation on either side, a body's brace) PhpStorm's rule holds.
         val leftChar = text[left.textRange.endOffset - 1]

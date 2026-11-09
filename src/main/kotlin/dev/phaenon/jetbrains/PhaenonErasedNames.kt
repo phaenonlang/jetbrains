@@ -22,7 +22,7 @@ object PhaenonErasedNames {
 
     /** The words of a Phaenon construct that name no class. */
     private val NOT_A_CLASS: Set<String> = setOf(
-        "list", "map", "class", "bytes", "of", "out", "in", "is", "as", "type",
+        "list", "map", "class", "bytes", "of", "out", "in", "type",
         "int", "float", "string", "bool", "mixed", "null", "void", "never", "object", "array", "callable", "iterable",
         "self", "static", "parent", "true", "false", "throws",
     )

@@ -21,9 +21,11 @@ import com.jetbrains.php.lang.PhpLanguage
  * Reformat Code writes phn fmt's first layer (design/tooling.md §5.1): after PhpStorm's PHP
  * formatter has laid out the file with the project's PHP style and Phaenon's braces
  * ([PhaenonFormattingModelBuilder]), the project's `phn fmt --stdin` lays out what only Phaenon
- * knows: the spacing inside its own syntax (`<T of Item>`, `map<string, list<int>>`, `throws`,
- * `as?`), one-line docblocks, no blank line before the first line, spaces for tabs. Both share
- * their golden files, the compiler's `internal/format/testdata`.
+ * knows: the spacing inside its own syntax (`<T of Item>`, `map<string, list<int>>`, `throws`),
+ * one-line docblocks, no blank line before the first line, spaces for tabs, and the withdrawn
+ * spellings it can rewrite without the checked program, `$x is Foo` as `$x instanceof Foo` among
+ * them (design/tooling.md §5.6). Both share their golden files, the compiler's
+ * `internal/format/testdata`.
  *
  * The layer runs right after the reformat, as an edit of its own: changing the document from
  * inside the formatter's post-processing breaks the caret bookkeeping of the reformat still under

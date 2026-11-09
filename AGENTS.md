@@ -22,7 +22,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
 
 - JDK 21; Gradle provisions one if none is installed. `./gradlew test` is a no-op when nothing
   changed (build cache): `--rerun` forces it. The results are in `build/test-results/test/*.xml`.
-- `src/main/kotlin`: `PhaenonLexer` (erasure) and `PhaenonPsiBuilder` (no lazy bodies) feed the
+- `src/main/kotlin`: `PhaenonLexer` (erasure, and the empty `function` of a method without a
+  keyword, D27) and `PhaenonPsiBuilder` (no lazy bodies, that token read as `function`) feed the
   parser; `PhaenonErasedTypes`, `PhaenonTypeSyntax` and `PhaenonTypeText` read the erased text back
   for `PhaenonTypeProvider` (a type parameter as its bound, `class<T>` as `class-string<Bound>`,
   closure types with PhpStorm's signature encoding); `PhaenonErasure` and
@@ -75,7 +76,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   (`PhaenonTextMateBundleProvider`); its grammar and language configuration are verbatim copies of
   `../vscode`'s, which that repository's tests compare: refresh by copying, never edit.
 - `src/test/testData/reflector/*.phn` are copies of the `tequila/reflection` dogfood sources;
-  `syntax/Constructs.phn` uses every Phaenon construct; `types/` holds the erased-type fixtures,
+  `syntax/Constructs.phn` uses every Phaenon construct, `methods/Shapes.phn` every shape of a
+  method without a keyword (D27); `types/` holds the erased-type fixtures,
   `closure/` the closure-type ones, `classstring/` the `class<T>` ones, `php86/` the PHP 8.6 ones, `imports/` the Optimize Imports ones (`X.phn` → `X.after.phn`).
   Tests set the IDE's highest PHP level: the test project defaults to PHP 5.6. It also lacks
   PhpStorm's bundled PHP stubs (they are indexed only for a project with a PHP module), so a test
@@ -89,11 +91,10 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
   `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update
   (README § How it works).
-- Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
-  `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
-  element-array unions, a partial application is also its callee's result to PhpStorm; the
-  implied `strict_types` is not modelled; the lexer, the editor colouring
-  (`com.jetbrains.php.baseLexerProvider`), the parsing of bodies, debugging
+- Known limits (README § Limitations): `type` aliases are erased whole, type arguments of user
+  generics are dropped, tuples type as element-array unions, a partial application is also its
+  callee's result to PhpStorm; the implied `strict_types` is not modelled; the lexer, the editor
+  colouring (`com.jetbrains.php.baseLexerProvider`), the parsing of bodies, debugging
   (`PhpTemplateLanguagePathMapper`, `com.intellij.php.debug.templateLanguage`) and the docblock stub
   on Enter use internal API of the PHP plugin, each use named in `verifier/internal-api.txt` with
   its reason (README § Internal API): a new one fails `verifyPlugin` until it has a public
