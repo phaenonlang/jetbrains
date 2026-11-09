@@ -10,7 +10,7 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ```sh
 ./gradlew test           # inside a headless PhpStorm; the first run downloads it
 ./gradlew buildPlugin    # → build/distributions/phaenon-jetbrains-<version>.zip
-./gradlew verifyPlugin   # JetBrains Plugin Verifier
+./gradlew verifyPlugin   # JetBrains Plugin Verifier across the declared range
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
 ./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # tests against an installed, newer IDE
 

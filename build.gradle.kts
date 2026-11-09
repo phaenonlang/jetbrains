@@ -98,6 +98,9 @@ intellijPlatform {
         ides {
             // The PhpStorm build the plugin is compiled against (platformVersion), already on disk.
             current()
+            // The newest build of every PhpStorm line in the declared range (sinceBuild up, EAP and
+            // RC builds included): the range the Marketplace verifies an upload against.
+            recommended()
             // Optionally verify against an installed IDE as well:
             //   ./gradlew verifyPlugin -PlocalIdePath=/Applications/PhpStorm.app/Contents
             providers.gradleProperty("localIdePath").orNull?.let { local(file(it)) }

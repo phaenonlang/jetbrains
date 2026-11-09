@@ -322,12 +322,20 @@ indexed; navigation and the duplicate-declaration inspection then prefer the sou
 ```bash
 ./gradlew buildPlugin        # → build/distributions/phaenon-jetbrains-<version>.zip
 ./gradlew test               # runs against a headless PhpStorm
-./gradlew verifyPlugin       # JetBrains Plugin Verifier against the targeted PhpStorm build
+./gradlew verifyPlugin       # JetBrains Plugin Verifier across the declared range
 ./gradlew runIde             # starts a sandboxed PhpStorm with the plugin installed
 ```
 
 The first build downloads the PhpStorm distribution declared in `gradle.properties`
 (`platformVersion`). A JDK 21 is required; Gradle provisions one if none is installed.
+
+`verifyPlugin` verifies the plugin against the PhpStorm build it is compiled against and against
+the newest build of every PhpStorm line from `pluginSinceBuild` on, EAP and RC builds included:
+the range the JetBrains Marketplace verifies an upload against. Each is downloaded once (about
+1 GB). It fails at the levels `build.gradle.kts` sets. On macOS the verifier does not resolve the
+XML plugin of PhpStorm 2026.3's macOS distribution, and reports the XML formatter classes the
+plugin builds on as missing, as it does the PHP plugin's own; the Linux distribution, which CI
+verifies, and IntelliJ IDEA 2026.3 resolve it, and the plugin verifies as compatible there.
 
 To also verify against a locally installed IDE:
 
