@@ -64,7 +64,7 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   repeated); fixtures `testData/linemap/` are compiled by hand as the spec lays them out, so keep
   them in step when the compiled layout changes;
   the compiler's language server, `phn lsp`, gives the checker's diagnostics and build on save
-  (`PhaenonLsp.kt`: `PhaenonLspServerSupportProvider`, `PhaenonLspServerDescriptor` asking for
+  (`PhaenonLsp.kt`: `PhaenonLspIntegrationProvider`, `PhaenonLspClientDescriptor` asking for
   diagnostics only, `PhaenonLspClient` for the server's `phaenon/build`, `PhaenonBuildWidget` in
   the status bar; registered by `phaenon-lsp.xml`, optional on `com.intellij.modules.ultimate`);
   `PhaenonCompiler` finds the project's `phn` and runs `phn fmt --stdin`, which

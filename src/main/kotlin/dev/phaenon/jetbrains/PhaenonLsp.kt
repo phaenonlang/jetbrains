@@ -12,10 +12,10 @@ import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidgetFactory
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.platform.lsp.api.Lsp4jClient
-import com.intellij.platform.lsp.api.LspServerManager
+import com.intellij.platform.lsp.api.LspClientManager
+import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
-import com.intellij.platform.lsp.api.LspServerSupportProvider
-import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
+import com.intellij.platform.lsp.api.ProjectWideLspClientDescriptor
 import com.intellij.platform.lsp.api.customization.LspCompletionDisabled
 import com.intellij.platform.lsp.api.customization.LspCustomization
 import com.intellij.platform.lsp.api.customization.LspFormattingDisabled
@@ -41,11 +41,11 @@ import java.nio.charset.StandardCharsets
  * files only: a project inside another's directory gets a server of its own, whose files the outer
  * one would otherwise check too, and installed code gets none.
  */
-class PhaenonLspServerSupportProvider : LspServerSupportProvider {
-    override fun fileOpened(project: Project, file: VirtualFile, serverStarter: LspServerSupportProvider.LspServerStarter) {
+class PhaenonLspIntegrationProvider : LspIntegrationProvider {
+    override fun fileOpened(project: Project, file: VirtualFile, clientStarter: LspIntegrationProvider.LspClientStarter) {
         val root = serverRoot(project, file)?.takeIf { java.io.File(it.path).isDirectory } ?: return
         val binary = PhaenonCompiler.binary(project, root) ?: return
-        serverStarter.ensureServerStarted(PhaenonLspServerDescriptor(project, root, binary))
+        clientStarter.ensureClientStarted(PhaenonLspClientDescriptor(project, root, binary))
     }
 
     companion object {
@@ -61,20 +61,20 @@ class PhaenonLspServerSupportProvider : LspServerSupportProvider {
 
         init {
             PhaenonRestart.languageServer = { project ->
-                LspServerManager.getInstance(project).stopAndRestartIfNeeded(PhaenonLspServerSupportProvider::class.java)
+                LspClientManager.getInstance(project).stopAndRestartClientsIfNeeded(PhaenonLspIntegrationProvider::class.java)
             }
         }
 
     }
 }
 
-class PhaenonLspServerDescriptor(project: Project, private val root: VirtualFile, private val binary: String) :
-    ProjectWideLspServerDescriptor(project, "Phaenon") {
+class PhaenonLspClientDescriptor(project: Project, private val root: VirtualFile, private val binary: String) :
+    ProjectWideLspClientDescriptor(project, "Phaenon") {
 
     // PhpStorm offers a file to every server whose descriptor supports it: this one takes its own
     // project's.
     override fun isSupportedFile(file: VirtualFile): Boolean =
-        PhaenonLspServerSupportProvider.serverRoot(project, file) == root
+        PhaenonLspIntegrationProvider.serverRoot(project, file) == root
 
     override fun createCommandLine(): GeneralCommandLine =
         GeneralCommandLine(binary, "lsp").withWorkDirectory(root.path).withCharset(StandardCharsets.UTF_8)
@@ -96,7 +96,7 @@ class PhaenonLspServerDescriptor(project: Project, private val root: VirtualFile
     }
 
     override fun equals(other: Any?): Boolean =
-        other is PhaenonLspServerDescriptor && other.root == root && other.binary == binary
+        other is PhaenonLspClientDescriptor && other.root == root && other.binary == binary
     override fun hashCode(): Int = root.hashCode() * 31 + binary.hashCode()
 }
 

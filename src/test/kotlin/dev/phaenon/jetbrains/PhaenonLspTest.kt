@@ -1,12 +1,19 @@
 package dev.phaenon.jetbrains
 
 import com.google.gson.JsonParser
+import com.intellij.openapi.extensions.ExtensionPointName
+import com.intellij.platform.lsp.api.LspIntegrationProvider
+import com.intellij.platform.lsp.api.customization.LspCompletionDisabled
+import com.intellij.platform.lsp.api.customization.LspFormattingDisabled
+import com.intellij.platform.lsp.api.customization.LspGoToDefinitionDisabled
+import com.intellij.platform.lsp.api.customization.LspHoverDisabled
+import com.intellij.platform.lsp.api.customization.LspSemanticTokensDisabled
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import java.io.File
 import java.nio.file.Files
 
 /**
- * `phn lsp` in PhpStorm ([PhaenonLspServerSupportProvider]): the project's compiler, asked for
+ * `phn lsp` in PhpStorm ([PhaenonLspIntegrationProvider]): the project's compiler, asked for
  * diagnostics only, build on save as the settings say, its builds in the status bar.
  */
 class PhaenonLspTest : BasePlatformTestCase() {
@@ -22,11 +29,21 @@ class PhaenonLspTest : BasePlatformTestCase() {
         }
     }
 
+    fun testTheProviderIsRegisteredWhereThePlatformLooksForIt() {
+        // platform.lsp.integrationProvider (phaenon-lsp.xml), the extension point of the current
+        // API, which PhpStorm declares from 2026.1.4 on.
+        val point = ExtensionPointName.create<LspIntegrationProvider>("com.intellij.platform.lsp.integrationProvider")
+        assertTrue(point.extensionList.any { it is PhaenonLspIntegrationProvider })
+        // Loaded, the provider installs the restart the settings page asks for after a change: its
+        // servers stopped and started again through LspClientManager.
+        PhaenonRestart.languageServer(project)
+    }
+
     fun testTheServerIsTheProjectsCompilerAskedForDiagnosticsOnly() {
         val phn = myFixture.configureByText("A.phn", "namespace App;\n").virtualFile
         val php = myFixture.configureByText("B.php", "<?php\n").virtualFile
         val root = phn.parent
-        val descriptor = PhaenonLspServerDescriptor(project, root, "/opt/phn/bin/phn")
+        val descriptor = PhaenonLspClientDescriptor(project, root, "/opt/phn/bin/phn")
 
         val command = descriptor.createCommandLine()
         assertEquals("/opt/phn/bin/phn", command.exePath)
@@ -37,10 +54,12 @@ class PhaenonLspTest : BasePlatformTestCase() {
         assertFalse("a .php is PhpStorm's alone", descriptor.isSupportedFile(php))
         assertEquals("phaenon", descriptor.getLanguageId(phn))
         // What the PSI answers is not asked of the server.
-        assertFalse(descriptor.lspGoToDefinitionSupport)
-        assertFalse(descriptor.lspHoverSupport)
-        assertNull(descriptor.lspCompletionSupport)
-        assertNull(descriptor.lspFormattingSupport)
+        val customization = descriptor.lspCustomization
+        assertSame(LspGoToDefinitionDisabled, customization.goToDefinitionCustomizer)
+        assertSame(LspHoverDisabled, customization.hoverCustomizer)
+        assertSame(LspCompletionDisabled, customization.completionCustomizer)
+        assertSame(LspFormattingDisabled, customization.formattingCustomizer)
+        assertSame(LspSemanticTokensDisabled, customization.semanticTokensCustomizer)
 
         PhaenonSettings.of(project).buildOnSave = false
         assertEquals(mapOf("features" to "diagnostics", "buildOnSave" to false), descriptor.createInitializationOptions())
@@ -77,15 +96,15 @@ class PhaenonLspTest : BasePlatformTestCase() {
         val own = myFixture.addFileToProject("app/src/Shop.phn", "namespace App;\n").virtualFile
         myFixture.addFileToProject("app/packages/inner/phaenon.json", "{\"roots\": {\"src\": \".src\"}}")
         val nested = myFixture.addFileToProject("app/packages/inner/src/Inner.phn", "namespace Inner;\n").virtualFile
-        val app = PhaenonLspServerSupportProvider.serverRoot(project, own)!!
-        val inner = PhaenonLspServerSupportProvider.serverRoot(project, nested)!!
+        val app = PhaenonLspIntegrationProvider.serverRoot(project, own)!!
+        val inner = PhaenonLspIntegrationProvider.serverRoot(project, nested)!!
         assertEquals("app", app.name)
         assertEquals("inner", inner.name)
 
-        val outer = PhaenonLspServerDescriptor(project, app, "/opt/phn/bin/phn")
+        val outer = PhaenonLspClientDescriptor(project, app, "/opt/phn/bin/phn")
         assertTrue(outer.isSupportedFile(own))
         assertFalse("a nested project's file is its own server's", outer.isSupportedFile(nested))
-        assertTrue(PhaenonLspServerDescriptor(project, inner, "/opt/phn/bin/phn").isSupportedFile(nested))
+        assertTrue(PhaenonLspClientDescriptor(project, inner, "/opt/phn/bin/phn").isSupportedFile(nested))
     }
 
     fun testInstalledCodeHasNoServer() {
@@ -101,12 +120,12 @@ class PhaenonLspTest : BasePlatformTestCase() {
         assertTrue(PhaenonCompiler.isVendorCode(installed))
         assertFalse(PhaenonCompiler.isVendorCode(own))
         assertFalse(PhaenonCompiler.isVendorCode(notInstalled))
-        assertNull(PhaenonLspServerSupportProvider.serverRoot(project, installed))
-        val app = PhaenonLspServerSupportProvider.serverRoot(project, own)!!
-        assertEquals(app, PhaenonLspServerSupportProvider.serverRoot(project, notInstalled))
+        assertNull(PhaenonLspIntegrationProvider.serverRoot(project, installed))
+        val app = PhaenonLspIntegrationProvider.serverRoot(project, own)!!
+        assertEquals(app, PhaenonLspIntegrationProvider.serverRoot(project, notInstalled))
         assertFalse(
             "the project reads it as vendor code",
-            PhaenonLspServerDescriptor(project, app, "/opt/phn/bin/phn").isSupportedFile(installed),
+            PhaenonLspClientDescriptor(project, app, "/opt/phn/bin/phn").isSupportedFile(installed),
         )
     }
 
