@@ -20,8 +20,6 @@
 #     stays in it.
 #   - Skipped for want of their variables: the runs over whole Phaenon trees
 #     (PHAENON_TREES) and the line map against a real Xdebug (PHAENON_XDEBUG).
-#     The tests of a newer PhpStorm's behaviour return early on platformVersion;
-#     they need -PtestIdePath and an installed IDE.
 #
 # The compiler's repository is checked out with this workflow's own token,
 # which reads this repository and public ones only. While phaenonlang/phaenon

@@ -1,6 +1,6 @@
 # Phaenon for JetBrains IDEs — agent guide
 
-The PhpStorm plugin for `.phn` files (Kotlin, IntelliJ Platform Gradle Plugin, PhpStorm 2025.1+).
+The PhpStorm plugin for `.phn` files (Kotlin, IntelliJ Platform Gradle Plugin, PhpStorm 2026.1.4+).
 It makes PhpStorm read a `.phn` file as PHP code without the open tag, erases Phaenon's additions to
 PHP on the way to PhpStorm's parser and gives the erased declarations their types back (`list<User>`
 as `User[]`, `class<T>` as `class-string<Bound>`, closure signatures); the README explains how and
@@ -100,8 +100,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   its reason (README § Internal API): a new one fails `verifyPlugin` until it has a public
   replacement or a line there; the Frames list labels a compiled frame with the compiled name and line. Code a feature inserts is laid out
   by PhpStorm's formatter, as in PHP: insert it unformatted and let the reformatting that follows
-  the command do it. Behaviour of a newer PhpStorm (the PHP 8.5 pipe and its inspection) is tested
-  with `-PtestIdePath`; on 2025.1 those tests return early.
+  the command do it. A test of behaviour only a newer PhpStorm than the floor has returns early
+  on the floor and runs with `-PtestIdePath`.
 - Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, … with a body that says
   what changed and why), with no attribution lines and no `Co-Authored-By`: the repository will be
   public.

@@ -14,10 +14,10 @@ group = providers.gradleProperty("pluginGroup").get()
 version = "0.5.0" // x-release-please-version
 
 kotlin {
-    // PhpStorm 2025.3+ runs on JBR 21, so the plugin targets Java 21 bytecode.
+    // PhpStorm 2026.1+ runs on JBR 25, and its own classes are Java 21 bytecode: so are the plugin's.
     jvmToolchain(21)
     compilerOptions {
-        // The plugin runs on the Kotlin standard library the IDE bundles, 2.2 in PhpStorm 2025.3;
+        // The plugin runs on the Kotlin standard library the IDE bundles, 2.3 in PhpStorm 2026.1.4;
         // the API version stays at 2.1, which everything here needs. A newer API version than the
         // library's lets the compiler call library functions that are not there, and it
         // writes coroutine debug metadata that library rejects: with the IDE's coroutine debug
@@ -42,8 +42,8 @@ repositories {
 dependencies {
     intellijPlatform {
         // `-PtestIdePath=/Applications/PhpStorm.app/Contents` builds and tests against an installed IDE
-        // instead, for behaviour only a newer PhpStorm has (the PHP 8.5 pipe operator and its
-        // inspections). The plugin itself is built against platformVersion: that is what it supports.
+        // instead, for behaviour only a newer PhpStorm has. The plugin itself is built against
+        // platformVersion: that is what it supports.
         val testIde = providers.gradleProperty("testIdePath").orNull
         if (testIde != null) local(testIde) else phpstorm(providers.gradleProperty("platformVersion"))
         // The PHP plugin provides the lexer, parser and PSI we reuse; the TextMate plugin

@@ -28,7 +28,7 @@
         <codeInsight.overrideMethod language="PHP" order="first" implementationClass="dev.phaenon.jetbrains.PhaenonOverrideMethodsHandler"/>
 
         <!-- PhpStorm's nested-calls-to-pipe fix writes `Style(...)` for `Style::line(...)`: in .phn files a correct conversion
-             replaces it (the fix came after PHP 8.5 support, not in 2025.3, and is matched by class name). -->
+             replaces it (the fix is not public API and is matched by class name). -->
         <intentionAction>
             <language>PHP</language>
             <className>dev.phaenon.jetbrains.PhaenonPipeConversionIntention</className>

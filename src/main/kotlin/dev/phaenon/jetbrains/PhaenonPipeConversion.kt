@@ -161,8 +161,7 @@ class PhaenonPipeConversionIntention : PsiElementBaseIntentionAction() {
 /**
  * Hides PhpStorm's "Convert nested function calls to a pipe expression" quick-fix in `.phn` files,
  * where [PhaenonPipeConversionIntention] does the conversion right. The fix is told by its class
- * name: the class came after PhpStorm's PHP 8.5 support (2026.2 has it), and the plugin is built
- * against 2025.3.
+ * name, a string: the class is not public (package-private in the PHP plugin, 2026.1 to 2026.3).
  */
 class PhaenonPipeQuickFixFilter : IntentionActionFilter {
 
