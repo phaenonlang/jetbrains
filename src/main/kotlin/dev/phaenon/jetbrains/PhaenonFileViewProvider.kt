@@ -4,11 +4,11 @@ import com.intellij.lang.Language
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.FileViewProvider
 import com.intellij.psi.FileViewProviderFactory
+import com.intellij.psi.LanguageFileViewProviders
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.SingleRootFileViewProvider
 import com.intellij.psi.impl.source.PsiFileImpl
-import com.jetbrains.php.lang.PhpFileViewProviderFactory
 import com.jetbrains.php.lang.PhpLanguage
 
 /**
@@ -41,21 +41,22 @@ class PhaenonFileViewProvider(manager: PsiManager, file: VirtualFile, eventSyste
 
 /**
  * Registered for the PHP language ahead of PhpStorm's own factory. It claims `.phn` files and
- * hands every other PHP file straight to PhpStorm's factory, so plain PHP is untouched.
+ * hands every other PHP file straight to the factory registered after it, PhpStorm's, so plain
+ * PHP is untouched. The platform asks only the first factory of a language; the next one is
+ * found in the same extension point rather than by its class, which is the PHP plugin's own.
  */
 class PhaenonFileViewProviderFactory : FileViewProviderFactory {
-
-    private val phpFactory = PhpFileViewProviderFactory()
 
     override fun createFileViewProvider(
         file: VirtualFile,
         language: Language?,
         manager: PsiManager,
         eventSystemEnabled: Boolean,
-    ): FileViewProvider =
-        if (PhaenonFiles.isPhaenonFile(file)) {
-            PhaenonFileViewProvider(manager, file, eventSystemEnabled)
-        } else {
-            phpFactory.createFileViewProvider(file, language, manager, eventSystemEnabled)
-        }
+    ): FileViewProvider {
+        if (PhaenonFiles.isPhaenonFile(file)) return PhaenonFileViewProvider(manager, file, eventSystemEnabled)
+        val php = LanguageFileViewProviders.INSTANCE.allForLanguage(PhpLanguage.INSTANCE).firstOrNull { it !is PhaenonFileViewProviderFactory }
+        // Without one (no other factory registered), the platform's default for a single-language file.
+        return php?.createFileViewProvider(file, language, manager, eventSystemEnabled)
+            ?: SingleRootFileViewProvider(manager, file, eventSystemEnabled)
+    }
 }

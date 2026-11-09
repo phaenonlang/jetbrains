@@ -13,6 +13,7 @@ import com.intellij.formatting.Spacing
 import com.intellij.formatting.Wrap
 import com.intellij.lang.ASTNode
 import com.intellij.lang.Language
+import com.intellij.lang.LanguageFormatting
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiComment
@@ -29,8 +30,8 @@ import com.intellij.psi.formatter.common.ExtraRangesProvider
 import com.intellij.psi.formatter.xml.HtmlPolicy
 import com.intellij.psi.templateLanguages.SimpleTemplateLanguageFormattingModelBuilder
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.xml.template.formatter.AbstractXmlTemplateFormattingModelBuilder
 import com.jetbrains.php.lang.PhpLanguage
-import com.jetbrains.php.lang.formatter.PhpFormattingModelBuilder
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.parser.PhpElementTypes
 import com.jetbrains.php.lang.psi.elements.Function
@@ -65,7 +66,9 @@ import com.jetbrains.php.lang.psi.elements.PhpClass
  * placement, wrapping at the right margin), as in a `.php` file; the compiler lays out its output
  * itself and maps it back to the `.phn`'s lines (design/line-map.md).
  *
- * `createTemplateFormattingModel` is a public method of PhpStorm's PHP formatter; the formatter's
+ * `createTemplateFormattingModel` is a public method of the platform's XML template formatter,
+ * which PhpStorm's PHP formatter extends; the builder is the one registered for PHP in the
+ * `lang.formatter` extension point, so no class of the PHP plugin's is named. The formatter's
  * blocks are used as PhpStorm builds them and only wrapped, never subclassed.
  *
  * The PHP code style is the project's, with one change for `.phn` files: Phaenon's canonical layout
@@ -77,8 +80,6 @@ import com.jetbrains.php.lang.psi.elements.PhpClass
  */
 class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
 
-    private val php = PhpFormattingModelBuilder()
-
     override fun isEngagedToFormat(context: PsiElement): Boolean =
         PhaenonFiles.isPhaenonFile(context.containingFile?.viewProvider?.virtualFile)
 
@@ -87,11 +88,15 @@ class PhaenonFormattingModelBuilder : CustomFormattingModelBuilder {
         val settings = canonical(formattingContext.codeStyleSettings, file.project)
         val policy = HtmlPolicy(settings, FormattingDocumentModelImpl.createOn(file))
         val topLevel = file.node.getChildren(null).filter { it.elementType !== TokenType.WHITE_SPACE && it.textLength > 0 }.map { it.psi }
-        val model = php.createTemplateFormattingModel(file, settings, policy, topLevel, Indent.getNoneIndent())
+        val model = php()?.createTemplateFormattingModel(file, settings, policy, topLevel, Indent.getNoneIndent())
             ?: return SimpleTemplateLanguageFormattingModelBuilder().createModel(formattingContext)
         val root = PhaenonFormattingBlock.of(model.rootBlock, ErasedSpacing(file, settings))
         return DocumentBasedFormattingModel(root, file.project, settings, file.fileType, file)
     }
+
+    /** PhpStorm's PHP formatter: the template formatter registered for PHP. */
+    private fun php(): AbstractXmlTemplateFormattingModelBuilder? =
+        LanguageFormatting.INSTANCE.allForLanguage(PhpLanguage.INSTANCE).firstNotNullOfOrNull { it as? AbstractXmlTemplateFormattingModelBuilder }
 
     /**
      * [settings] with Phaenon's brace placement: a class-like's opening brace on a line of its own,
