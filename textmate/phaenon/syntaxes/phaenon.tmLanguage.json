@@ -11,6 +11,13 @@
     }
   ],
   "injections": {
+    "L:meta.class.body.php - meta.function.php - comment - string, L:meta.interface.body.php - meta.function.php - comment - string, L:meta.trait.body.php - meta.function.php - comment - string, L:meta.enum.body.php - meta.function.php - comment - string": {
+      "patterns": [
+        {
+          "include": "#generic-method"
+        }
+      ]
+    },
     "L:source.phaenon - comment - string - meta.use.php": {
       "patterns": [
         {
@@ -59,7 +66,7 @@
     "class": {
       "comment": "A class or an anonymous class (new class(…)), PHP's rule with type parameters in its header and the member rules in its body.",
       "name": "meta.class.php",
-      "begin": "(?i)(?<![$\\w\\\\]|->|::)(?:\\b((?:(?:final|abstract|readonly)\\s+)*)(class)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)|\\b(new)\\b\\s*(\\#\\[.*\\])?\\s*(?:((readonly))\\s+)?\\b(class)\\b)",
+      "begin": "(?i)(?<![$\\w\\\\]|->|::)(?=\\b(?:final|abstract|readonly|class|new)\\b)(?:\\b((?:(?:final|abstract|readonly)\\s+)*)(class)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)|\\b(new)\\b\\s*(\\#\\[.*\\])?\\s*(?:((readonly))\\s+)?\\b(class)\\b)",
       "beginCaptures": {
         "1": {
           "patterns": [
@@ -171,7 +178,7 @@
     "interface": {
       "comment": "An interface, PHP's rule with type parameters in its header and the member rules in its body.",
       "name": "meta.interface.php",
-      "begin": "(?i)(?<![$\\w\\\\]|->|::)\\b(interface)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+      "begin": "(?i)(?=\\binterface\\s)(?<![$\\w\\\\]|->|::)(?<!extends\\s|implements\\s|,\\s)\\b(interface)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
       "beginCaptures": {
         "1": {
           "name": "storage.type.interface.php"
@@ -222,7 +229,7 @@
     "trait": {
       "comment": "A trait, PHP's rule with type parameters in its header and the member rules in its body.",
       "name": "meta.trait.php",
-      "begin": "(?i)(?<![$\\w\\\\]|->|::)\\b(trait)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+      "begin": "(?i)(?=\\btrait\\s)(?<![$\\w\\\\]|->|::)(?<!extends\\s|implements\\s|,\\s)\\b(trait)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
       "beginCaptures": {
         "1": {
           "name": "storage.type.trait.php"
@@ -267,7 +274,7 @@
     "enum": {
       "comment": "An enum, PHP's rule with the member rules in its body; case( begins a method named case.",
       "name": "meta.enum.php",
-      "begin": "(?i)(?<![$\\w\\\\]|->|::)\\b(enum)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
+      "begin": "(?i)(?=\\benum\\s)(?<![$\\w\\\\]|->|::)(?<!extends\\s|implements\\s|,\\s)\\b(enum)\\s+([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)",
       "beginCaptures": {
         "1": {
           "name": "storage.type.enum.php"
@@ -352,9 +359,57 @@
       ]
     },
     "method": {
-      "comment": "A method (functions.md §1.1): at a member's start, its modifiers, then a name followed by ( or by a balanced <…> and (, either after PHP's function or with no keyword. Without function, a modifier, var, const, function, fn and Closure are no method's name: after the modifiers they begin a property's or a constant's type, or a closure. The rule owns the body, so a call in it is never read as a declaration. It begins at the member's start, its indentation included, ahead of the injections that would take name<T>( for a generic call: an injection wins a tie, so only a generic method written at column 0 reads as a call.",
+      "comment": "A method (functions.md §1.1): at a member's start, its modifiers, then a name followed by ( or by a balanced <…> and (, either after PHP's function or with no keyword. Without function, a modifier, var, const, function, fn and Closure are no method's name: after the modifiers they begin a property's or a constant's type, or a closure. The rule owns the body, so a call in it is never read as a declaration. It begins at the member's start, its indentation included, ahead of the injections that would take name<T>( for a generic call: an injection wins a tie, so a generic method written at column 0 is #generic-method's.",
       "name": "meta.function.php",
       "begin": "(?:^|(?<=[{};\\]]|\\*/))\\s*((?:(?i:final|abstract|public|private|protected|static|readonly)\\s+)*)(?:((?i:function))\\s+(?:(&)\\s*)?([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)|(?:(&)\\s*)?(?!(?i:static|abstract|final|public|protected|private|readonly|var|const|function|fn)(?![A-Za-z0-9_\\x{7f}-\\x{10ffff}])|Closure(?![A-Za-z0-9_\\x{7f}-\\x{10ffff}]))([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*))(?=\\s*(?:<(?:[^<>;{}$]|<(?:[^<>;{}$]|<[^<>;{}$]*>)*>)*>)?\\s*\\()",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "#modifiers"
+            }
+          ]
+        },
+        "2": {
+          "name": "storage.type.function.php"
+        },
+        "3": {
+          "name": "storage.modifier.reference.php"
+        },
+        "4": {
+          "patterns": [
+            {
+              "include": "#function-name"
+            }
+          ]
+        },
+        "5": {
+          "name": "storage.modifier.reference.php"
+        },
+        "6": {
+          "patterns": [
+            {
+              "include": "#function-name"
+            }
+          ]
+        }
+      },
+      "end": "(?<=[};])|(;)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.terminator.expression.php"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#function-tail"
+        }
+      ]
+    },
+    "generic-method": {
+      "comment": "A generic method at column 0, #method with its <…> required: there a generic call's injection starts where #method does and wins the tie, so this rule is injected ahead of it into the class-like bodies, outside any function's. The <…> is required because a property hook's set(…), inside the property's braces, has no scope that would keep it out. A generic method at column 0 in an anonymous class inside a function still reads as a call.",
+      "name": "meta.function.php",
+      "begin": "^((?:(?i:final|abstract|public|private|protected|static|readonly)\\s+)*)(?:((?i:function))\\s+(?:(&)\\s*)?([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*)|(?:(&)\\s*)?(?!(?i:static|abstract|final|public|protected|private|readonly|var|const|function|fn)(?![A-Za-z0-9_\\x{7f}-\\x{10ffff}])|Closure(?![A-Za-z0-9_\\x{7f}-\\x{10ffff}]))([A-Za-z_\\x{7f}-\\x{10ffff}][A-Za-z0-9_\\x{7f}-\\x{10ffff}]*))(?=\\s*<(?:[^<>;{}$]|<(?:[^<>;{}$]|<[^<>;{}$]*>)*>)*>\\s*\\()",
       "beginCaptures": {
         "1": {
           "patterns": [
