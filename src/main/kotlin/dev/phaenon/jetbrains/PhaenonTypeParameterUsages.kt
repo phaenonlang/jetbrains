@@ -2,15 +2,15 @@ package dev.phaenon.jetbrains
 
 import com.intellij.find.findUsages.FindUsagesHandler
 import com.intellij.find.findUsages.FindUsagesHandlerFactory
-import com.intellij.model.psi.PsiSymbolDeclaration
-import com.intellij.model.psi.PsiSymbolDeclarationProvider
-import com.intellij.model.psi.PsiSymbolService
 import com.intellij.openapi.application.QueryExecutorBase
 import com.intellij.openapi.util.TextRange
+import com.intellij.pom.PomDeclarationSearcher
+import com.intellij.pom.PomTarget
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.util.Consumer
 import com.intellij.util.Processor
 import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocType
 
@@ -20,20 +20,18 @@ import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocType
  * class or method name. The usages are the erased constructs that mention `T`
  * ([PhaenonTypeParameterReference]) and the docblock types `@param T $x`, `@var T $x`, which
  * PhpStorm reads as class names and which [PhaenonDocTypeReferenceSearcher] adds.
+ *
+ * The parameter is reported as a declared target ([PhaenonTypeParameter] is a `PsiDeclaredTarget`):
+ * the platform's default declaration provider makes the declaration of it, with the parameter
+ * itself as the declared element, so find usages runs on [PhaenonTypeParameter].
  */
-class PhaenonTypeParameterDeclarations : PsiSymbolDeclarationProvider {
+class PhaenonTypeParameterDeclarations : PomDeclarationSearcher() {
 
-    override fun getDeclarations(element: PsiElement, offsetInElement: Int): Collection<PsiSymbolDeclaration> {
-        if (!PhaenonTokenTypes.isErased(element) || !PhaenonErasedTypes.isDeclarationList(element)) return emptyList()
-        return PhaenonTypeText.parameters(element.text)
+    override fun findDeclarationsAt(element: PsiElement, offsetInElement: Int, consumer: Consumer<in PomTarget>) {
+        if (!PhaenonTokenTypes.isErased(element) || !PhaenonErasedTypes.isDeclarationList(element)) return
+        PhaenonTypeText.parameters(element.text)
             .filter { (offset, name) -> offsetInElement in offset..offset + name.length }
-            .map { (offset, name) -> Declaration(element, TextRange.from(offset, name.length), PhaenonTypeParameter(element, offset, name)) }
-    }
-
-    private class Declaration(private val list: PsiElement, private val range: TextRange, private val parameter: PhaenonTypeParameter) : PsiSymbolDeclaration {
-        override fun getDeclaringElement(): PsiElement = list
-        override fun getRangeInDeclaringElement(): TextRange = range
-        override fun getSymbol() = PsiSymbolService.getInstance().asSymbol(parameter)
+            .forEach { (offset, name) -> consumer.consume(PhaenonTypeParameter(element, offset, name)) }
     }
 }
 

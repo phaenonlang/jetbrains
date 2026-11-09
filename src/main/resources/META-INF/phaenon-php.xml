@@ -74,7 +74,7 @@
 
         <!-- `T` in `class Box<T of Item>` is a declaration: Cmd+click shows its usages, which include
              erased constructs and docblock types naming it. -->
-        <psi.declarationProvider implementation="dev.phaenon.jetbrains.PhaenonTypeParameterDeclarations"/>
+        <pom.declarationSearcher implementation="dev.phaenon.jetbrains.PhaenonTypeParameterDeclarations"/>
         <findUsagesHandlerFactory implementation="dev.phaenon.jetbrains.PhaenonTypeParameterFindUsagesHandlerFactory"/>
         <referencesSearch implementation="dev.phaenon.jetbrains.PhaenonDocTypeReferenceSearcher"/>
 
