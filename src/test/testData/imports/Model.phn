@@ -1,9 +1,7 @@
 namespace App\Model;
 
 final class ArgOnly {}
-final class AsOnly {}
 final class DocOnly {}
-final class IsOnly {}
 final class Native {}
 final class QualifiedSigOnly {}
 final class ReturnOnly {}

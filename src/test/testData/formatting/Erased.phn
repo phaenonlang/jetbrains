@@ -38,16 +38,14 @@ private readonly map<string, list<Event<T>>>   $streams;
 
     fun check(mixed $x): bool
     {
-        if ($x is list<int>) {
+        if (is_array($x) && array_is_list($x)) {
             return true;
         }
-        if ($x   is   User) {
+        if ($x   instanceof   User) {
             return true;
         }
-        $y = $x   as   map<string, Money>;
-        $z=$x as? Money;
-        $ok = $x is int && $y is string;
-        return $ok || $z === null;
+        $z=$x instanceof Money ? $x : null;
+        return $z === null;
     }
 
     public static function of <U>(list<U> $rows): Box<U>

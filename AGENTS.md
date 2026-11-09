@@ -89,11 +89,10 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
   `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update
   (README § How it works).
-- Known limits (README § Limitations): `is` / `as` do not narrow (except `is` on a class name),
-  `type` aliases are erased whole, type arguments of user generics are dropped, tuples type as
-  element-array unions, a partial application is also its callee's result to PhpStorm; the
-  implied `strict_types` is not modelled; the lexer, the editor colouring
-  (`com.jetbrains.php.baseLexerProvider`), the parsing of bodies, debugging
+- Known limits (README § Limitations): `type` aliases are erased whole, type arguments of user
+  generics are dropped, tuples type as element-array unions, a partial application is also its
+  callee's result to PhpStorm; the implied `strict_types` is not modelled; the lexer, the editor
+  colouring (`com.jetbrains.php.baseLexerProvider`), the parsing of bodies, debugging
   (`PhpTemplateLanguagePathMapper`, `com.intellij.php.debug.templateLanguage`) and the docblock stub
   on Enter use internal API of the PHP plugin, each use named in `verifier/internal-api.txt` with
   its reason (README § Internal API): a new one fails `verifyPlugin` until it has a public

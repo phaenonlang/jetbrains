@@ -33,9 +33,6 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  * - `Closure(T): U` is erased whole: a bare `Closure` with a signature is `\Closure` whatever the
  *   namespace and imports (the compiler's reading), where PhpStorm would resolve the name in the
  *   file's namespace. `\Closure(T): U` keeps its name and erases the signature.
- * - `$x is T` becomes `$x instanceof T` when `T` is a plain class name (the `is` token is re-typed,
- *   its text stays); every other `is`/`as`/`as?` test is erased together with its type, so the
- *   expression degrades to its operand.
  * - `type Name = …;` aliases are erased whole.
  * - `(bytes)` is re-typed as a `(string)` cast: one token spanning the parentheses.
  * - PHP 8.6's argument placeholders (`f(?, 1)`, `f(b: ?)`, `$o->m(?)`, design/php-versions.md
@@ -108,8 +105,6 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             ?: tryExpressionBody(c)
             ?: tryFun(c)
             ?: tryPlaceholder(c)
-            ?: tryIs(c)
-            ?: tryAs(c)
             ?: tryTypeAlias(c)
             ?: tryDeclarationTypeParams(c)
             ?: tryBytesCast(c)
@@ -351,29 +346,6 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         return Plan(1).replace(0, PhpTokenTypes.IDENTIFIER)
     }
 
-    /** `$x is T`: `instanceof` for a class name, erased otherwise. */
-    private fun tryIs(c: Tok): Plan? {
-        if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "is" || prevSig !in EXPRESSION_END) return null
-        val s = Scan()
-        val u = scanUnion(sig(1), s) ?: return null
-        if (s.extraClosers > 0) return null
-        val single = u.members.singleOrNull()
-        return if (single != null && single.classLike && !u.nullable) {
-            Plan(u.end).replace(0, PhpTokenTypes.kwINSTANCEOF).erase(s.erase)
-        } else {
-            Plan(u.end).erase(0 until u.end)
-        }
-    }
-
-    /** `$x as T`, `$x as? T`: erased, the expression keeps its operand. */
-    private fun tryAs(c: Tok): Plan? {
-        if (c.type != PhpTokenTypes.kwAS || prevSig !in VALUE_END) return null
-        val s = Scan()
-        val u = scanUnion(sig(1), s) ?: return null
-        if (s.extraClosers > 0) return null
-        return Plan(u.end).erase(0 until u.end)
-    }
-
     /** `type Name<…> = T;` at statement level: erased whole. */
     private fun tryTypeAlias(c: Tok): Plan? {
         if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "type" || prevSig !in STATEMENT_START) return null
@@ -481,9 +453,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         var extraClosers = 0
     }
 
-    private class Member(val start: Int, val end: Int, val native: Boolean, val classLike: Boolean)
+    private class Member(val start: Int, val end: Int, val native: Boolean)
 
-    private class Union(val end: Int, val members: List<Member>, val nullable: Boolean, val allErased: Boolean)
+    private class Union(val end: Int, val allErased: Boolean)
 
     /**
      * Scans a type at [i0]: `?T`, `A|B`, `A&B`, DNF groups, tuples, generics. Returns null when the
@@ -493,11 +465,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     private fun scanUnion(i0: Int, s: Scan): Union? {
         if (i0 < 0) return null
         var i = i0
-        var nullable = false
-        if (typeAt(i) == PhpTokenTypes.opQUEST) {
-            nullable = true
-            i = sig(i + 1)
-        }
+        if (typeAt(i) == PhpTokenTypes.opQUEST) i = sig(i + 1)
         val members = ArrayList<Member>()
         val separators = ArrayList<Int>()
         while (true) {
@@ -526,7 +494,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 if (k < separators.size) s.erase.add(m.start..separators[k]) else s.erase.add(separators[k - 1] until m.end)
             }
         }
-        return Union(end, members, nullable, allErased)
+        return Union(end, allErased)
     }
 
     private fun scanAtom(i: Int, s: Scan): Member? {
@@ -548,20 +516,20 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                         continue
                     }
                     if (typeAt(next) != PhpTokenTypes.chRPAREN) return null
-                    return Member(i, next + 1, native && !tuple, classLike = false)
+                    return Member(i, next + 1, native && !tuple)
                 }
             }
             PhpTokenTypes.kwLIST -> {
                 val lt = sig(i + 1)
                 if (typeAt(lt) != PhpTokenTypes.opLESS) return null
                 val end = scanTypeArguments(lt, s, declaration = false) ?: return null
-                return Member(i, end, native = false, classLike = false)
+                return Member(i, end, native = false)
             }
             PhpTokenTypes.kwCLASS -> {
                 val lt = sig(i + 1)
-                if (typeAt(lt) != PhpTokenTypes.opLESS) return Member(i, i + 1, native = false, classLike = false)
+                if (typeAt(lt) != PhpTokenTypes.opLESS) return Member(i, i + 1, native = false)
                 val end = scanTypeArguments(lt, s, declaration = false) ?: return null
-                return Member(i, end, native = false, classLike = false)
+                return Member(i, end, native = false)
             }
             PhpTokenTypes.kwARRAY, PhpTokenTypes.kwCALLABLE, PhpTokenTypes.kwSTATIC -> {
                 // `array<K, V>` is the M3 spelling still found in migrated sources: PHP's array, arguments erased.
@@ -569,9 +537,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 if (t.type == PhpTokenTypes.kwARRAY && typeAt(lt) == PhpTokenTypes.opLESS) {
                     val end = scanTypeArguments(lt, s, declaration = false) ?: return null
                     s.erase.add(lt until end)
-                    return Member(i, end, native = true, classLike = false)
+                    return Member(i, end, native = true)
                 }
-                return Member(i, i + 1, native = true, classLike = false)
+                return Member(i, i + 1, native = true)
             }
             PhpTokenTypes.IDENTIFIER, PhpTokenTypes.NAMESPACE_RESOLUTION -> {
                 // A qualified name: tokens are adjacent, no whitespace inside.
@@ -582,7 +550,6 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                 }
                 while (typeAt(j + 1) == PhpTokenTypes.NAMESPACE_RESOLUTION && typeAt(j + 2) == PhpTokenTypes.IDENTIFIER) j += 2
                 val name = buffer.subSequence(t.start, tok(j)!!.end).toString()
-                val simple = name.substringAfterLast('\\')
                 val next = sig(j + 1)
                 if ((name == "Closure" || name == "\\Closure") && (typeAt(next) == PhpTokenTypes.chLPAREN || typeAt(next) in PhpTokenTypes.tsCAST_OPS)) {
                     val end = scanClosureSignature(next, s) ?: return null
@@ -590,18 +557,18 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                     // `Closure(` as a type form and the emitter writes `\Closure`), but a `Closure`
                     // left to PhpStorm resolves in the file's namespace: erased whole, like `list<…>`,
                     // and typed back by PhaenonTypeText. `\Closure(…)` means the same in PHP's reading.
-                    if (name == "Closure") return Member(i, end, native = false, classLike = false)
+                    if (name == "Closure") return Member(i, end, native = false)
                     s.erase.add(next until end)
-                    return Member(i, end, native = true, classLike = false)
+                    return Member(i, end, native = true)
                 }
                 if (typeAt(next) == PhpTokenTypes.opLESS) {
                     val end = scanTypeArguments(next, s, declaration = false) ?: return null
-                    val generic = simple == "map" || name in typeParams
+                    val generic = name.substringAfterLast('\\') == "map" || name in typeParams
                     if (!generic) s.erase.add(next until end)
-                    return Member(i, end, native = !generic, classLike = !generic && simple !in PRIMITIVE_NAMES)
+                    return Member(i, end, native = !generic)
                 }
                 val erased = name == "bytes" || name in typeParams
-                return Member(i, j + 1, native = !erased, classLike = !erased && simple !in PRIMITIVE_NAMES)
+                return Member(i, j + 1, native = !erased)
             }
             else -> return null
         }
@@ -693,24 +660,6 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         /** Trivia between significant tokens: whitespace, erased text, comments — a docblock is a token of its own, outside COMMENTS. */
         val SKIPPABLE: TokenSet = TokenSet.orSet(TokenSet.create(PhpTokenTypes.WHITE_SPACE, PhaenonTokenTypes.ERASED, PhpDocElementTypes.DOC_COMMENT), PhpTokenTypes.COMMENTS)
 
-        /** What `$x is T` may follow: a value. */
-        val EXPRESSION_END: TokenSet = TokenSet.orSet(
-            TokenSet.create(
-                PhpTokenTypes.VARIABLE, PhpTokenTypes.chRPAREN, PhpTokenTypes.chRBRACKET, PhpTokenTypes.IDENTIFIER,
-                PhpTokenTypes.STRING_LITERAL, PhpTokenTypes.STRING_LITERAL_SINGLE_QUOTE, PhpTokenTypes.chRDOUBLE_QUOTE,
-            ),
-            PhpTokenTypes.tsNUMBERS,
-        )
-
-        /** What `$x as T` may follow; an identifier is left out because of `use Foo as Bar`. */
-        val VALUE_END: TokenSet = TokenSet.orSet(
-            TokenSet.create(
-                PhpTokenTypes.VARIABLE, PhpTokenTypes.chRPAREN, PhpTokenTypes.chRBRACKET,
-                PhpTokenTypes.STRING_LITERAL, PhpTokenTypes.STRING_LITERAL_SINGLE_QUOTE, PhpTokenTypes.chRDOUBLE_QUOTE,
-            ),
-            PhpTokenTypes.tsNUMBERS,
-        )
-
         val STATEMENT_START: Set<IElementType?> = setOf(null, PhpTokenTypes.opSEMICOLON, PhpTokenTypes.chRBRACE, PhpTokenTypes.chLBRACE)
 
         /** Where a declaration may start: a statement boundary, a modifier, the `]` of an attribute. */
@@ -755,10 +704,5 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
 
         /** After `&` in a type, these mean a by-reference parameter rather than an intersection. */
         val BY_REF_FOLLOWERS: TokenSet = TokenSet.create(PhpTokenTypes.VARIABLE, PhpTokenTypes.opVARIADIC)
-
-        val PRIMITIVE_NAMES: Set<String> = setOf(
-            "int", "float", "string", "bool", "null", "mixed", "void", "never", "object", "iterable", "true", "false",
-            "self", "parent", "integer", "boolean", "double",
-        )
     }
 }

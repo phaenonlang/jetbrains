@@ -22,8 +22,8 @@ the **full PHP toolchain** rather than a syntax-colouring approximation of it:
   each compiled file carries ([Line map](#line-map-navigation-and-debugging))
 
 Phaenon's own syntax parses too — generics, `list<T>`, `map<K, V>`, `bytes`, tuples, `class<T>`,
-`Closure(T): U`, `is` / `as`, `type` aliases, expression bodies `=> expr;` and `throws A|B`, and PHP
-8.6's partial application, which no PhpStorm parses yet — and its types reach PhpStorm: a
+`Closure(T): U`, `type` aliases, expression bodies `=> expr;` and `throws A|B`, and PHP 8.6's
+partial application, which no PhpStorm parses yet — and its types reach PhpStorm: a
 `list<User>` is a `User[]` to completion and the inspections, a `class<User>` names `User` behind
 `::` and `new`, a `Closure(int): string` checks the calls made through it. A list, a map and bytes
 are the array and the string they compile to, so `->` on them means what it means in PHP: they are
@@ -120,8 +120,6 @@ provider reads it back, and the class names in it are references.
 | `\Closure(A): R` | `\Closure`, the signature erased | the same as the bare spelling |
 | a type parameter `T` | erased | its bound, `mixed` without one |
 | `?T`, `T\|null` with `T` erased | `?` and `\|` erased with it; a return type takes its `:` | the native members stay PhpStorm's |
-| `$x is Foo` | `$x instanceof Foo` (the `is` token re-typed) | PhpStorm narrows as for `instanceof` |
-| `$x is list<int>`, `$x is ?Foo`, `$x as T`, `$x as? T` | `$x` — the test is erased | the operand's type |
 | `(bytes) $raw` | one `(string)` cast token | `string` |
 | `type Name = …;` | erased whole | — (uses of `Name` are unknown classes) |
 | `array<K, V>` (M3 spelling in migrated sources) | `array` | `array` |
@@ -297,8 +295,11 @@ without the server.
 - after, as an edit of its own.
 
 That layer lays out what only Phaenon knows: the spacing inside `<T of Item>`,
-`map<string, list<int>>`, `throws`, `as?`, one-line docblocks, no blank line before the first
-line, and spaces for tabs. Only a reformat of the whole file runs it. A `.phn` always indents with
+`map<string, list<int>>` and `throws`, one-line docblocks, no blank line before the first line,
+and spaces for tabs. It also rewrites the spellings D26 withdrew where no type is needed
+(design/tooling.md §5.6): `$x is Foo` on a class name becomes `$x instanceof Foo`, and the other
+tests stay for `phn fmt` over the project, `P1001` from `phn lsp` until then. Only a reformat of
+the whole file runs it. A `.phn` always indents with
 spaces (D21), whatever the PHP code style or an `.editorconfig` says.
 
 ## Install
@@ -381,7 +382,8 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   plain `.php` files still start in HTML mode.
 - `PhaenonSyntaxTest`: `testData/syntax/Constructs.phn` uses every Phaenon construct and parses
   without errors or error highlighting; the erased text is an erased leaf at its original offsets;
-  `is` on a class name is `instanceof`; `(bytes)` is a string cast; bodies are not lazy; PHP without
+  `is` and `as` read as PHP reads them (D26: a leftover test is the syntax error of the same `.php`
+  file); `(bytes)` is a string cast; bodies are not lazy; PHP without
   Phaenon syntax lexes exactly as PhpStorm lexes it; reformatting leaves each erased construct as written.
 - `PhaenonErasedTypesTest`: erased declarations get their types (`list<User>` and
   `map<string, User>` as `User[]`, `bytes` as `string`, tuples, `class<User>`, closure signatures,
@@ -429,8 +431,8 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   `phpversion` tests read them. PhpStorm's bundled `Core_c.php` stub is copied in from the PHP
   plugin for `Attribute` and `Override`.
 - `PhaenonImportOptimizerTest`: Optimize Imports on `testData/imports/X.phn` gives `X.after.phn`:
-  an import used only in a type argument, union member, return type, closure signature (both
-  spellings) or `is` / `as` type stays, as one a docblock or PHP code uses does, and goes where
+  an import used only in a type argument, union member, return type or closure signature (both
+  spellings) stays, as one a docblock or PHP code uses does, and goes where
   the sorting puts it; an unused one goes, a block left empty is rebuilt, each import has a line of
   its own, a braced namespace keeps its indentation, and the block is laid out by the PHP code style
   exactly as in the same `.php` file (PSR-12's blank line before function imports); an alias and a
@@ -599,9 +601,6 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   PhpStorm's and print a class-string as `string`: no extension point reaches PhpStorm's type
   printer (`PhpType` presentation and its quick-doc renderer are internal), and a plugin-printed
   `class<T>` there would need one.
-- **`is` and `as` do not narrow**, except `$x is Foo` on a plain class name, which PhpStorm sees as
-  `instanceof`. The other forms are erased with their type, so the expression keeps its operand's
-  type and a `$y = $x as map<string, Money>` is typed as `$x`.
 - **Completion inside erased constructs is the plugin's own**, not PhpStorm's: short class
   names (imported on insertion), the members of a namespace after a qualifier (`Event\Dom…`,
   `\App\Event\…`), type parameters and keywords.

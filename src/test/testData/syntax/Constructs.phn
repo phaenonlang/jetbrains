@@ -63,18 +63,14 @@ final class Box<T of object = object> implements \IteratorAggregate<int, T>
 
     public function check(mixed $x, string|Id $id): bool
     {
-        if ($x is list<int>) {
+        if (is_array($x) && array_is_list($x)) {
             return true;
         }
-        if ($x is ?User) {
+        if ($x === null || $x instanceof User) {
             return false;
         }
-        if ($x is User) {
-            return true;
-        }
-        $y = $x as map<string, Money>;
-        $z = $x as? Money;
-        $ok = $x is int && $y is string;
+        $z = $x instanceof Money ? $x : null;
+        $ok = is_int($x) && is_string($id);
 
         return $ok || $z === null;
     }

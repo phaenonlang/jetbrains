@@ -18,11 +18,11 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
 
 /**
  * Optimize Imports in a `.phn` file keeps an import that only an erased construct uses — a type
- * argument, a union member, a return type, a closure signature, an `is` / `as` type — as it keeps
- * one a docblock type uses, and still removes one nothing uses; the block is laid out by the PHP
- * code style, as in a `.php` file. The tests run the platform's optimizer, the one every entry point goes through, on the fixtures in
- * `testData/imports/` (`X.phn` → `X.after.phn`); the classes the imports name are in `Model.phn`,
- * since PhpStorm never removes an import of a class it cannot find.
+ * argument, a union member, a return type, a closure signature — as it keeps one a docblock type
+ * uses, and still removes one nothing uses; the block is laid out by the PHP code style, as in a
+ * `.php` file. The tests run the platform's optimizer, the one every entry point goes through, on
+ * the fixtures in `testData/imports/` (`X.phn` → `X.after.phn`); the classes the imports name are
+ * in `Model.phn`, since PhpStorm never removes an import of a class it cannot find.
  */
 class PhaenonImportOptimizerTest : BasePlatformTestCase() {
 
@@ -126,6 +126,6 @@ class PhaenonImportOptimizerTest : BasePlatformTestCase() {
             .sorted()
 
     private companion object {
-        val ERASED_ONLY = listOf("ArgOnly", "AsOnly", "IsOnly", "QualifiedSigOnly", "ReturnOnly", "SigOnly", "UnionOnly")
+        val ERASED_ONLY = listOf("ArgOnly", "QualifiedSigOnly", "ReturnOnly", "SigOnly", "UnionOnly")
     }
 }

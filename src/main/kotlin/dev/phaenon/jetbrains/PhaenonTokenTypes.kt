@@ -15,7 +15,7 @@ object PhaenonTokenTypes {
 
     /**
      * An erased Phaenon construct: a type PHP cannot spell (`list<User>`, `<T of object>`,
-     * `class<T>`, `(A, B)`), an `is` / `as` test, a `type` alias. To PhpStorm's parser it is a
+     * `class<T>`, `(A, B)`), a `throws` clause, a `type` alias. To PhpStorm's parser it is a
      * comment, skipped like whitespace ([PhaenonParserDefinition]), so the tree below is ordinary
      * PHP PSI; in that tree it is a [PhaenonErasedLeaf] at the construct's own offsets, whose
      * text the type provider reads back and whose class names
