@@ -4,6 +4,17 @@ From 0.2.1 on, release-please writes each entry from the Conventional Commits me
 previous release (`release-please-config.json`); the entry is the Marketplace's change notes for
 that version. The first release was written by hand.
 
+## [0.6.0](https://github.com/phaenonlang/jetbrains/compare/v0.5.0...v0.6.0) (2026-11-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* PhpStorm 2025.3 is no longer supported, nor are 2026.1 to 2026.1.3; the plugin needs 2026.1.4 or newer.
+
+### Features
+
+* PhpStorm 2026.1.4 or newer; the LSP integration on the current API ([93837e6](https://github.com/phaenonlang/jetbrains/commit/93837e6d2c5bf75fe53803363e21dbba92b35b9e))
+
 ## [0.5.0](https://github.com/phaenonlang/jetbrains/compare/v0.4.0...v0.5.0) (2026-11-09)
 
 
