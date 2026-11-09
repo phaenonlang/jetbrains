@@ -156,7 +156,8 @@ object PhaenonCompiler {
             listOf(name)
         }
         for (dir in path.split(File.pathSeparatorChar)) {
-            if (dir.isBlank()) continue
+            // A relative entry would resolve against the IDE's working directory: skipped, as the platform's lookup did.
+            if (dir.isBlank() || !File(dir).isAbsolute) continue
             for (candidate in names) {
                 val file = File(dir, candidate)
                 if (file.isFile && file.canExecute()) return file.path
