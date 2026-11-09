@@ -1,5 +1,10 @@
 <!-- Loaded only when the PHP plugin (com.jetbrains.php) is present. -->
 <idea-plugin>
+    <!-- The formatter builds on the platform's XML template formatter (PhaenonFormattingModelBuilder),
+         part of the platform up to 2026.2 and the bundled XML plugin since 2026.3. The PHP plugin
+         requires it too; declared so that the classes resolve in every IDE of the range. -->
+    <depends>com.intellij.modules.xml</depends>
+
     <extensions defaultExtensionNs="com.intellij">
         <!-- .phn joins the PHP file type (no implementationClass: this bean only adds an extension). -->
         <fileType name="PHP" extensions="phn"/>
