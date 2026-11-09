@@ -72,7 +72,7 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
  * some other declaration is hand-written.
  *
- * PHP 8.6 (design/php-versions.md §4), which no PhpStorm knows, 2025.3 through 2026.3 — their
+ * PHP 8.6 (design/php-versions.md §4), which no PhpStorm knows, 2026.1 through 2026.3 — their
  * language levels stop at 8.5:
  *
  * - a partial application's `?` is a constant to PhpStorm ([PhaenonLexer]), "undefined", and its
