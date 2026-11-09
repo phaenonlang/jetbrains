@@ -49,7 +49,8 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
         )
     }
 
-    private fun pipesExist(): Boolean = PhpLanguageLevel.values().last().versionString >= "8.5"
+    private fun assertThePipeParses() =
+        assertTrue("the IDE's highest PHP language level has no pipe", PhpLanguageLevel.values().last() >= PhpLanguageLevel.PHP850)
 
     fun testPartialApplicationsParseAndRaiseNoFinding() {
         myFixture.configureByFiles("php86/Partial.phn")
@@ -79,7 +80,7 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
     }
 
     fun testAPipeStageIsTypedAsTheCallItBecomes() {
-        if (!pipesExist()) return
+        assertThePipeParses()
         myFixture.configureByFiles("php86/PartialPipe.phn")
 
         assertEmpty(syntaxErrors())
