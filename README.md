@@ -322,7 +322,7 @@ indexed; navigation and the duplicate-declaration inspection then prefer the sou
 ```bash
 ./gradlew buildPlugin        # → build/distributions/phaenon-jetbrains-<version>.zip
 ./gradlew test               # runs against a headless PhpStorm
-./gradlew verifyPlugin       # JetBrains Plugin Verifier across the declared range
+./gradlew verifyPlugin       # JetBrains Plugin Verifier across the declared range, then verifyInternalApi
 ./gradlew runIde             # starts a sandboxed PhpStorm with the plugin installed
 ```
 
@@ -332,10 +332,12 @@ The first build downloads the PhpStorm distribution declared in `gradle.properti
 `verifyPlugin` verifies the plugin against the PhpStorm build it is compiled against and against
 the newest build of every PhpStorm line from `pluginSinceBuild` on, EAP and RC builds included:
 the range the JetBrains Marketplace verifies an upload against. Each is downloaded once (about
-1 GB). It fails at the levels `build.gradle.kts` sets. On macOS the verifier does not resolve the
-XML plugin of PhpStorm 2026.3's macOS distribution, and reports the XML formatter classes the
-plugin builds on as missing, as it does the PHP plugin's own; the Linux distribution, which CI
-verifies, and IntelliJ IDEA 2026.3 resolve it, and the plugin verifies as compatible there.
+1 GB). It fails on compatibility problems and on API scheduled for removal; `verifyInternalApi`,
+which runs after it, fails on internal API that `verifier/internal-api.txt` does not name (see
+[Internal API](#internal-api)). On macOS the verifier does not resolve the XML plugin of PhpStorm
+2026.3's macOS distribution, and reports the XML formatter classes the plugin builds on as missing,
+as it does the PHP plugin's own; the Linux distribution, which CI verifies, and IntelliJ IDEA 2026.3
+resolve it, and the plugin verifies as compatible there.
 
 To also verify against a locally installed IDE:
 
@@ -667,37 +669,49 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   plugin only keeps it out of completion, where it doubled the `fun` keyword.
 - **The pipe conversion replaces PhpStorm's quick-fix in the editor only.** Applying the fix from
   the Inspect Code results is PhpStorm's fix, which mistakes method calls in every file type.
-- The editor features above call PHP plugin classes that are public but not documented API:
-  `PhpFormattingModelBuilder.createTemplateFormattingModel` (inherited from the platform's XML
-  template formatter), `PhpEnterHandlerAdapter` (the registered delegate the doc-comment handler
-  hands Enter to), `PhpImplementMethodsHandler` / `PhpOverrideMethodsHandler` and
-  `getMethodsToOverride`, and an `instanceof` of `PhpOverriddenMethodInsertHandler` to recognise
-  override items. PhpStorm's pipe quick-fix is matched by its class name, a string, because the
-  class does not exist in 2025.3.
+- The editor features above reach PhpStorm's own implementations through the extension points
+  they are registered in, the plugin's own registered ahead of them: the view provider factory of
+  PHP (`lang.fileViewProviderFactory`), its formatter (`lang.formatter`, a subclass of the
+  platform's XML template formatter, whose public `createTemplateFormattingModel` the plugin calls)
+  and its Implement / Override Methods handlers (`codeInsight.implementMethod`,
+  `codeInsight.overrideMethod`); the method a generated one was written from is found in the class
+  hierarchy (`PhpClassHierarchyUtils`). Override items of completion are recognised by an
+  `instanceof` of `PhpOverriddenMethodInsertHandler`, public API. PhpStorm's pipe quick-fix is
+  matched by its class name, a string, because the class does not exist in 2025.3.
 - The debugger support implements `PhpTemplateLanguagePathMapper` (`com.intellij.php.debug.templateLanguage`),
-  PHP plugin API marked internal; Twig and Blade, bundled with PhpStorm, are its other implementations,
-  and it is the same in 2025.3 and 2026.3. Its gate relies on how PhpStorm asks: that
+  PHP plugin API marked internal up to 2026.2 and public since 2026.3; Twig and Blade, bundled with
+  PhpStorm, are its other implementations, and it is the same in 2025.3 and 2026.3. Its gate relies on how PhpStorm asks: that
   `PhpLineBreakpointHandler.registerBreakpoint` calls `isTemplateFileType` itself (checked on the
   stack) right after `getInstance` asked `isGeneratedFile` about the breakpoint's file. If PhpStorm
   changes that, `.phn` breakpoints are no longer mapped (and not hit), while `.php` files are
   unaffected. Source-line stepping reads the platform's debugger action ids (`StepOver`, `StepInto`,
   …, `XDebuggerActions`) as strings. The compiled file's wrapped editor forwards every method of
-  `TextEditor`, `isEditorLoaded()` among them, which is marked internal.
+  `TextEditor` but `isEditorLoaded()`, internal API, whose default (loaded) it keeps, as the
+  platform's own `TextEditorWithPreview` does.
 - The TextMate fallback is highlighting only, and it needs the IDE's own PHP TextMate bundle
   (bundled with every JetBrains IDE) for `source.php`.
-- `com.jetbrains.php.baseLexerProvider` is marked internal by JetBrains. It is the only way to
-  hand the editor highlighter a lexer for a file of the PHP file type, and it is present unchanged
-  from 2025.3 through 2026.3 (both verified with the Plugin Verifier), but a future PhpStorm could
-  rename it. If that happens, parsing and every analysis feature keep working and only the editor
-  colouring of `.phn` files would regress until the plugin is updated. The verifier is configured
-  to report, not fail on, internal API usage for this reason. `PhaenonPsiBuilder` and
-  `PhaenonTypeProvider` also call PhpStorm parser and type-analysis classes (`PhpPsiBuilder`,
-  `StatementList`, `PhpTypeAnalyserVisitor`) that are public but outside the documented open API;
-  so do `PhaenonTypeText` (`PhpExpressionImpl.serializeAdvancedClosureParameter` and its separator,
-  the encoding of closure signatures) and `PhaenonHighlightFilter`
-  (`PhpParamsInspection.isCallTypeConvertibleFromDeclaredType`, the convertibility PhpStorm's own
-  closure-call check uses). The verifier reports them compatible with 2025.3 and 2026.3.
-  `PhaenonTypePresentation` decodes closure signatures with
+- <a id="internal-api"></a>**Internal API.** Reading a `.phn` as PHP code from its first byte
+  is built on PHP plugin classes JetBrains marks internal, and no public API does the same:
+  PhpStorm's lexer for PHP without an open tag (`PhpWithOptionalOpenTagLexer`), under the parser and
+  under the editor's highlighter, which asks the `com.jetbrains.php.baseLexerProvider` extension
+  point for its lexer (PHP's file type has one highlighter, keyed by the file type); and PhpStorm's
+  statement parser (`PhpPsiBuilder`, `Statement`, `Function`, `Namespace`, `ClassDeclaration`,
+  internal since 2026.3), which `PhaenonPsiBuilder` runs on a function body there and then instead
+  of leaving it lazy, since PhpStorm reparses a lazy body with a lexer of its own and would undo
+  the erasure in it. The debugger's mapper and the breakpoint handler its gate recognises (above),
+  and the Enter delegate that writes PhpStorm's docblock stub (`PhpEnterHandlerAdapter`, internal
+  since 2026.3), are the rest. `verifier/internal-api.txt` names each of these uses with its reason,
+  and `verifyInternalApi` fails on any other the Plugin Verifier reports in an IDE of the range.
+  Should one of these classes change, the build against the new PhpStorm and the verifier say so;
+  the extension point going would leave parsing and every analysis feature working and regress the
+  editor colouring of `.phn` files alone. Everything else goes through public API.
+  `PhaenonTypeProvider` and `PhaenonTypeText` also call PhpStorm type-analysis classes
+  (`StatementList`, `PhpTypeAnalyserVisitor`, `PhpExpressionImpl.serializeAdvancedClosureParameter`
+  and its separator, the encoding of closure signatures) that are public but outside the documented
+  open API; `PhaenonHighlightFilter` judges a closure call with the convertibility PhpStorm's own
+  check uses, spelled out with `PhpType`'s public operations, and `PhaenonThrows` asks PhpStorm's
+  public exception analysis (`PhpThrownExceptionsAnalyzer`) what the exception inspections compute
+  with internal helpers. `PhaenonTypePresentation` decodes closure signatures with
   `PhpExpressionImpl.getTypeFromSerializedClosureParameter`, and `PhaenonDocumentationProvider`
   styles its definition with the PHP plugin's `PhpHighlightingData` keys and the platform's
   `QuickDocHighlightingHelper`, and replaces the block PhpStorm writes as `<div class='definition'><pre>`

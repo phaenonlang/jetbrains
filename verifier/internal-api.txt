@@ -1,0 +1,31 @@
+# Internal API the plugin uses knowingly, for want of a public API that does the same (README,
+# "Internal API"). One line per used class and plugin class, as verifyInternalApi reads the Plugin
+# Verifier's internal-api-usages.txt: "<API class> in <plugin class>", the API class being the one
+# that declares the member used. A use that is not named here fails verifyPlugin in every IDE the
+# verification covers; a line no IDE reports any more is warned about, and goes.
+
+# Reading a .phn as PHP code from its first byte. PhpStorm's own lexer for PHP without an open tag,
+# under the parser and under the editor's highlighter, which asks the baseLexerProvider extension
+# point for it (PHP's file type has one highlighter, keyed by the file type, not the file).
+com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer in PhaenonLexer
+com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer in PhaenonBaseLexerProvider
+com.jetbrains.php.lang.lexer.PhpBaseLexerProvider in PhaenonBaseLexerProvider
+
+# Bodies parsed with the file, not lazily: PhpStorm reparses a lazy body with a lexer of its own,
+# which would undo the erasure inside it. The body is parsed there and then by PhpStorm's statement
+# parser, in the order PhpStorm's own expansion of a lazy block uses (PhaenonPsiBuilder).
+com.jetbrains.php.lang.parser.PhpPsiBuilder in PhaenonPsiBuilder
+com.jetbrains.php.lang.parser.parsing.Statement in PhaenonPsiBuilder
+com.jetbrains.php.lang.parser.parsing.Namespace in PhaenonPsiBuilder
+com.jetbrains.php.lang.parser.parsing.classes.ClassDeclaration in PhaenonPsiBuilder
+com.jetbrains.php.lang.parser.parsing.functions.Function in PhaenonPsiBuilder
+
+# Debugging .phn through PhpStorm's template debugging, the mechanism of Twig and Blade: the mapper
+# is internal up to 2026.2 and public since 2026.3; its gate recognises PhpStorm's breakpoint
+# registration by the handler's class, internal since 2026.3.
+com.jetbrains.php.debug.template.PhpTemplateLanguagePathMapper in PhaenonDebugPathMapper
+com.jetbrains.php.debug.common.PhpLineBreakpointHandler in PhaenonDebugPathMapper
+
+# The docblock stub on Enter is PhpStorm's, written by its Enter delegate, which the plugin's runs
+# first and then trims; the delegate is recognised by its class (internal since 2026.3).
+com.jetbrains.php.lang.editor.PhpEnterHandlerAdapter in PhaenonDocCommentEnterHandler

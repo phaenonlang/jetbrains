@@ -86,8 +86,10 @@ intellijPlatform {
     }
 
     pluginVerification {
-        // Fail on real compatibility problems and on API scheduled for removal, which a coming
-        // IDE drops. Internal API is reported, not failed on; see README.
+        // Fail on what breaks the plugin in an IDE of the range, or soon will (API scheduled for
+        // removal). Internal API is reported and checked against verifier/internal-api.txt by
+        // verifyInternalApi below, which fails on any use the list does not name: the uses listed
+        // there have no public replacement (README, "Internal API").
         failureLevel = listOf(
             VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
             VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
@@ -108,6 +110,19 @@ intellijPlatform {
         }
     }
 }
+
+// The internal API uses of the Plugin Verifier's reports, one per used class and plugin class: "<API
+// class> in <plugin class>", the API class being the class itself or the one declaring the member.
+fun internalApiUses(report: File): Set<String> = report.readLines().filter { it.startsWith("Internal ") }.mapNotNull { line ->
+    val match = Regex("""^Internal (class|interface|annotation|enum|method|constructor|field) (\S+).*? in (?:class )?dev\.phaenon\.jetbrains\.([A-Za-z0-9_]+)""").find(line)
+        ?: return@mapNotNull "unparsed: $line"
+    val (kind, element, user) = match.destructured
+    val api = when (kind) {
+        "class", "interface", "annotation", "enum" -> element
+        else -> element.substringBefore('(').substringBeforeLast('.')
+    }
+    "$api in $user"
+}.toSet()
 
 // CHANGELOG.md's newest entry (from its first "## " heading to the next) as the HTML the Marketplace
 // shows: release-please's Markdown is headings, bullets of "**scope:** subject ([sha](url))" and
@@ -156,6 +171,37 @@ tasks.withType<PrepareSandboxTask>().configureEach {
     from(layout.projectDirectory.dir("textmate")) {
         into(pluginName.map { "$it/textmate" })
     }
+}
+
+// Fails when the Plugin Verifier saw internal API that verifier/internal-api.txt does not name, in any IDE it
+// verified against. Runs after verifyPlugin, on the reports of this version.
+val verifyInternalApi by tasks.registering {
+    group = "verification"
+    description = "Fails on internal API uses that verifier/internal-api.txt does not name."
+    val listed = layout.projectDirectory.file("verifier/internal-api.txt")
+    val reports = layout.buildDirectory.dir("reports/pluginVerifier")
+    val version = project.version.toString()
+    val pluginDir = "plugins/dev.phaenon.jetbrains/$version"
+    inputs.file(listed)
+    doLast {
+        val allowed = listed.asFile.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.toSet()
+        val ides = reports.get().asFile.listFiles().orEmpty().filter { it.resolve(pluginDir).isDirectory }.sortedBy { it.name }
+        if (ides.isEmpty()) throw GradleException("No Plugin Verifier reports of $version under ${reports.get().asFile}: run verifyPlugin")
+        val unlisted = ides.flatMap { ide ->
+            val report = ide.resolve("$pluginDir/internal-api-usages.txt")
+            val uses = if (report.isFile) internalApiUses(report) else emptySet()
+            (uses - allowed).map { "${ide.name}: $it" }
+        }
+        if (unlisted.isNotEmpty()) {
+            throw GradleException("Internal API that verifier/internal-api.txt does not name:\n  " + unlisted.joinToString("\n  "))
+        }
+        val used = ides.flatMap { ide -> ide.resolve("$pluginDir/internal-api-usages.txt").takeIf { it.isFile }?.let(::internalApiUses).orEmpty() }.toSet()
+        (allowed - used).forEach { logger.warn("verifier/internal-api.txt names an internal API use no verified IDE reports: $it") }
+    }
+}
+
+tasks.withType<VerifyPluginTask>().configureEach {
+    finalizedBy(verifyInternalApi)
 }
 
 tasks.test {
