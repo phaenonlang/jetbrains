@@ -86,14 +86,15 @@ intellijPlatform {
     }
 
     pluginVerification {
-        // Fail on real compatibility problems only. The one internal API we use
-        // (com.jetbrains.php.baseLexerProvider) has no public alternative; see README.
+        // Fail on real compatibility problems and on API scheduled for removal, which a coming
+        // IDE drops. Internal API is reported, not failed on; see README.
         failureLevel = listOf(
             VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
             VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
             VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
             VerifyPluginTask.FailureLevel.OVERRIDE_ONLY_API_USAGES,
             VerifyPluginTask.FailureLevel.NON_EXTENDABLE_API_USAGES,
+            VerifyPluginTask.FailureLevel.SCHEDULED_FOR_REMOVAL_API_USAGES,
         )
         ides {
             // The PhpStorm build the plugin is compiled against (platformVersion), already on disk.
