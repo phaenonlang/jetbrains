@@ -306,8 +306,9 @@ class PhaenonFormattingTest : BasePlatformTestCase() {
     }
 
     fun testErasedConstructsAreFormattedAroundAndNeverInside() {
-        // `Box <T>` → `Box<T>`, `) : T` → `): T`, `list<T>  $items` → `list<T> $items`, `$x   as   T` →
-        // `$x as T`, `new Box<U> (` → `new Box<U>(`; the text of each construct stays as written.
+        // `Box <T>` → `Box<T>`, `) : T` → `): T`, `list<T>  $items` → `list<T> $items`,
+        // `new Box<U> (` → `new Box<U>(`, and PHP's own `$x   instanceof   User` → `$x instanceof User`;
+        // the text of each construct stays as written.
         val file = myFixture.configureByFile("formatting/Erased.phn")
         val erased = erasedTexts(file)
 
