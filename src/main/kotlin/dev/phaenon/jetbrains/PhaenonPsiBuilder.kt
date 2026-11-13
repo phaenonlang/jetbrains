@@ -64,6 +64,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  * that block; its fence stands behind the `;` that ends the expression, where the lexer ends the
  * body's scope as well ([bodyEnd]), and the block is closed there, as the compiler's tree holds it.
  *
+ * **Skipping past an expression body.** PhpStorm skips a block before this builder parses it, by
+ * counting braces up to the `}` that answers the first (`StatementList.parseFast`), and the `{`
+ * of an arrow is one no `}` answers. Left to itself such a skip runs on past its block to the end
+ * of the input, for every expression body and for every block that holds one: a class of *n*
+ * expression bodies took *n* skips of the rest of the file. Nothing a skip passes is kept — its
+ * collapse is answered by parsing the block from its start ([Marker.collapse]) — so the builder
+ * ends it early: a skip that steps over an arrow's `{` finds the input ending where that
+ * expression body does ([skipStep]). A skip is told by how PhpStorm's parser drives the builder,
+ * as the rest is: it marks a `{`, steps over it, and uses no marker until it collapses that one.
+ * Were it to skip in another way, the skips would run on again and the trees stay right;
+ * `PhaenonTreeEqualityTest` counts the steps of a parse for that.
+ *
  * The empty token [PhaenonLexer] hands over before a method declared without a keyword,
  * [PhaenonTokenTypes.FUNCTION], is `function` to the parser: the builder answers its type as
  * PHP's keyword, and the leaf the platform builds of it is one ([PhaenonTokenTypes.FUNCTION]).
@@ -79,6 +91,16 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
     /** How many bodies are being parsed, one inside the other. */
     private var bodies = 0
 
+    /** The token the parser marked last, while it has used no marker since: where a skip may begin. -1 once it has. */
+    private var marked = -1
+
+    /** Whether the parser stepped over the `{` at [marked] and has only read on since: it is skipping a block, as far as can be told. */
+    private var skipping = false
+
+    /** Whether that skip has stepped over the `{` of an arrow and got its fence, and the fence it found standing, to put back ([settle]). */
+    private var skipFenced = false
+    private var fenceAroundSkip: End? = null
+
     /** How many of the markers handed out next are the parser's own around a body's statements. */
     private var wrappersToCome = 0
 
@@ -88,11 +110,15 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
     private val treeNotBuiltYet: ASTNode by lazy { ASTFactory.whitespace("") }
 
     override fun mark(): PsiBuilder.Marker {
-        if (wrappersToCome == 0) return Marker(super.mark(), wrapperOf = null)
+        settle()
+        val marker = super.mark()
+        // A marker starts at the token the parser reads next: the platform's builder passes whitespace and comments before it takes one.
+        marked = rawTokenIndex()
+        if (wrappersToCome == 0) return Marker(marker, wrapperOf = null)
         val type = PARSER_WRAPPERS[PARSER_WRAPPERS.size - wrappersToCome]
         wrappersToCome--
         wrappersOpen++
-        return Marker(super.mark(), wrapperOf = type)
+        return Marker(marker, wrapperOf = type)
     }
 
     override fun getTokenType(): IElementType? = if (atFence()) null else asParserSees(super.getTokenType())
@@ -102,7 +128,9 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
     override fun eof(): Boolean = atFence() || super.eof()
 
     override fun advanceLexer() {
-        if (!atFence()) super.advanceLexer()
+        if (atFence()) return
+        if (marked >= 0) skipStep()
+        super.advanceLexer()
     }
 
     /** No further than the fence. PhpStorm's parser does not advance by raw tokens; if it comes to, it stays in the body. */
@@ -116,7 +144,7 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
         if (fence == null) return asParserSees(super.lookAhead(steps))
         // What the parser would find after as many steps, none of which passes the fence.
         val here = super.mark()
-        repeat(steps) { advanceLexer() }
+        repeat(steps) { if (!atFence()) super.advanceLexer() }
         val type = tokenType
         here.rollbackTo()
         return type
@@ -145,6 +173,51 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
     private fun behindFence(steps: Int): Boolean = fence.let { it != null && rawTokenIndex() + steps >= it.index }
 
     /**
+     * A step of the parser's since it took a marker and used none: the place where a skip shows,
+     * and where it is kept from running on.
+     *
+     * PhpStorm's skip of a block (`StatementList.parseFast`) marks the block's `{`, steps over it
+     * and then only reads and steps, counting braces, until the `}` that answers the first or the
+     * end of the input; the marker is collapsed after that. A first step that is not over the
+     * marked `{` is no skip, and the builder stops looking until the next marker. A skip that
+     * steps over the `{` of an arrow — the one it began at, or the first inside the block it began
+     * at — has counted a brace nothing answers and would run to the end of the input: from here on
+     * the input ends for it where that expression body does. The block is parsed from its start
+     * once the skip's marker is collapsed, wherever the skip stopped, so the tree is the same.
+     *
+     * Parsing in earnest uses a marker before it has read far — a statement, an expression, an
+     * error each take one — and that lifts the fence ([settle]): were PhpStorm's parser to step
+     * over a marked `{` and an arrow's without skipping, it would have to read past the end of
+     * that expression body, with no marker in between, to see the input end there.
+     */
+    private fun skipStep() {
+        val type = super.getTokenType()
+        if (!skipping) {
+            if (type !== PhpTokenTypes.chLBRACE || rawTokenIndex() != marked) {
+                marked = -1
+                return
+            }
+            skipping = true
+        }
+        if (skipFenced || type !== PhpTokenTypes.chLBRACE || super.getTokenText() != ARROW_BRACE) return
+        fenceAroundSkip = fence
+        // On unfinished code nothing may end the expression body before the input ends: the skip
+        // then goes that far, as the body does, and looks for no other end on its way.
+        bodyEnd(arrow = true)?.let { fence = it }
+        skipFenced = true
+    }
+
+    /** The parser takes or uses a marker: it is not skipping a block, or its skip is over, and the fence of a skip goes. */
+    private fun settle() {
+        marked = -1
+        skipping = false
+        if (!skipFenced) return
+        skipFenced = false
+        fence = fenceAroundSkip
+        fenceAroundSkip = null
+    }
+
+    /**
      * Parses the block at the current token — a `{`, or the `{` an expression body's arrow is —
      * into a non-lazy group statement, with PhpStorm's parser between the block's ends.
      */
@@ -171,6 +244,8 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
             bodies--
             wrappersOpen = open
             wrappersToCome = outerToCome
+            // A parse PhpStorm gave up may have left a skip unfinished: its fence goes before the body's.
+            settle()
             fence = outerFence
         }
 
@@ -267,8 +342,10 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
         private val builder: PsiBuilder get() = this@PhaenonPsiBuilder
 
         override fun collapse(type: IElementType) {
+            settle()
             if (type === PhpElementTypes.GROUP_STATEMENT) {
-                // PhpStorm has skipped the block (StatementList.parseFast); go back and parse it.
+                // PhpStorm has skipped the block (StatementList.parseFast), or as much of it as the
+                // builder let it ([skipStep]); go back and parse it.
                 delegate.rollbackTo()
                 if (builder.tokenType === PhpTokenTypes.chLBRACE) {
                     parseBody()
@@ -304,6 +381,7 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
         }
 
         override fun done(type: IElementType) {
+            settle()
             if (wrapperOf == null) return delegate.done(type)
             wrappersOpen--
             if (type === wrapperOf) {
@@ -316,20 +394,21 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
             }
         }
 
-        override fun precede(): PsiBuilder.Marker = Marker(delegate.precede(), wrapperOf = null)
-        override fun drop() = delegate.drop()
-        override fun rollbackTo() = delegate.rollbackTo()
-        override fun error(message: String) = delegate.error(message)
+        // Every use of a marker ends what [skipStep] takes for a skip: PhpStorm's uses none while it skips.
+        override fun precede(): PsiBuilder.Marker = Marker(used().precede(), wrapperOf = null)
+        override fun drop() = used().drop()
+        override fun rollbackTo() = used().rollbackTo()
+        override fun error(message: String) = used().error(message)
 
-        override fun doneBefore(type: IElementType, before: PsiBuilder.Marker) = delegate.doneBefore(type, unwrap(before))
+        override fun doneBefore(type: IElementType, before: PsiBuilder.Marker) = used().doneBefore(type, unwrap(before))
         override fun doneBefore(type: IElementType, before: PsiBuilder.Marker, errorMessage: String) =
-            delegate.doneBefore(type, unwrap(before), errorMessage)
-        override fun errorBefore(message: String, before: PsiBuilder.Marker) = delegate.errorBefore(message, unwrap(before))
+            used().doneBefore(type, unwrap(before), errorMessage)
+        override fun errorBefore(message: String, before: PsiBuilder.Marker) = used().errorBefore(message, unwrap(before))
 
-        override fun doneBefore(type: IElementType, before: SyntaxTreeBuilder.Marker) = delegate.doneBefore(type, unwrap(before))
+        override fun doneBefore(type: IElementType, before: SyntaxTreeBuilder.Marker) = used().doneBefore(type, unwrap(before))
         override fun doneBefore(type: IElementType, before: SyntaxTreeBuilder.Marker, errorMessage: String) =
-            delegate.doneBefore(type, unwrap(before), errorMessage)
-        override fun errorBefore(message: String, before: SyntaxTreeBuilder.Marker) = delegate.errorBefore(message, unwrap(before))
+            used().doneBefore(type, unwrap(before), errorMessage)
+        override fun errorBefore(message: String, before: SyntaxTreeBuilder.Marker) = used().errorBefore(message, unwrap(before))
 
         override fun setCustomEdgeTokenBinders(left: WhitespacesAndCommentsBinder?, right: WhitespacesAndCommentsBinder?) =
             delegate.setCustomEdgeTokenBinders(left, right)
@@ -341,6 +420,11 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
         override fun getEndIndex(): Int = delegate.endIndex
         override fun getErrorMessage(): String? = delegate.errorMessage
         override fun isCollapsed(): Boolean = delegate.isCollapsed
+
+        private fun used(): PsiBuilder.Marker {
+            settle()
+            return delegate
+        }
 
         private fun unwrap(marker: SyntaxTreeBuilder.Marker): PsiBuilder.Marker =
             if (marker is Marker) marker.delegate else marker as PsiBuilder.Marker

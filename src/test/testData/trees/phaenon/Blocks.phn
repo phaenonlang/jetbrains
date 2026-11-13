@@ -1,0 +1,109 @@
+namespace App\Trees;
+
+interface Shape
+{
+    area(): float;
+}
+
+trait Named
+{
+    name(): string => static::class;
+}
+
+enum Suit: string
+{
+    case Hearts = 'h';
+    case Spades = 's';
+
+    label(): string => match ($this) {
+        Suit::Hearts => 'hearts',
+        Suit::Spades => 'spades',
+    };
+
+    static of(string $s): self => self::from($s);
+}
+
+abstract class Blocks implements Shape
+{
+    use Named;
+
+    public int $hooked = 1 {
+        get => $this->hooked + 1;
+        set(int $value) {
+            $this->hooked = $value;
+        }
+    }
+
+    public string $short { get => $this->name(); }
+
+    plain(): int => 1;
+
+    closure(): \Closure => function (int $x) use (&$y): int {
+        $y = $x;
+        if ($x) {
+            return 1;
+        }
+
+        return $x + 1;
+    };
+
+    arrow(): \Closure => fn (int $x): int => $x + 1;
+
+    arrows(): \Closure => fn (int $x) => fn (int $y) => [$x => $y];
+
+    matched(int $x): string => match (true) {
+        $x > 1 => 'many',
+        default => (function () { return 'one'; })(),
+    };
+
+    heredoc(string $n): string => <<<TXT
+        Hello {$n}; not the end; { nor this }
+        TXT;
+
+    nowdoc(): string => <<<'TXT'
+        ; { ; }
+        TXT;
+
+    interpolated(string $n): string => "a{$n}b${n}c" . "{$this->plain()};";
+
+    log(string $m): void => print("x {$m}; y");
+
+    fail(): never => throw new \LogicException('no; way');
+
+    anonymous(): object => new class (1) {
+        __construct(private int $n) {}
+
+        count(): int => $this->n;
+
+        inner(): \Closure => function () { return new class { deep(): int => 2; }; };
+    };
+
+    braces(): object {
+        $first = new class {
+            one(): int => 1;
+
+            two(): int { return 2; }
+
+            three(): int => 3;
+        };
+        try {
+            return new class { four(): int => 4; };
+        } finally {
+            unset($first);
+        }
+    }
+
+    abstract area(): float;
+
+    protected static last(): int => 5;
+}
+
+function twice(int $x): int => $x * 2;
+
+function outer(): \Closure {
+    function declared(): int => 6;
+
+    return fn (): int => declared();
+}
+
+function generated(): \Generator => yield from [1, 2];
