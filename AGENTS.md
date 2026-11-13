@@ -12,10 +12,13 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ./gradlew buildPlugin    # → build/distributions/phaenon-jetbrains-<version>.zip
 ./gradlew verifyPlugin   # JetBrains Plugin Verifier across the declared range, then verifyInternalApi
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
-./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # tests against an installed, newer IDE
+./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # build and test against an installed, newer IDE
+./gradlew testInIde -PtestInIdePath=/path/to/PhpStorm/Contents     # the suite inside another IDE, the plugin as platformVersion builds it
 
 PHAENON_TREES=/path/to/a/phaenon/project:/path/to/another \
   ./gradlew test --tests '*RealTree*'   # parse every .phn of any Phaenon trees named; skipped when unset
+PHAENON_PHP_TREES=/path/to/a/php/project/vendor \
+  ./gradlew test --tests '*TreeEquality*'   # the PHP files there (open tag first, no other tag) as .phn: their trees must be PhpStorm's; skipped when unset
 PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'   # the line map against a real Xdebug over DBGp; skipped when unset
 PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # Reformat Code with phn fmt --stdin, on the compiler's format goldens
 ```
@@ -87,18 +90,29 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   per tree: files, files with syntax errors, errors, stub mismatches, files skipped for PHP syntax
   the IDE's level lacks. Run it after every lexer or builder change; a `.phn` the compiler parses
   (`../phaenon/bin/phn check`) and PhpStorm does not is a plugin bug unless plain PHP fails alike
-  (the test checks that itself and lists such files instead of counting them). A change that
+  (the test checks that itself and lists such files instead of counting them).
+  `PhaenonTreeEqualityTest` is the other half: PHP that reads the same with and without its open
+  tag (`testData/trees`, and the files under `PHAENON_PHP_TREES`) must parse, as a `.phn`, into
+  the tree PhpStorm builds of the `.php`, and its Phaenon file (`testData/trees/phaenon`: erasures
+  and expression bodies in bodies in bodies) without an error and without a lazy node; the shapes
+  of broken code known to differ are pinned in `testData/trees/differing`. `PhaenonPsiBuilder`
+  parses a body by running PhpStorm's parser again on the builder between the body's braces, which
+  rests on how that parser drives a builder and on no API (README § Internal API): this test is
+  what fails when a PhpStorm build changes it, with `PhaenonD18Test`, `PhaenonMethodsTest` and
+  `PhaenonSyntaxTest` for what only Phaenon has in a body. So run the whole suite with `testInIde`
+  against every new PhpStorm line and EAP (those four for a quick look), and after every builder
+  change. A change that
   alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
   `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update
   (README § How it works).
 - Known limits (README § Limitations): `type` aliases are erased whole, type arguments of user
   generics are dropped, tuples type as element-array unions, a partial application is also its
   callee's result to PhpStorm; the implied `strict_types` is not modelled; the lexer, the editor
-  colouring (`com.jetbrains.php.baseLexerProvider`), the parsing of bodies, debugging
-  (`PhpTemplateLanguagePathMapper`, `com.intellij.php.debug.templateLanguage`) and the docblock stub
-  on Enter use internal API of the PHP plugin, each use named in `verifier/internal-api.txt` with
-  its reason (README § Internal API): a new one fails `verifyPlugin` until it has a public
-  replacement or a line there; the Frames list labels a compiled frame with the compiled name and line. Code a feature inserts is laid out
+  colouring (`com.jetbrains.php.baseLexerProvider`) and debugging
+  (`PhpTemplateLanguagePathMapper`, `com.intellij.php.debug.templateLanguage`) use internal API of
+  the PHP plugin, each use named in `verifier/internal-api.txt` with its reason (README § Internal
+  API; WI-86457 is the request to make the first two public): a new one fails `verifyPlugin` until
+  it has a public replacement or a line there; the Frames list labels a compiled frame with the compiled name and line. Code a feature inserts is laid out
   by PhpStorm's formatter, as in PHP: insert it unformatted and let the reformatting that follows
   the command do it. A test of behaviour only a newer PhpStorm than the floor has returns early
   on the floor and runs with `-PtestIdePath`.
