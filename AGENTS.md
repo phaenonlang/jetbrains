@@ -18,7 +18,7 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 PHAENON_TREES=/path/to/a/phaenon/project:/path/to/another \
   ./gradlew test --tests '*RealTree*'   # parse every .phn of any Phaenon trees named; skipped when unset
 PHAENON_PHP_TREES=/path/to/a/php/project/vendor \
-  ./gradlew test --tests '*TreeEquality*'   # every PHP file there as a .phn: its tree must be PhpStorm's; skipped when unset
+  ./gradlew test --tests '*TreeEquality*'   # the PHP files there (open tag first, no other tag) as .phn: their trees must be PhpStorm's; skipped when unset
 PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'   # the line map against a real Xdebug over DBGp; skipped when unset
 PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # Reformat Code with phn fmt --stdin, on the compiler's format goldens
 ```
@@ -92,12 +92,16 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   (`../phaenon/bin/phn check`) and PhpStorm does not is a plugin bug unless plain PHP fails alike
   (the test checks that itself and lists such files instead of counting them).
   `PhaenonTreeEqualityTest` is the other half: PHP that reads the same with and without its open
-  tag (`testData/trees`, and every file under `PHAENON_PHP_TREES`) must parse, as a `.phn`, into
-  the tree PhpStorm builds of the `.php`. `PhaenonPsiBuilder` parses a body by running PhpStorm's
-  parser again on the builder between the body's braces, which rests on how that parser drives a
-  builder and on no API (README § Internal API): this test is what fails when a PhpStorm build
-  changes it, so run it with `testInIde` against every new PhpStorm line and EAP, and after every
-  builder change. A change that
+  tag (`testData/trees`, and the files under `PHAENON_PHP_TREES`) must parse, as a `.phn`, into
+  the tree PhpStorm builds of the `.php`, and its Phaenon file (`testData/trees/phaenon`: erasures
+  and expression bodies in bodies in bodies) without an error and without a lazy node; the shapes
+  of broken code known to differ are pinned in `testData/trees/differing`. `PhaenonPsiBuilder`
+  parses a body by running PhpStorm's parser again on the builder between the body's braces, which
+  rests on how that parser drives a builder and on no API (README § Internal API): this test is
+  what fails when a PhpStorm build changes it, with `PhaenonD18Test`, `PhaenonMethodsTest` and
+  `PhaenonSyntaxTest` for what only Phaenon has in a body. So run the whole suite with `testInIde`
+  against every new PhpStorm line and EAP (those four for a quick look), and after every builder
+  change. A change that
   alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
   `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update
   (README § How it works).

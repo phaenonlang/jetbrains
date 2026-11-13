@@ -367,14 +367,19 @@ then. It takes the options and the variables of `test`:
 
 ```bash
 ./gradlew testInIde -PtestInIdePath=/Applications/PhpStorm.app/Contents
-./gradlew testInIde -PtestInIdePath=/path/to/PhpStorm-EAP/Contents --tests '*TreeEquality*'
+./gradlew testInIde -PtestInIdePath=/path/to/PhpStorm-EAP/Contents \
+  --tests '*TreeEquality*' --tests '*D18*' --tests '*Methods*' --tests '*Syntax*'
 ```
 
-Run it for every new PhpStorm line, its EAP builds included: the parsing of bodies rests on how
-PhpStorm's parser works, not on an API ([Internal API](#internal-api)), and
-`PhaenonTreeEqualityTest` is what tells when that has changed. `PHAENON_PHP_TREES` gives it volume:
-every PHP file under the directories named is parsed as a `.php` and as a `.phn`, and the two trees
-must be one.
+Run the first, the whole suite, for every new PhpStorm line, its EAP builds included: the parsing
+of bodies rests on how PhpStorm's parser works, not on an API ([Internal API](#internal-api)). The
+second is the short form, the suites that tell when that has changed. `PhaenonTreeEqualityTest`
+compares the trees of PHP with PhpStorm's own and holds a Phaenon file whose bodies must parse with
+the file, without an error and without a lazy node; the other three have the expression bodies, the
+methods without a keyword and the erasures in bodies that no PHP has. `PHAENON_PHP_TREES` gives the
+comparison volume: each file under the directories named that begins with `<?php` and has no other
+tag in it — a tag in a string or a comment counts — is parsed as a `.php` and as a `.phn` under the
+IDE's highest language level, and the two trees must be one. The report counts the files left out.
 
 ```bash
 PHAENON_PHP_TREES=/path/to/a/php/project/vendor:/path/to/another ./gradlew test --tests '*TreeEquality*'
@@ -416,10 +421,17 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   anonymous classes, `try`, `match`, heredocs, interpolation, attributes, enums, property hooks,
   functions declared in functions, braced namespaces, inline HTML — and `testData/trees/broken` is
   code as it stands while it is typed: braces missing and left over, statements cut short, a file
-  that ends in a body. The same holds under every language level from PHP 8.0 up, and for every
-  PHP file under `PHAENON_PHP_TREES`. It is the guard of the way bodies are parsed
-  ([Internal API](#internal-api)); its class comment names the two shapes of broken code whose
-  trees are known to differ.
+  that ends in a body. The same holds under every language level from PHP 8.0 up, and for the
+  PHP files under `PHAENON_PHP_TREES` ([Build](#build) says which). `testData/trees/phaenon` is the
+  Phaenon file of the guard: erased types, calls with type arguments, anonymous classes with
+  methods without a keyword and expression bodies, in bodies in bodies, parse without an error
+  and without a node parsed on demand (doc comments apart, of any type), which PHP alone would not
+  tell where PhpStorm stops collapsing bodies as the builder expects. `testData/trees/differing`
+  holds the three shapes of broken code whose trees are known not to be PhpStorm's, named in the
+  class comment, and the test asserts each difference, so that a PhpStorm that ends one is
+  noticed. Below PHP 8.0 a `#[` on a body's last line ends its parse (PhpStorm reads it as a
+  comment there, in a loop that must see the input end at the body's end). It is the guard of the
+  way bodies are parsed ([Internal API](#internal-api)).
 - `PhaenonErasedTypesTest`: erased declarations get their types (`list<User>` and
   `map<string, User>` as `User[]`, `bytes` as `string`, tuples, `class<User>`, closure signatures,
   type parameters); `[0]` and `foreach` yield the element type; a method call on a `string`, a
@@ -637,6 +649,18 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   tags). Its quick-fixes add `@throws` tags, not clause members. PhpStorm highlights a wrong
   expression body's value from the arrow's `>` on, the statement it stands for. A clause naming a
   type parameter is taken to cover any exception.
+- **Bodies are PhpStorm's from PHP 8.0 up.** Below it PhpStorm's parser reads `#[` as a comment to
+  the end of its line and an `fn` it has skipped over as a name, and a body of a `.phn` then differs
+  from the same body of a `.php` (`PhaenonTreeEqualityTest`). Phaenon's floor is PHP 8.5; a project
+  whose language level is older has more to put right than this.
+- **An expression body costs PhpStorm's parser a scan to the end of its class.** The arrow reaches
+  the parser as `{`, PhpStorm skips a body by counting braces before the plugin parses it, and no
+  `}` answers that one: the skip runs past the class's brace, to the end of the body around it or
+  of the file, for each expression body of a class but its last. The plugin rolls it back, so the tree is right; a
+  file of many expression bodies is parsed in time that grows with their number times its
+  length, on every edit. It was so before the bodies were parsed by PhpStorm's parser. A token of
+  no length for the missing `}`, handed over by the lexer as the `function` of a method without a
+  keyword is, would end it; nothing does yet.
 - **An expression body takes no second statement.** It is a block of one statement to PhpStorm,
   closed where the source has no `}`, so a refactoring that adds a statement to the body —
   Introduce Variable on part of the expression — writes it between the arrow's two characters and
@@ -752,8 +776,8 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   one highlighter, keyed by the file type).
   [WI-86457](https://youtrack.jetbrains.com/issue/WI-86457) asks for them as public API, and the
   answer there is that the lexer, the provider interface and the extension point become public in
-  a PhpStorm build to come; until one has them so, they are internal API in every IDE of the
-  range. The debugger's mapper and the breakpoint handler its gate recognises (above) are the
+  a PhpStorm build to come. Until one has them so, the Plugin Verifier reports the provider in
+  every IDE of the range and the lexer in 2026.3, the first build that marks it. The debugger's mapper and the breakpoint handler its gate recognises (above) are the
   rest: the mapper is public since 2026.3, the handler stays internal.
   `verifier/internal-api.txt` names each of these uses with its reason, and `verifyInternalApi`
   fails on any other the Plugin Verifier reports in an IDE of the range, and on a line there that
@@ -768,10 +792,11 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   nothing promises: it rests on how PhpStorm's parser drives a builder — that it collapses a body
   into `GROUP_STATEMENT` on a marker starting at its `{`, opens two markers and no other before
   its statements, and stops at the end of the input — and JetBrains says of it that it is not a
-  contract. A change there would give a body a wrong tree and no error;
-  `PhaenonTreeEqualityTest` is what turns it into a failure, by comparing the trees of `.phn`
-  files with PhpStorm's own of the same PHP, so it is run against every new PhpStorm build
-  ([Build](#build), `testInIde`).
+  contract. A change there would give a body a wrong tree and possibly no error: the builder logs
+  the changes it can tell (a marker that is not one of the two, a block skipped that does not begin
+  with a brace) and no other. `PhaenonTreeEqualityTest` is what turns it into a failure, by
+  comparing the trees of `.phn` files with PhpStorm's own of the same PHP and by a Phaenon file of
+  its own, so it is run against every new PhpStorm build ([Build](#build), `testInIde`).
   Should one of these classes change, the build against the new PhpStorm and the verifier say so;
   the extension point going would leave parsing and every analysis feature working and regress the
   editor colouring of `.phn` files alone. Everything else goes through public API.
