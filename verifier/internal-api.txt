@@ -20,7 +20,3 @@ com.jetbrains.php.lang.lexer.PhpBaseLexerProvider in PhaenonBaseLexerProvider
 # registration by the handler's class, internal since 2026.3.
 com.jetbrains.php.debug.template.PhpTemplateLanguagePathMapper in PhaenonDebugPathMapper
 com.jetbrains.php.debug.common.PhpLineBreakpointHandler in PhaenonDebugPathMapper
-
-# The docblock stub on Enter is PhpStorm's, written by its Enter delegate, which the plugin's runs
-# first and then trims; the delegate is recognised by its class (internal since 2026.3).
-com.jetbrains.php.lang.editor.PhpEnterHandlerAdapter in PhaenonDocCommentEnterHandler

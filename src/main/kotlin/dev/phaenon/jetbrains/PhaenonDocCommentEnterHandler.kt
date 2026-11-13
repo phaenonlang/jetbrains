@@ -15,7 +15,6 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtilCore
 import com.jetbrains.php.lang.documentation.phpdoc.lexer.PhpDocTokenTypes
 import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocComment
-import com.jetbrains.php.lang.editor.PhpEnterHandlerAdapter
 import com.jetbrains.php.lang.psi.PhpPsiUtil
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.Function
@@ -34,17 +33,20 @@ import com.jetbrains.php.lang.psi.elements.PhpNamedElement
  *
  * This delegate runs ahead of PhpStorm's PHP enter handler (`phpEnterHandler`), and only where
  * that handler would generate a stub (the caret right after the opening of a comment with nothing in
- * it yet): it hands the Enter to PhpStorm's registered delegate, which writes the stub as it always
- * does, then deletes the line of every `@param` of a parameter with a type, native or erased, the
- * `@return` of a function with a return type, and the `@var` of a typed property. Untyped
- * parameters keep PhpStorm's tags, as does whatever else PhpStorm adds, a `@throws` too unless the
- * signature's `throws` clause names its exception. A stub of one line or none is one line, whatever
- * it documents (design/functions.md §5): `/** <caret> */`, or `/** @param $raw */` with the caret
- * after the tag.
+ * it yet): it asks the delegates registered after it, in the platform's order and as the platform
+ * would, PhpStorm's among them, which writes the stub as it always does; then it deletes the line
+ * of every `@param` of a parameter with a type, native or erased, the `@return` of a function with
+ * a return type, and the `@var` of a typed property. Untyped parameters keep PhpStorm's tags, as
+ * does whatever else PhpStorm adds, a `@throws` too unless the signature's `throws` clause names
+ * its exception. A stub of one line or none is one line, whatever it documents
+ * (design/functions.md §5): `/** <caret> */`, or `/** @param $raw */` with the caret after the tag.
  *
- * Calling the registered delegate, rather than the class that writes the stub, keeps the plugin
- * working where PhpStorm moved that work: 2025.3 writes it in `PhpDocEnterHandler`, 2026.2 in a
- * backend subclass the adapter picks (`BackendPhpDocEnterHandler`).
+ * Asking the delegates through their interface, and none by its class, needs nothing of PhpStorm
+ * but that one of them writes the stub, and keeps working where PhpStorm moves that work: 2025.3
+ * writes it in `PhpDocEnterHandler`, 2026.2 in a backend subclass its delegate picks
+ * (`BackendPhpDocEnterHandler`). Taking the platform's round over for the rest of the delegates is
+ * what [preprocessEnter] answers for: each is asked once, and what the first of them decides is
+ * what the platform is told.
  */
 class PhaenonDocCommentEnterHandler : EnterHandlerDelegateAdapter() {
 
@@ -68,13 +70,23 @@ class PhaenonDocCommentEnterHandler : EnterHandlerDelegateAdapter() {
 
         val start = PsiTreeUtil.getParentOfType(elementAt, PhpDocComment::class.java, false)?.textRange?.startOffset
             ?: return EnterHandlerDelegate.Result.Continue
-        val php = EnterHandlerDelegate.EP_NAME.extensionList.firstOrNull { it is PhpEnterHandlerAdapter }
-            ?: return EnterHandlerDelegate.Result.Continue
-        val result = php.preprocessEnter(file, editor, caretOffset, caretAdvance, dataContext, originalHandler)
-        if (result != EnterHandlerDelegate.Result.Stop) return result
-        PsiDocumentManager.getInstance(project).commitDocument(document)
-        dropRedundantTags(file, editor, start)
-        return EnterHandlerDelegate.Result.Stop
+        val delegates = EnterHandlerDelegate.EP_NAME.extensionList
+        val own = delegates.indexOf(this)
+        if (own < 0) return EnterHandlerDelegate.Result.Continue
+        // The rest of the platform's round (EnterHandler): the first delegate that does not pass the Enter on decides.
+        for (next in delegates.subList(own + 1, delegates.size)) {
+            val result = next.preprocessEnter(file, editor, caretOffset, caretAdvance, dataContext, originalHandler)
+            if (result == EnterHandlerDelegate.Result.Continue) continue
+            if (result == EnterHandlerDelegate.Result.Stop) {
+                PsiDocumentManager.getInstance(project).commitDocument(document)
+                dropRedundantTags(file, editor, start)
+            }
+            return result
+        }
+        // Every delegate has passed the Enter on. `Continue` would have the platform ask each of them
+        // a second time; `Default` ends its round where it would have ended, with the Enter it types
+        // after a round nobody stopped, and nothing forced about the indent.
+        return EnterHandlerDelegate.Result.Default
     }
 
     /** The caret right after the comment's opening, nothing after it: where PhpStorm generates a stub. */
@@ -89,6 +101,8 @@ class PhaenonDocCommentEnterHandler : EnterHandlerDelegateAdapter() {
 
     private fun dropRedundantTags(file: PsiFile, editor: Editor, start: Int) {
         val comment = PsiTreeUtil.findElementOfClassAtOffset(file, start, PhpDocComment::class.java, false) ?: return
+        // A stub closes the comment. A delegate that stopped the Enter and left the comment open wrote none: nothing to trim.
+        if (PsiUtilCore.getElementType(comment.lastChild) !== PhpDocTokenTypes.DOC_COMMENT_END) return
         val redundant = ArrayList<PsiElement>()
         when (val owner = documented(comment)) {
             is Function -> {

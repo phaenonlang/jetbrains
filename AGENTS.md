@@ -104,9 +104,9 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
 - Known limits (README § Limitations): `type` aliases are erased whole, type arguments of user
   generics are dropped, tuples type as element-array unions, a partial application is also its
   callee's result to PhpStorm; the implied `strict_types` is not modelled; the lexer, the editor
-  colouring (`com.jetbrains.php.baseLexerProvider`), debugging
-  (`PhpTemplateLanguagePathMapper`, `com.intellij.php.debug.templateLanguage`) and the docblock stub
-  on Enter use internal API of the PHP plugin, each use named in `verifier/internal-api.txt` with its reason (README § Internal
+  colouring (`com.jetbrains.php.baseLexerProvider`) and debugging
+  (`PhpTemplateLanguagePathMapper`, `com.intellij.php.debug.templateLanguage`) use internal API of
+  the PHP plugin, each use named in `verifier/internal-api.txt` with its reason (README § Internal
   API; WI-86457 is the request to make the first two public): a new one fails `verifyPlugin` until
   it has a public replacement or a line there; the Frames list labels a compiled frame with the compiled name and line. Code a feature inserts is laid out
   by PhpStorm's formatter, as in PHP: insert it unformatted and let the reformatting that follows
