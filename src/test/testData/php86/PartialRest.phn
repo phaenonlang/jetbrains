@@ -1,5 +1,25 @@
 namespace App;
 
+function label(string $prefix, string $value): string {
+    return $prefix . $value;
+}
+
+function frame(string $open, string $body, string $close): string {
+    return $open . $body . $close;
+}
+
+function framed(string $open, string $body, string $close = ']'): string {
+    return $open . $body . $close;
+}
+
+function joined(string $glue, string $first, string ...$rest): string {
+    return $first . $glue . implode($glue, $rest);
+}
+
+function take(\Closure $c): int {
+    return 1;
+}
+
 final class Meter
 {
     public static round(float $value, int $precision): float {
@@ -18,11 +38,31 @@ final class Ruler
     }
 }
 
+const LABELLED = label('✓ ', ...);
+
 final class Rests
 {
-    run(Meter $meter, string $ns): void {
+    const LABEL = label('✓ ', ...);
+
+    run(Meter $meter, string $ns, float $ratio): void {
+        $function = label('✓ ', ...);
         $method = $meter->scale(2, ...);
         $static = Meter::round(1.5, ...);
         $width = $ns |> Ruler::width(2, ...);
+        $line = $ns |> label('✓ ', ...);
+        $nested = take(label('✓ ', ...));
+        $named = label(value: 'x', ...);
+        $mixed = label(?, ...);
+        $frame = frame('[', ...);
+        $methodStage = $ratio |> $meter->scale(2, ...);
+        $optionalLeft = $ns |> framed('[', ...);
+        $variadicLeft = $ns |> joined('-', ...);
+        $parenthesised = $ns |> (label('» ', ...));
+        $invoked = label('› ', ...)('x');
+        $invokedWithTwo = frame('<', ...)('x', '>');
+        $multiLine = label(
+            '✓ ',
+            ...
+        );
     }
 }

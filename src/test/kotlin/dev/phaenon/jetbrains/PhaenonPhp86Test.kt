@@ -125,21 +125,79 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
         assertTrue("a call of the mixed form's closure", "\\string" in types["mixedCalled"]!!)
     }
 
-    fun testMethodsAndPipeStagesTakeATrailingPlaceholder() = atEachLevel { level ->
-        myFixture.configureByFiles("php86/PartialRest.phn")
+    fun testATrailingPlaceholderStandsForTheRequiredParametersLeft() {
+        // Up to 2026.2 the call is a call with a spread to PhpStorm, which counts its arguments:
+        // "Required parameter '$value' missing" for each `...` here, on either target. The
+        // compiler lowers all of them for 8.5. A closure called at once gets what it needs: a
+        // pipe stage one argument for its one parameter, `frame('<', ...)('x', '>')` two.
+        for (target in listOf(PhaenonTarget.PHP85, PhaenonTarget.PHP86)) {
+            if (target == PhaenonTarget.PHP86) myFixture.addFileToProject("phaenon.json", """{"php": "8.6"}""")
+            atEachLevel { level ->
+                myFixture.configureByFiles("php86/PartialRest.phn")
 
-        assertEmpty(level.name, syntaxErrors())
-        if (PhaenonPartialApplication.phpStormParsesPlaceholders) {
-            assertEmpty(level.name, findings())
-        } else {
-            // Up to 2026.2 the call is a call with a spread to PhpStorm, which misses the argument
-            // `...` stands for: "Required parameter '$value' missing", a known defect of its own.
-            assertSameElements(level.name, findings().map { it.substringAfter(" @") }, listOf("'(2, ...)'", "'(1.5, ...)'", "'(2, ...)'"))
+                assertEquals(target, PhaenonTarget.of(myFixture.file))
+                assertEmpty("$target ${level.name}", syntaxErrors())
+                assertEmpty("$target ${level.name}", findings())
+            }
         }
         val types = assignedTypes()
+        assertPartial(types, "function", listOf("\\string"), "\\string")
         assertPartial(types, "method", listOf("\\float"), "\\float")
         assertPartial(types, "static", listOf("\\int"), "\\float")
+        assertPartial(types, "named", listOf("\\string"), "\\string")
+        assertPartial(types, "mixed", listOf("\\string", "\\string"), "\\string")
+        assertPartial(types, "frame", listOf("\\string", "\\string"), "\\string")
         assertEquals("a pipe stage, the call it becomes", listOf("\\int"), types["width"])
+        assertEquals("a function stage, the call it becomes", listOf("\\string"), types["line"])
+    }
+
+    fun testACallThatLacksAnArgumentKeepsItsFinding() = atEachLevel { level ->
+        myFixture.configureByFiles("php86/PartialMissing.phn")
+
+        // A call without placeholders, around a partial application, inside one or alone, lacks
+        // its argument in every build. Up to 2026.2 PhpStorm says so as well of a partial
+        // application that PHP rejects, if in the words of the call: without a trailing `...`
+        // (`label(?)`, "expects exactly 2 arguments"), with a `...` that is not last, through
+        // `new` or `?->`; and of one whose closure is called at once with fewer arguments than it
+        // needs (`ArgumentCountError`): a pipe stage given one of two, `label('◇ ', ...)()` none of
+        // one. None goes. 2026.3 parses them as partial applications: it reports the pipe stages
+        // and `?->` otherwise and a closure called at once on that call.
+        val missing = mutableListOf(
+            missing("\$value", "'('✓ ')'"),
+            missing("\$body, \$close", "'('[')'"),
+            missing("\$c", "'()'"),
+            missing("\$value", "'(take(label('✓ ', ...)))'"),
+            missing("\$value", "'('◦ ')'"),
+        )
+        if (PhaenonPartialApplication.phpStormParsesPlaceholders) {
+            missing += missing("\$value", "'()'")
+            missing += missing("\$close", "'('x')'")
+            missing += missing("\$body", "'(close: '»')'")
+        } else {
+            missing += missing("\$value", "'(?)'")
+            missing += missing("\$prefix", "'(..., value: 'x')'")
+            missing += missing("\$b", "'(1, ...)'")
+            missing += missing("\$body, \$close", "'('(', ...)'")
+            missing += missing("\$low, \$high", "'(1.0, ...)'")
+            missing += missing("\$value", "'(prefix: ?, ...)'")
+            missing += missing("\$value", "'(?, ...)'")
+            missing += missing("\$value", "'(3, ...)'")
+            missing += missing("\$value", "'('◇ ', ...)'")
+            missing += missing("\$body, \$close", "'('{', ...)'")
+            missing += missing("\$body, \$close", "'('«', ...)'")
+        }
+        val found = findings().filter(::isMissingArgument)
+        assertEquals(level.name, missing.size, missing.toSet().size)
+        assertSameElements(level.name, found, missing)
+    }
+
+    fun testATrailingPlaceholderInAPhpFileKeepsPhpStormsFindings() = atEachLevel { level ->
+        myFixture.configureByText("Rest.php", "<?php\nnamespace App;\n\nfunction label(string \$prefix, string \$value): string {\n    return \$prefix . \$value;\n}\n\n\$f = label('✓ ', ...);\n")
+
+        val found = findings().filter(::isMissingArgument)
+        // The `.phn` rule reaches no `.php`; 2026.3 parses the `...` itself and reports nothing.
+        if (PhaenonPartialApplication.phpStormParsesPlaceholders) assertEmpty(level.name, found)
+        else assertSameElements(level.name, found, listOf(missing("\$value", "'('✓ ', ...)'")))
     }
 
     fun testAPipeStageIsTypedAsTheCallItBecomes() {
@@ -236,6 +294,20 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
     private fun findings(): List<String> = myFixture.doHighlighting()
         .filter { it.severity.myVal >= HighlightSeverity.WEAK_WARNING.myVal }
         .map { "${it.description} @'${it.text}'" }
+
+    /** PhpStorm's "Required parameter '{0}' missing" and its plural, around the names. */
+    private val MISSING: List<Pair<String, String>> by lazy {
+        listOf("inspection.missing_param", "required.parameters.missing")
+            .map { PhpBundle.message(it, "\u0000") }
+            .map { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
+    }
+
+    private fun isMissingArgument(finding: String): Boolean =
+        MISSING.any { (prefix, suffix) -> finding.startsWith(prefix) && finding.substringBefore(" @").endsWith(suffix) }
+
+    /** The finding PhpStorm writes for [names] missing at [anchor], in its words: singular or plural. */
+    private fun missing(names: String, anchor: String): String =
+        PhpBundle.message(if (", " in names) "required.parameters.missing" else "inspection.missing_param", names) + " @" + anchor
 
     /** [PhpLanguageFeature]'s message of the feature named, null where this PhpStorm has none. */
     private fun featureMessage(name: String): String? =

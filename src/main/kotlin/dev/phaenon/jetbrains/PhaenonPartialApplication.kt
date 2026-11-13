@@ -35,6 +35,9 @@ class PhaenonPartialApplication private constructor(
     private val variadic: Boolean,
 ) {
 
+    /** How many `?` placeholders, positional and named: each a required parameter of the closure. */
+    val placeholders: Int get() = positional.count { it } + named.count { it.second }
+
     /** `?b;name=?,other=b;v`: positional flags, named arguments, the variadic marker. */
     fun encode(): String =
         positional.joinToString("") { if (it) "?" else "b" } + ";" +
@@ -153,6 +156,24 @@ class PhaenonPartialApplication private constructor(
                 child = child.nextSibling
             }
             return if (any) PhaenonPartialApplication(positional, named, variadic) else null
+        }
+
+        /**
+         * Whether [call] is a partial application whose last argument is the trailing `...`, which
+         * stands for every parameter its other arguments leave (PHP 8.6): creating the closure
+         * lacks no argument, whatever it calls. Calling the closure is another matter: it takes
+         * the parameters the placeholders stand for. A `...` before another argument is no such
+         * call: PHP rejects it ("Variadic placeholder must be last").
+         */
+        @JvmStatic
+        fun takesTheRest(call: PsiElement): Boolean {
+            if (of(call) == null) return false
+            val list = PsiTreeUtil.getChildOfType(call, ParameterList::class.java) ?: return false
+            var last: PsiElement? = list.lastChild
+            while (last is PsiWhiteSpace || last is PsiComment || last != null && PsiUtilCore.getElementType(last) === PhpTokenTypes.opCOMMA) {
+                last = last.prevSibling
+            }
+            return isVariadicPlaceholder(last) || last != null && isPhpStormsPlaceholder(last) && last.textMatches("...")
         }
 
         private fun nextIsColon(element: PsiElement): Boolean {
