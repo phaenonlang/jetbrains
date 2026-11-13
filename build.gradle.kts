@@ -246,6 +246,11 @@ tasks.withType<Test>().configureEach {
     val trees = providers.environmentVariable("PHAENON_TREES").orElse("")
     inputs.property("phaenonTrees", trees)
     systemProperty("phaenon.trees", trees.get())
+    // PhaenonTreeEqualityTest compares, for every PHP file under the directories named by
+    // PHAENON_PHP_TREES (colon-separated), the tree of the file read as a .phn with PhpStorm's own.
+    val phpTrees = providers.environmentVariable("PHAENON_PHP_TREES").orElse("")
+    inputs.property("phaenonPhpTrees", phpTrees)
+    systemProperty("phaenon.phpTrees", phpTrees.get())
     // PhaenonXdebugTest drives a real Xdebug over DBGp: PHAENON_XDEBUG names the extension (loaded
     // with `php -n -d zend_extension=…` only), PHAENON_PHP the php binary (default `php`).
     val xdebug = providers.environmentVariable("PHAENON_XDEBUG").orElse("")

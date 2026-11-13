@@ -8,18 +8,12 @@
 # Reading a .phn as PHP code from its first byte. PhpStorm's own lexer for PHP without an open tag,
 # under the parser and under the editor's highlighter, which asks the baseLexerProvider extension
 # point for it (PHP's file type has one highlighter, keyed by the file type, not the file).
+# WI-86457 asks for them as public API, and the answer there is that they become public in a
+# PhpStorm build to come; a line goes when no IDE of the range reports it any more, which
+# verifyInternalApi says by failing on it.
 com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer in PhaenonLexer
 com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer in PhaenonBaseLexerProvider
 com.jetbrains.php.lang.lexer.PhpBaseLexerProvider in PhaenonBaseLexerProvider
-
-# Bodies parsed with the file, not lazily: PhpStorm reparses a lazy body with a lexer of its own,
-# which would undo the erasure inside it. The body is parsed there and then by PhpStorm's statement
-# parser, in the order PhpStorm's own expansion of a lazy block uses (PhaenonPsiBuilder).
-com.jetbrains.php.lang.parser.PhpPsiBuilder in PhaenonPsiBuilder
-com.jetbrains.php.lang.parser.parsing.Statement in PhaenonPsiBuilder
-com.jetbrains.php.lang.parser.parsing.Namespace in PhaenonPsiBuilder
-com.jetbrains.php.lang.parser.parsing.classes.ClassDeclaration in PhaenonPsiBuilder
-com.jetbrains.php.lang.parser.parsing.functions.Function in PhaenonPsiBuilder
 
 # Debugging .phn through PhpStorm's template debugging, the mechanism of Twig and Blade: the mapper
 # is internal up to 2026.2 and public since 2026.3; its gate recognises PhpStorm's breakpoint

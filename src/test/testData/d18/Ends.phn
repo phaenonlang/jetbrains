@@ -1,0 +1,63 @@
+namespace App;
+
+final class Ends<T of object>
+{
+    private list<T> $items = [];
+
+    plain(): int => 1;
+
+    closure(): \Closure => function (int $x) use (&$y): int {
+        $y = $x;
+        if ($x) {
+            return 1;
+        }
+
+        return $x + 1;
+    };
+
+    arrow(): \Closure => fn (int $x): int => $x + 1;
+
+    arrows(): \Closure => fn (int $x) => fn (int $y) => [$x => $y];
+
+    matched(int $x): string => match (true) {
+        $x > 1 => 'many',
+        default => (function () { return 'one'; })(),
+    };
+
+    heredoc(string $n): string => <<<TXT
+        Hello {$n}; not the end; { nor this }
+        TXT;
+
+    nowdoc(): string => <<<'TXT'
+        ; { ; }
+        TXT;
+
+    log(string $m): void => $this->logger->info("x {$m}; y");
+
+    fail(): never => throw new \LogicException('no; way');
+
+    anonymous(): object => new class (1) extends Base {
+        __construct(private int $n) {}
+
+        count(): int => $this->n;
+
+        inner(): \Closure => function () { return new class { deep(): int => 2; }; };
+    };
+
+    static of<U of object>(class<U> $c): static => new static($c);
+
+    &reference(): array => $this->items;
+
+    keyed(): array => ['a' => 1, 'b' => fn () => ['c' => 2]];
+
+    interpolated(): string => "a{$this->x}b" . `ls; ls`;
+
+    block(): int
+    {
+        return 2;
+    }
+}
+
+function twice(int $x): int => $x * 2;
+
+function generated(): \Generator => yield from [1, 2];

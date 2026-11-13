@@ -45,7 +45,7 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  *   or its return type, is erased whole, its names references like any erased type's; an expression
  *   body `=> expr;` is handed over as the block it compiles to, the arrow's two characters split into
  *   `{` and `return` (`{` and an erased `>` under `void` or `never`), and [PhaenonPsiBuilder] closes
- *   that block after its one statement, where the source has no `}`.
+ *   that block behind the `;` of its expression, where the source has no `}`.
  *
  * Not erased but added: a method declared without a keyword (design/functions.md §1.1, roadmap
  * D27), `[modifiers] [&]name[<…>](`, at the member level of a class, interface, trait or enum
@@ -397,7 +397,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
      * `=> expr;` in place of a named function's body (design/functions.md §3): the arrow's two
      * characters become `{` and `return` — the block the compiler writes — or `{` and an erased `>`
      * when the written return type is `void` or `never`, whose body is only evaluated.
-     * [PhaenonPsiBuilder] ends the block after the statement. An arrow function's `fn (…) =>` is no
+     * [PhaenonPsiBuilder] ends the block behind the expression's `;`. An arrow function's `fn (…) =>` is no
      * named function's header and stays PHP's.
      */
     private fun tryExpressionBody(c: Tok): Plan? {
