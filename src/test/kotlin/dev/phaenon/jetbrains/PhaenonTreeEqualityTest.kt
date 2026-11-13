@@ -10,6 +10,8 @@ import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
+import com.intellij.psi.PsiWhiteSpace
+import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.tree.ILazyParseableElementType
 import com.intellij.psi.util.PsiTreeUtil
@@ -43,6 +45,9 @@ import java.io.File
  * PHP has an erased type or an expression body. So the guard has a Phaenon file of its own,
  * `testData/trees/phaenon/Bodies.phn`: erasures and expression bodies in bodies in bodies, which
  * must parse without an error and without a lazy node, and to the declarations it declares.
+ * `Blocks.phn` beside it is compared with `Blocks.php`, the PHP its expression bodies stand for,
+ * and the steps of a parse are counted, since PhpStorm's skip of a block is ended by the builder
+ * where it meets an arrow's brace and would cost time, not a tree, if it no longer were.
  *
  * The two trees differ in what the comparison leaves out: the open tag and the line break after
  * it, the file's own node, and a body's node type — PhpStorm's lazy group statement in the `.php`,
@@ -179,6 +184,143 @@ class PhaenonTreeEqualityTest : BasePlatformTestCase() {
     }
 
     /**
+     * An expression body is the block it stands for, whatever its expression holds and wherever it
+     * stands: `testData/trees/phaenon/Blocks.phn` parses into the tree PhpStorm builds of
+     * `Blocks.php`, the same declarations with every `=> expr;` written as the block the compiler
+     * writes for it — `{ return expr; }`, `{ expr; }` under `void` and `never` — and every method
+     * with its `function`. The trees are compared by [shape], which leaves out what the two texts
+     * differ in. Closures, arrow functions, a `match`, heredocs, interpolations and anonymous
+     * classes stand in the expressions, with braces and `;` of their own; expression bodies stand
+     * in a trait, an enum, a class beside property hooks and an abstract method, in anonymous
+     * classes inside expression bodies and inside blocks (a method's, a closure's, a `try`'s),
+     * and in functions, one declared in a function. So the file is also every way PhpStorm skips
+     * past an expression body before the builder parses it ([PhaenonPsiBuilder], "Skipping past
+     * an expression body").
+     */
+    fun testAnExpressionBodyIsTheBlockItStandsFor() {
+        val factory = PsiFileFactory.getInstance(project)
+        val phn = factory.createFileFromText("Blocks.phn", PhpFileType.INSTANCE, File(testDataPath, "trees/phaenon/Blocks.phn").readText())
+        val php = factory.createFileFromText("Blocks.php", PhpFileType.INSTANCE, File(testDataPath, "trees/phaenon/Blocks.php").readText())
+        assertSame(PhaenonFileElementType, phn.node.elementType)
+        assertNotSame(PhaenonFileElementType, php.node.elementType)
+        assertTrue(php.text.startsWith(PREFIX))
+
+        assertEquals("syntax errors", emptyList<String>(), errors(phn))
+        assertEquals("syntax errors of the PHP", emptyList<String>(), errors(php))
+        assertEquals("lazy nodes", emptyList<String>(), lazy(phn))
+        assertEquals("expression bodies", 24, count(phn.node) { isExpressionBody(it) })
+        assertEquals("and none in the PHP", 0, count(php.node) { isExpressionBody(it) })
+        difference(shape(php, PREFIX.length), shape(phn, 0))?.let { fail("Blocks.phn is not the tree of Blocks.php: $it") }
+    }
+
+    /**
+     * PhpStorm skips a block before the builder parses it, by counting braces, and the `{` an
+     * expression body's arrow is has no `}`: left alone, each such skip runs to the end of the
+     * input, and a class is parsed in steps that grow with the square of its expression bodies.
+     * The builder ends the skip at the expression body's end, or before the arrow of one inside
+     * the block. What is measured is steps, the
+     * questions and advances that reach the platform's builder, not time, for two shapes: the
+     * expression bodies of one class, whose own skips ran on, and blocks that each hold one,
+     * whose skips did.
+     *
+     * The measure is the same members written with braces. Their steps grow with the members as
+     * PhpStorm's parser and the platform make them grow, whatever that is in a given build, and
+     * the steps of the expression bodies may grow a quarter faster than that for four times the
+     * members: a term of PhpStorm's own is in both and cancels, and the few tokens the two forms
+     * of a member differ by move the quotient by less than a hundredth. With the skips running on
+     * the expression bodies grew three times as fast, 12.3 times the steps where braces take 4.0.
+     * And for all the members there are, they take no more than twice the steps of the braces.
+     */
+    fun testASkipEndsWhereAnExpressionBodyDoes() {
+        val php = LanguageParserDefinitions.INSTANCE.forLanguage(PhpLanguage.INSTANCE)
+        fun steps(source: String, bodies: Int): Long {
+            val asked = Counting(PsiBuilderFactory.getInstance().createBuilder(PhaenonParserDefinition(php), PhaenonLexer(), source), limit = Int.MAX_VALUE)
+            val parser = php.createParser(project)
+            val root = parser.parse(PhaenonFileElementType, PhaenonPsiBuilder(parser, asked))
+            assertEquals(source, root.text)
+            assertEquals(0, count(root) { it.elementType === TokenType.ERROR_ELEMENT })
+            assertEquals(bodies, count(root) { it.elementType === PhpElementTypes.NON_LAZY_GROUP_STATEMENT } - 1)
+            return asked.asked.toLong()
+        }
+        fun members(count: Int, member: (Int) -> String): String = "final class C\n{\n    private int \$x = 1;\n\n" + (0 until count).joinToString("") { member(it) } + "}\n"
+
+        val shapes = listOf(
+            Triple("the expression bodies of one class", 1, { arrow: Boolean ->
+                { i: Int -> if (arrow) "    m$i(): int => \$this->x + $i;\n" else "    m$i(): int { return \$this->x + $i; }\n" }
+            }),
+            Triple("blocks that each hold an expression body", 2, { arrow: Boolean ->
+                { i: Int -> "    m$i(): object { return new class { " + (if (arrow) "v(): int => $i;" else "v(): int { return $i; }") + " }; }\n" }
+            }),
+        )
+        for ((name, bodiesEach, member) in shapes) {
+            val few = steps(members(FEW, member(true)), FEW * bodiesEach)
+            val many = steps(members(4 * FEW, member(true)), 4 * FEW * bodiesEach)
+            val bracesFew = steps(members(FEW, member(false)), FEW * bodiesEach)
+            val bracesMany = steps(members(4 * FEW, member(false)), 4 * FEW * bodiesEach)
+            val said = "$name: $FEW members take $few steps and ${4 * FEW} take $many, with braces $bracesFew and $bracesMany"
+            // many / few <= 1.25 * bracesMany / bracesFew
+            assertTrue(said, 4 * many * bracesFew <= 5 * few * bracesMany)
+            assertTrue(said, many <= 2 * bracesMany)
+        }
+    }
+
+    /**
+     * What the builder takes for a skip ends with the first marker the parser takes or uses and
+     * with the first error it reports, and the input is whole again. PhpStorm's parser does none
+     * of that while it skips, so no tree of its own can tell whether the rule holds; it is what
+     * keeps a parser that steps over a marked `{` for another reason from being told of an end
+     * the input does not have. So the builder is driven by hand here, as a skip drives it: a `{`
+     * marked and stepped over, then steps to where the input ends. It ends behind the expression
+     * body for a skip that began at its arrow, and before the first arrow in the block for one
+     * that began at a brace. Then one thing a skip does not do, each in its turn, and the rest
+     * is read as a parse in earnest reads it, a marker at every token, to the end of the text.
+     */
+    fun testAMarkerOrAnErrorEndsWhatTheBuilderTakesForASkip() {
+        val php = LanguageParserDefinitions.INSTANCE.forLanguage(PhpLanguage.INSTANCE)
+        val source = "function f(): int => 1;\nfunction h() { return new class { v(): int => 2; }; }\nfunction g(): int => 3;\n"
+        val skips = listOf(
+            Triple("a skip from an arrow", source.indexOf("=> 1"), source.indexOf("function h")),
+            Triple("a skip from a brace", source.indexOf("{ return"), source.indexOf("=> 2")),
+        )
+        val uses = linkedMapOf<String, (PsiBuilder, PsiBuilder.Marker) -> Unit>(
+            "a marker taken" to { builder, _ -> builder.mark() },
+            "an error reported" to { builder, _ -> builder.error("an error") },
+            "the marker dropped" to { _, marker -> marker.drop() },
+            "the marker done" to { _, marker -> marker.done(PhpElementTypes.STATEMENT) },
+            "the marker rolled back to" to { _, marker -> marker.rollbackTo() },
+            "the marker preceded" to { _, marker -> marker.precede() },
+            "the marker made an error" to { _, marker -> marker.error("an error") },
+            "the marker collapsed into something else than a body" to { _, marker -> marker.collapse(PhpTokenTypes.LINE_COMMENT) },
+        )
+        for ((skip, from, end) in skips) {
+            for ((use, act) in uses) {
+                val what = "$skip, then $use"
+                // The parser is never asked: nothing here is collapsed into a body.
+                val builder = PhaenonPsiBuilder(php.createParser(project), PsiBuilderFactory.getInstance().createBuilder(PhaenonParserDefinition(php), PhaenonLexer(), source))
+                builder.mark()
+                while (builder.currentOffset < from) builder.advanceLexer()
+                assertEquals(what, from, builder.currentOffset)
+                assertSame(what, PhpTokenTypes.chLBRACE, builder.tokenType)
+
+                val marker = builder.mark()
+                builder.advanceLexer()
+                while (!builder.eof()) builder.advanceLexer()
+                assertEquals("$what: where the input ends for the skip", end, builder.currentOffset)
+                assertNull(what, builder.tokenType)
+
+                act(builder, marker)
+                assertFalse("$what: the input is whole again", builder.eof())
+                assertNotNull(what, builder.tokenType)
+                while (!builder.eof()) {
+                    builder.mark().drop()
+                    builder.advanceLexer()
+                }
+                assertEquals("$what: to the end of the text", source.length, builder.currentOffset)
+            }
+        }
+    }
+
+    /**
      * The shapes of broken code whose trees are known not to be PhpStorm's (the class comment says
      * why): they differ, each in its way. A failure here is a PhpStorm that parses one of them
      * differently, which is worth a look at how it parses a body now.
@@ -235,12 +377,13 @@ class PhaenonTreeEqualityTest : BasePlatformTestCase() {
         assertEquals("each `#[` is a comment to the end of its line or of its body", 4, count(root) { it.elementType === PhpTokenTypes.LINE_COMMENT })
     }
 
-    /** A builder that fails once it has been asked more than any parse of a few lines asks. */
-    private class Counting(delegate: PsiBuilder) : PsiBuilderAdapter(delegate) {
-        private var asked = 0
+    /** A builder that counts what it is asked, and fails once it has been asked more than any parse of a few lines asks. */
+    private class Counting(delegate: PsiBuilder, private val limit: Int = LIMIT) : PsiBuilderAdapter(delegate) {
+        var asked = 0
+            private set
 
         private fun count() {
-            if (++asked > LIMIT) throw AssertionError("the parse does not end: the builder was asked $LIMIT times")
+            if (++asked > limit) throw AssertionError("the parse does not end: the builder was asked $limit times")
         }
 
         override fun getTokenType(): IElementType? {
@@ -363,6 +506,61 @@ class PhaenonTreeEqualityTest : BasePlatformTestCase() {
         return out.toString()
     }
 
+    /**
+     * The tree below [file] as [tree] gives it, less what an expression body and the block it
+     * stands for differ in as texts: no ranges and no whitespace, a leaf by its type and text.
+     * Three leaves of a `.phn` are read as the tokens they are to the parser, not as their text:
+     * an expression body's `{` and `return`, the arrow's two characters, and the `function` of a
+     * method without a keyword, which has none. The `>` erased under `void` and `never` is left
+     * out, the comment it is, and an expression body gets the `}` its source does not have.
+     */
+    private fun shape(file: PsiFile, shift: Int): String {
+        val out = StringBuilder()
+        fun walk(node: ASTNode, depth: Int, top: Boolean) {
+            val type = node.elementType
+            val psi = node.psi
+            if (node.textRange.endOffset <= shift || psi is PsiWhiteSpace || type === PhaenonTokenTypes.ERASED) return
+            if (top && type === PhpElementTypes.NON_LAZY_GROUP_STATEMENT) {
+                var child = node.firstChildNode
+                while (child != null) {
+                    walk(child, depth, false)
+                    child = child.treeNext
+                }
+                return
+            }
+            out.append("  ".repeat(depth))
+            out.append(if (type === PhpElementTypes.GROUP_STATEMENT) PhpElementTypes.NON_LAZY_GROUP_STATEMENT else type)
+            if (psi is PsiErrorElement) out.append(" error: ").append(psi.errorDescription)
+            val first = node.firstChildNode
+            if (first == null && psi !is PsiErrorElement) {
+                val text = when (type) {
+                    PhpTokenTypes.chLBRACE -> "{"
+                    PhpTokenTypes.kwRETURN -> "return"
+                    PhpTokenTypes.kwFUNCTION -> "function"
+                    else -> node.text.replace("\n", "\\n")
+                }
+                out.append(" '").append(text).append('\'')
+            }
+            out.append('\n')
+            var child = first
+            while (child != null) {
+                walk(child, depth + 1, false)
+                child = child.treeNext
+            }
+            if (isExpressionBody(node)) out.append("  ".repeat(depth + 1)).append(PhpTokenTypes.chRBRACE).append(" '}'\n")
+        }
+        var child = file.node.firstChildNode
+        while (child != null) {
+            walk(child, 0, true)
+            child = child.treeNext
+        }
+        return out.toString()
+    }
+
+    /** A body that begins with an arrow's `=`, handed over as its `{`. */
+    private fun isExpressionBody(node: ASTNode): Boolean =
+        node.elementType === PhpElementTypes.NON_LAZY_GROUP_STATEMENT && node.firstChildNode.let { it != null && it.elementType === PhpTokenTypes.chLBRACE && it.text == "=" }
+
     private fun errors(file: PsiFile): List<String> {
         val out = ArrayList<String>()
         count(file.node) { node -> (node.psi as? PsiErrorElement)?.also { out.add("${it.errorDescription} at ${it.textOffset}") } != null }
@@ -427,5 +625,7 @@ class PhaenonTreeEqualityTest : BasePlatformTestCase() {
         const val LISTING_CAP = 50
         /** The nodes shown before and after the one two trees part at. */
         const val CONTEXT = 4
+        /** The members of the smaller class whose steps are counted; the larger has four times as many. */
+        const val FEW = 100
     }
 }
