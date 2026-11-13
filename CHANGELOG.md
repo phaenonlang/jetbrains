@@ -4,6 +4,15 @@ From 0.2.1 on, release-please writes each entry from the Conventional Commits me
 previous release (`release-please-config.json`); the entry is the Marketplace's change notes for
 that version. The first release was written by hand.
 
+## [0.6.1](https://github.com/phaenonlang/jetbrains/compare/v0.6.0...v0.6.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* a trailing ... stands for the required parameters left ([#19](https://github.com/phaenonlang/jetbrains/issues/19)) ([fbfda26](https://github.com/phaenonlang/jetbrains/commit/fbfda269af4c860674ff03beffa09a8038c8cf9f))
+* bodies and the docblock stub on Enter through public API ([#16](https://github.com/phaenonlang/jetbrains/issues/16)) ([ce43869](https://github.com/phaenonlang/jetbrains/commit/ce438693c709523f215b341cf7ba382ecdcbcca7))
+* PhpStorm 2026.3's PHP 8.6 support in .phn files ([#17](https://github.com/phaenonlang/jetbrains/issues/17)) ([c3d61c4](https://github.com/phaenonlang/jetbrains/commit/c3d61c44bcfbdb78832dec993f8a88ba7b53d9a7))
+
 ## [0.6.0](https://github.com/phaenonlang/jetbrains/compare/v0.5.0...v0.6.0) (2026-11-09)
 
 
