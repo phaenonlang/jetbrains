@@ -103,7 +103,7 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   length, not its square; the shapes
   of broken code known to differ are pinned in `testData/trees/differing`. `PhaenonPsiBuilder`
   parses a body by running PhpStorm's parser again on the builder between the body's braces, and
-  ends PhpStorm's skip of a block at the first expression body it steps into, which
+  ends PhpStorm's skip of a block at the first expression body it meets, which
   rests on how that parser drives a builder and on no API (README § Internal API): this test is
   what fails when a PhpStorm build changes it, with `PhaenonD18Test`, `PhaenonMethodsTest` and
   `PhaenonSyntaxTest` for what only Phaenon has in a body. So run the whole suite with `testInIde`

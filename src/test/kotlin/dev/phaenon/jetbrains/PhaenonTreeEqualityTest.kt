@@ -217,22 +217,30 @@ class PhaenonTreeEqualityTest : BasePlatformTestCase() {
      * PhpStorm skips a block before the builder parses it, by counting braces, and the `{` an
      * expression body's arrow is has no `}`: left alone, each such skip runs to the end of the
      * input, and a class is parsed in steps that grow with the square of its expression bodies.
-     * The builder ends the skip where the expression body ends. What is measured is steps, the
-     * questions and advances that reach the platform's builder, not time: four times the members
-     * take four times the steps and no more, and about what the same members with braces take.
-     * Two shapes: the expression bodies of one class, whose own skips ran on, and blocks that
-     * each hold one, whose skips did.
+     * The builder ends the skip at the expression body's end, or before the arrow of one inside
+     * the block. What is measured is steps, the
+     * questions and advances that reach the platform's builder, not time, for two shapes: the
+     * expression bodies of one class, whose own skips ran on, and blocks that each hold one,
+     * whose skips did.
+     *
+     * The measure is the same members written with braces. Their steps grow with the members as
+     * PhpStorm's parser and the platform make them grow, whatever that is in a given build, and
+     * the steps of the expression bodies may grow a quarter faster than that for four times the
+     * members: a term of PhpStorm's own is in both and cancels, and the few tokens the two forms
+     * of a member differ by move the quotient by less than a hundredth. With the skips running on
+     * the expression bodies grew three times as fast, 12.3 times the steps where braces take 4.0.
+     * And for all the members there are, they take no more than twice the steps of the braces.
      */
     fun testASkipEndsWhereAnExpressionBodyDoes() {
         val php = LanguageParserDefinitions.INSTANCE.forLanguage(PhpLanguage.INSTANCE)
-        fun steps(source: String, bodies: Int): Int {
+        fun steps(source: String, bodies: Int): Long {
             val asked = Counting(PsiBuilderFactory.getInstance().createBuilder(PhaenonParserDefinition(php), PhaenonLexer(), source), limit = Int.MAX_VALUE)
             val parser = php.createParser(project)
             val root = parser.parse(PhaenonFileElementType, PhaenonPsiBuilder(parser, asked))
             assertEquals(source, root.text)
             assertEquals(0, count(root) { it.elementType === TokenType.ERROR_ELEMENT })
             assertEquals(bodies, count(root) { it.elementType === PhpElementTypes.NON_LAZY_GROUP_STATEMENT } - 1)
-            return asked.asked
+            return asked.asked.toLong()
         }
         fun members(count: Int, member: (Int) -> String): String = "final class C\n{\n    private int \$x = 1;\n\n" + (0 until count).joinToString("") { member(it) } + "}\n"
 
@@ -247,9 +255,68 @@ class PhaenonTreeEqualityTest : BasePlatformTestCase() {
         for ((name, bodiesEach, member) in shapes) {
             val few = steps(members(FEW, member(true)), FEW * bodiesEach)
             val many = steps(members(4 * FEW, member(true)), 4 * FEW * bodiesEach)
-            val braces = steps(members(4 * FEW, member(false)), 4 * FEW * bodiesEach)
-            assertTrue("$name: $FEW members take $few steps, ${4 * FEW} take $many", many <= 4 * few)
-            assertTrue("$name: ${4 * FEW} members take $many steps, with braces $braces", many <= 2 * braces)
+            val bracesFew = steps(members(FEW, member(false)), FEW * bodiesEach)
+            val bracesMany = steps(members(4 * FEW, member(false)), 4 * FEW * bodiesEach)
+            val said = "$name: $FEW members take $few steps and ${4 * FEW} take $many, with braces $bracesFew and $bracesMany"
+            // many / few <= 1.25 * bracesMany / bracesFew
+            assertTrue(said, 4 * many * bracesFew <= 5 * few * bracesMany)
+            assertTrue(said, many <= 2 * bracesMany)
+        }
+    }
+
+    /**
+     * What the builder takes for a skip ends with the first marker the parser takes or uses and
+     * with the first error it reports, and the input is whole again. PhpStorm's parser does none
+     * of that while it skips, so no tree of its own can tell whether the rule holds; it is what
+     * keeps a parser that steps over a marked `{` for another reason from being told of an end
+     * the input does not have. So the builder is driven by hand here, as a skip drives it: a `{`
+     * marked and stepped over, then steps to where the input ends. It ends behind the expression
+     * body for a skip that began at its arrow, and before the first arrow in the block for one
+     * that began at a brace. Then one thing a skip does not do, each in its turn, and the rest
+     * is read as a parse in earnest reads it, a marker at every token, to the end of the text.
+     */
+    fun testAMarkerOrAnErrorEndsWhatTheBuilderTakesForASkip() {
+        val php = LanguageParserDefinitions.INSTANCE.forLanguage(PhpLanguage.INSTANCE)
+        val source = "function f(): int => 1;\nfunction h() { return new class { v(): int => 2; }; }\nfunction g(): int => 3;\n"
+        val skips = listOf(
+            Triple("a skip from an arrow", source.indexOf("=> 1"), source.indexOf("function h")),
+            Triple("a skip from a brace", source.indexOf("{ return"), source.indexOf("=> 2")),
+        )
+        val uses = linkedMapOf<String, (PsiBuilder, PsiBuilder.Marker) -> Unit>(
+            "a marker taken" to { builder, _ -> builder.mark() },
+            "an error reported" to { builder, _ -> builder.error("an error") },
+            "the marker dropped" to { _, marker -> marker.drop() },
+            "the marker done" to { _, marker -> marker.done(PhpElementTypes.STATEMENT) },
+            "the marker rolled back to" to { _, marker -> marker.rollbackTo() },
+            "the marker preceded" to { _, marker -> marker.precede() },
+            "the marker made an error" to { _, marker -> marker.error("an error") },
+            "the marker collapsed into something else than a body" to { _, marker -> marker.collapse(PhpTokenTypes.LINE_COMMENT) },
+        )
+        for ((skip, from, end) in skips) {
+            for ((use, act) in uses) {
+                val what = "$skip, then $use"
+                // The parser is never asked: nothing here is collapsed into a body.
+                val builder = PhaenonPsiBuilder(php.createParser(project), PsiBuilderFactory.getInstance().createBuilder(PhaenonParserDefinition(php), PhaenonLexer(), source))
+                builder.mark()
+                while (builder.currentOffset < from) builder.advanceLexer()
+                assertEquals(what, from, builder.currentOffset)
+                assertSame(what, PhpTokenTypes.chLBRACE, builder.tokenType)
+
+                val marker = builder.mark()
+                builder.advanceLexer()
+                while (!builder.eof()) builder.advanceLexer()
+                assertEquals("$what: where the input ends for the skip", end, builder.currentOffset)
+                assertNull(what, builder.tokenType)
+
+                act(builder, marker)
+                assertFalse("$what: the input is whole again", builder.eof())
+                assertNotNull(what, builder.tokenType)
+                while (!builder.eof()) {
+                    builder.mark().drop()
+                    builder.advanceLexer()
+                }
+                assertEquals("$what: to the end of the text", source.length, builder.currentOffset)
+            }
         }
     }
 

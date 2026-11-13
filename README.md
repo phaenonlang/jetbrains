@@ -47,7 +47,7 @@ PhpStorm. A `.phn` file *is* a PHP file to the IDE: PHP file type, PHP language,
 | `PhaenonFileViewProvider` | created by the factory | A single-root PHP view provider that, right after creating the `PhpFileImpl`, sets its content element type to `PhaenonFileElementType`. That is the same hook PhpStorm's template view provider uses to give the HTML side of a `.php` file its own parser, and it happens before any AST exists. Single-rooted on purpose: PhpStorm's provider also hosts an HTML tree built from inline-HTML tokens, which for a Phaenon file would only yield spurious HTML inspections. |
 | `PhaenonFileElementType` | root AST node of `.phn` files | An `IFileElementType` of the PHP language whose `parseContents` builds the `PsiBuilder` with `PhaenonLexer` and runs the stock PHP parser, the way PhpStorm parses its own code fragments. Everything below the root is ordinary PHP PSI, so the stub builder, indices, inspections and refactorings never notice. |
 | `PhaenonLexer` | the parser's lexer | PhpStorm's `PhpWithOptionalOpenTagLexer` (starts in scripting mode unless the first token is an open tag) wrapped in a `LookAheadLexer` that erases Phaenon-only syntax into `PhaenonTokenTypes.ERASED` tokens — comments to the parser (`PhaenonParserDefinition` adds the type to PHP's comment set), text and offsets untouched. See [Phaenon syntax](#phaenon-syntax). A method declared without a keyword (D27, design/functions.md §1.1) — at the member level of a class, interface, trait or enum body, anonymous classes included, `[modifiers] [&]name(` or `name<…>(` — gets an empty `PhaenonTokenTypes.FUNCTION` token before its `&` or name, which `PhaenonPsiBuilder` shows the parser as `function` and whose leaf is PHP's `function` leaf with no text: it parses as PHP's method and, without a visibility, as public, as PHP reads it and as the compiler writes it. The lexer follows the scopes it hands over — class bodies, blocks, expression bodies — so a bare `name(` in a body, a property's hooks or an expression body stays a call or a hook; the names that keep PHP's `function` (a modifier, `var`, `const`, `function`, `fn`, `Closure`) are never given one. `fun` is an identifier. Up to 2026.2 a PHP 8.6 placeholder `?` standing alone as an argument is handed over as an identifier, so `f(?, 1)` parses as a call with a constant for an argument; a PhpStorm whose parser takes placeholders itself (2026.3) gets PHP's own `?` (see [PHP 8.6](#php-86)). A named function's `throws A\|B` is erased whole, and its expression body's arrow is handed over as `{` and `return` (see [D18](#d18-expression-bodies-throws-layout)). |
-| `PhaenonPsiBuilder` | the parser's `PsiBuilder` | A `PsiBuilderAdapter` that intercepts PhpStorm's lazy function bodies and parses them on the spot, so the whole file goes through one lexer. PhpStorm expands a lazy block by re-lexing its text with a plain PHP lexer, which would discard the erasures inside every body. A body is parsed by running PhpStorm's parser — the public `PsiParser` that parses the file — again on the same builder, which for that run ends its input at the body's closing brace (a *fence*) and drops the two markers the parser opens around its statements, so that they become the body's children; a body inside it gets a fence of its own. An expression body's block, which the lexer opens at the arrow, has no `}` in the source: its fence stands behind the `;` that ends the expression, where the lexer ends the body's scope, and the block is closed there. PhpStorm skips a block by counting braces before the builder parses it, and no `}` answers the `{` of an arrow: a skip that steps over one finds the input ending where that expression body does, or it would run to the end of the file for every expression body and every block that holds one. [Internal API](#internal-api) says what this rests on. |
+| `PhaenonPsiBuilder` | the parser's `PsiBuilder` | A `PsiBuilderAdapter` that intercepts PhpStorm's lazy function bodies and parses them on the spot, so the whole file goes through one lexer. PhpStorm expands a lazy block by re-lexing its text with a plain PHP lexer, which would discard the erasures inside every body. A body is parsed by running PhpStorm's parser — the public `PsiParser` that parses the file — again on the same builder, which for that run ends its input at the body's closing brace (a *fence*) and drops the two markers the parser opens around its statements, so that they become the body's children; a body inside it gets a fence of its own. An expression body's block, which the lexer opens at the arrow, has no `}` in the source: its fence stands behind the `;` that ends the expression, where the lexer ends the body's scope, and the block is closed there. PhpStorm skips a block by counting braces before the builder parses it, and no `}` answers the `{` of an arrow: a skip that begins at one finds the input ending where that expression body does, and a skip that meets one inside its block finds it ending there, or each would run to the end of the file, for every expression body and every block that holds one. [Internal API](#internal-api) says what this rests on. |
 | `PhaenonBaseLexerProvider` | `com.jetbrains.php.baseLexerProvider` | Editor highlighting does not go through the parser: PhpStorm's editor highlighter is keyed by file type and builds its own lexer, asking this EP first. It gets the plain open-tag-optional lexer, so Phaenon syntax is coloured as the PHP tokens it is made of; Phaenon adds no keyword, and a method's name without one is the identifier it is. |
 | `PhaenonTypeProvider` | `com.jetbrains.php.typeProvider4` | Reads the erased Phaenon types back from the erased leaves (`PhaenonErasedTypes`, `PhaenonTypeSyntax`, `PhaenonTypeText`) and gives parameters, properties and return types their types: `list<User>` and `map<string, User>` → `User[]`, `bytes` → `string`, the array and the string they erase to; a type parameter → its bound, as the compiler writes it; `class<T>` → `class-string<Bound>` alone, the type PhpStorm gives a docblock-only `@return class-string<Bound>`, on which `$c::m()`, `new $c` and `$c::CONST` resolve; `Closure(A, B=, C...): R` → `\Closure` plus the signature in PhpStorm's own encoding. Types a partial application as the closure it creates and a pipe stage that is one as the call it becomes. |
 | `PhaenonErasedReferenceContributor` | `psi.referenceContributor` for PHP | Every erased construct is a `PhaenonErasedLeaf` (a comment leaf the token type creates itself), and each class name in it — `DomainEvent` in `list<DomainEvent>`, `User` in `Box<User>`, `Closure` in `Closure(int): string` — gets a `PhaenonClassReference` resolved as PHP would through the file's imports and namespace (`PhaenonErasedNames`), except a bare `Closure` before a signature, which is `\Closure` in any namespace, as the compiler reads it. Navigation, find-usages, rename and the unused-import inspection see them as they see a docblock type. A type parameter used in one (`T` in `id(): T`) gets a `PhaenonTypeParameterReference` to its declaration in the enclosing `<T of …>` list (`PhaenonTypeParameter`, a stand-in element at the name's offset). The declaration itself is one to the platform (`PhaenonTypeParameterDeclarations`, `psi.declarationProvider`): Cmd+click on it shows the usages, found by the default find-usages handler plus `PhaenonDocTypeReferenceSearcher`, which adds the docblock types naming it (`@var T $x`); such a docblock type also navigates to the declaration and is not an "undefined class". |
@@ -394,12 +394,12 @@ of bodies rests on how PhpStorm's parser works, not on an API ([Internal API](#i
 second is the short form, the suites that tell when that has changed. `PhaenonTreeEqualityTest`
 compares the trees of PHP with PhpStorm's own, holds a Phaenon file whose bodies must parse with
 the file, without an error and without a lazy node, and one whose expression bodies must be the
-blocks they stand for, and counts the steps a class of expression bodies takes; the other three
-have the expression bodies, the methods without a keyword and the erasures in bodies that no PHP
-has. `PHAENON_PHP_TREES` gives the comparison volume: each file under the directories named that
-begins with `<?php` and has no other tag in it — a tag in a string or a comment counts — is parsed
-as a `.php` and as a `.phn` under the IDE's highest language level, and the two trees must be one.
-The report counts the files left out.
+blocks they stand for, counts the steps a class of expression bodies takes and drives the builder
+as a skip does; the other three have the expression bodies, the methods without a keyword and the
+erasures in bodies that no PHP has. `PHAENON_PHP_TREES` gives the comparison volume: each file
+under the directories named that begins with `<?php` and has no other tag in it — a tag in a
+string or a comment counts — is parsed as a `.php` and as a `.phn` under the IDE's highest
+language level, and the two trees must be one. The report counts the files left out.
 
 ```bash
 PHAENON_PHP_TREES=/path/to/a/php/project/vendor:/path/to/another ./gradlew test --tests '*TreeEquality*'
@@ -451,10 +451,12 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   the compiler writes for it: the two trees are one but for the texts of the arrow and the brace
   the source does not have — expression bodies holding closures, arrow functions, a `match`,
   heredocs, interpolations and anonymous classes, in a trait, an enum, a class with property hooks,
-  anonymous classes in blocks and a function declared in a function. A class of four times the
-  expression bodies, and of four times the blocks that hold one, parses in four times the steps
-  and about those of the same class with braces: PhpStorm's skip of a block ends where an
-  expression body does, not at the end of the file. `testData/trees/differing`
+  anonymous classes in blocks and a function declared in a function. The steps of a class of
+  expression bodies, and of blocks that each hold one, grow with its members as those of the same
+  class with braces do, within a quarter for four times the members, and stay within twice of
+  them: PhpStorm's skip of a block ends at an expression body, not at the end of the file. The
+  builder driven by hand as a skip drives it is given that end, and the whole input again with
+  the first marker taken or used and the first error reported. `testData/trees/differing`
   holds the three shapes of broken code whose trees are known not to be PhpStorm's, named in the
   class comment, and the test asserts each difference, so that a PhpStorm that ends one is
   noticed. Below PHP 8.0 a `#[` on a body's last line ends its parse (PhpStorm reads it as a
@@ -836,12 +838,13 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   contract. A change there would give a body a wrong tree and possibly no error: the builder logs
   the changes it can tell (a marker that is not one of the two, a block skipped that does not begin
   with a brace) and no other. The end of a skip at an expression body rests on one thing more:
-  that the parser, skipping a block, steps over the `{` it has just marked and uses no marker
-  until it collapses that one. A skip made in another way runs to the end of the file again,
-  which costs time and no tree. `PhaenonTreeEqualityTest` is what turns it into a failure, by
-  comparing the trees of `.phn` files with PhpStorm's own of the same PHP, by Phaenon files of
-  its own and by counting the steps of a parse, so it is run against every new PhpStorm build
-  ([Build](#build), `testInIde`).
+  that the parser, skipping a block, steps over the `{` it has just marked and neither takes nor
+  uses a marker nor reports an error until the skip is over. A skip made in another way runs to
+  the end of the file again, which costs time and no tree; a parse that is no skip is given the
+  whole input back by the first of those three it does. `PhaenonTreeEqualityTest` is what turns
+  it into a failure, by comparing the trees of `.phn` files with PhpStorm's own of the same PHP,
+  by Phaenon files of its own, by counting the steps of a parse and by driving the builder by
+  hand, so it is run against every new PhpStorm build ([Build](#build), `testInIde`).
   Should one of these classes change, the build against the new PhpStorm and the verifier say so;
   the extension point going would leave parsing and every analysis feature working and regress the
   editor colouring of `.phn` files alone. Everything else goes through public API.
