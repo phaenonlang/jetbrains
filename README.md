@@ -494,11 +494,14 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   language-level inspection on), are typed as their closures (by the plugin up to 2026.2, by
   PhpStorm, the closure alone, from 2026.3) and come back from Reformat Code as written; a pipe
   stage is typed as its call (`PartialPipe.phn`, `PartialRest.phn`); a trailing `...` that stands
-  for required parameters, in calls of functions, methods and static methods, pipe stages,
-  constants, nested calls and beside named arguments or `?`, raises no "Required parameter …
-  missing" on either target, while a call that lacks an argument keeps it (`PartialMissing.phn`:
-  no placeholder, `?` without `...`, a `...` that is not last, `new`, a call around a partial
-  application), as a `.php` keeps it of `f(1, ...)` up to 2026.2; readonly defaults,
+  for required parameters, in calls of functions, methods and static methods, constants, nested
+  calls, calls written over several lines and beside named arguments or `?`, and in a closure
+  called at once with what it needs (a pipe stage left one parameter, `f(B, ...)(C)`), raises no
+  "Required parameter … missing" on either target, while a call that lacks an argument keeps it
+  (`PartialMissing.phn`: no placeholder, inside a partial application or around one; up to
+  2026.2 also `?` without `...`, a `...` that is not last, `new`, `?->`, a pipe stage left two
+  parameters or one and a `?`, a closure called at once with too few), as a `.php` keeps it of
+  `f(1, ...)` up to 2026.2; readonly defaults,
   `#[\Override]` on constants and enum cases, `__debugInfo()` in an enum, directly or from a trait,
   and a write through a constant raise nothing on an 8.6 target at either level, and on an 8.5
   target read at 8.5 PhpStorm's findings stay, in each build's words (its language-level

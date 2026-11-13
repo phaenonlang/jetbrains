@@ -8,6 +8,14 @@ function frame(string $open, string $body, string $close): string {
     return $open . $body . $close;
 }
 
+function framed(string $open, string $body, string $close = ']'): string {
+    return $open . $body . $close;
+}
+
+function joined(string $glue, string $first, string ...$rest): string {
+    return $first . $glue . implode($glue, $rest);
+}
+
 function take(\Closure $c): int {
     return 1;
 }
@@ -36,7 +44,7 @@ final class Rests
 {
     const LABEL = label('✓ ', ...);
 
-    run(Meter $meter, string $ns): void {
+    run(Meter $meter, string $ns, float $ratio): void {
         $function = label('✓ ', ...);
         $method = $meter->scale(2, ...);
         $static = Meter::round(1.5, ...);
@@ -46,5 +54,15 @@ final class Rests
         $named = label(value: 'x', ...);
         $mixed = label(?, ...);
         $frame = frame('[', ...);
+        $methodStage = $ratio |> $meter->scale(2, ...);
+        $optionalLeft = $ns |> framed('[', ...);
+        $variadicLeft = $ns |> joined('-', ...);
+        $parenthesised = $ns |> (label('» ', ...));
+        $invoked = label('› ', ...)('x');
+        $invokedWithTwo = frame('<', ...)('x', '>');
+        $multiLine = label(
+            '✓ ',
+            ...
+        );
     }
 }

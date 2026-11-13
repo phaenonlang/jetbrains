@@ -12,6 +12,17 @@ function take(\Closure $c): int {
     return 1;
 }
 
+final class Meter
+{
+    public static clamp(float $value, float $low, float $high): float {
+        return $value;
+    }
+
+    scale(int $by, float $value): float {
+        return $value * $by;
+    }
+}
+
 final class Box
 {
     __construct(int $a, int $b) {}
@@ -19,7 +30,8 @@ final class Box
 
 final class Missing
 {
-    run(): void {
+    /** @param list<string> $args */
+    run(Meter $meter, string $ns, float $ratio, array $args): void {
         $call = label('✓ ');
         $calls = frame('[');
         $placeholder = label(?);
@@ -27,5 +39,15 @@ final class Missing
         $new = new Box(1, ...);
         $outer = take();
         $around = label(take(label('✓ ', ...)));
+        $reverse = frame(label('◦ '), ...);
+        $twoLeft = $ns |> frame('(', ...);
+        $staticTwoLeft = $ratio |> Meter::clamp(1.0, ...);
+        $placeholderStage = $ns |> label(prefix: ?, ...);
+        $methodPlaceholderStage = 2 |> $meter->scale(?, ...);
+        $nullsafe = $meter?->scale(3, ...);
+        $invokedEmpty = label('◇ ', ...)();
+        $invokedShort = frame('{', ...)('x');
+        $invokedNamed = frame('«', ...)(close: '»');
+        $unpacked = label(...$args, value: 'x', ...);
     }
 }

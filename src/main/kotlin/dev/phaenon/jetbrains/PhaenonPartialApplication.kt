@@ -35,6 +35,9 @@ class PhaenonPartialApplication private constructor(
     private val variadic: Boolean,
 ) {
 
+    /** How many `?` placeholders, positional and named: each a required parameter of the closure. */
+    val placeholders: Int get() = positional.count { it } + named.count { it.second }
+
     /** `?b;name=?,other=b;v`: positional flags, named arguments, the variadic marker. */
     fun encode(): String =
         positional.joinToString("") { if (it) "?" else "b" } + ";" +
@@ -157,9 +160,10 @@ class PhaenonPartialApplication private constructor(
 
         /**
          * Whether [call] is a partial application whose last argument is the trailing `...`, which
-         * stands for every parameter its other arguments leave (PHP 8.6): the call then lacks no
-         * argument, whatever it calls. A `...` before another argument is no such call: PHP
-         * rejects it ("Variadic placeholder must be last").
+         * stands for every parameter its other arguments leave (PHP 8.6): creating the closure
+         * lacks no argument, whatever it calls. Calling the closure is another matter: it takes
+         * the parameters the placeholders stand for. A `...` before another argument is no such
+         * call: PHP rejects it ("Variadic placeholder must be last").
          */
         @JvmStatic
         fun takesTheRest(call: PsiElement): Boolean {

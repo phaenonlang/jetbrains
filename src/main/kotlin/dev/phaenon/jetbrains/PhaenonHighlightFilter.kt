@@ -5,20 +5,24 @@ import com.intellij.codeInsight.daemon.impl.HighlightInfoFilter
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.PsiUtilCore
 import java.util.Locale
 import java.util.MissingResourceException
 import java.util.ResourceBundle
 import com.jetbrains.php.PhpBundle
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.config.PhpLanguageFeature
+import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.psi.elements.PhpClassFieldsList
 import com.jetbrains.php.lang.psi.elements.ConstantReference
 import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.FieldReference
 import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocComment
 import com.jetbrains.php.lang.parser.PhpElementTypes
+import com.jetbrains.php.lang.psi.elements.BinaryExpression
 import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.FunctionReference
+import com.jetbrains.php.lang.psi.elements.MemberReference
 import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.ParameterList
@@ -87,8 +91,11 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  *   PhpStorm also counts the arguments of the call it parses, so a trailing `...` that stands for
  *   a required parameter leaves it "missing": that goes where the `...` is the call's last
  *   argument ([PhaenonPartialApplication.takesTheRest]), which stands for every parameter left,
- *   and stays on any other call. The compiler emits a partial application as written for 8.6 and
- *   lowers it for 8.5, so these go on either target;
+ *   unless the closure is called at once with fewer arguments than it needs — a pipe stage with
+ *   the piped value, a callee with its arguments — or created through `?->`, which PHP refuses:
+ *   there the finding is right, if worded for the call. It stays on any other call. The compiler
+ *   emits a partial application as written for 8.6 and lowers it for 8.5, so these go on either
+ *   target;
  * - `#[\Override]` on a class constant or an enum case "cannot be applied" by the attribute's
  *   targets in PhpStorm's stubs, or is "only allowed since PHP 8.6"; PHP 8.6 allows it, and for 8.5
  *   the compiler checks it and drops the attribute, so this goes on either target too;
@@ -119,10 +126,12 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (description == SPREAD_WITHOUT_EXPRESSION) return !PhaenonPartialApplication.isVariadicPlaceholder(file.findElementAt(info.startOffset))
         if (NOT_A_VALID_CALLABLE.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) return !partialApplicationAt(info, file)
         if (description == PARTIAL_APPLICATION_NEEDS_86) return !partialApplicationAt(info, file)
-        if (MISSING_ARGUMENTS.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
-            // The finding marks the call's `(`: its parent is the call.
+        val missing = missingArguments(description)
+        if (missing > 0) {
+            // The finding's range starts where the call's argument list does, at its `(` or at the
+            // whitespace or comment after it: either way a child of the call.
             val call = file.findElementAt(info.startOffset)?.parent ?: return true
-            return !PhaenonPartialApplication.takesTheRest(call)
+            return !restStandsForTheMissing(call, missing)
         }
         if (description.startsWith(ATTRIBUTE_TARGET.first) && description.endsWith(ATTRIBUTE_TARGET.second)) return !overrideOnConstant(info, file)
         if (description == OVERRIDE_ON_CONSTANT_NEEDS_86) return !overrideOnConstant(info, file)
@@ -229,6 +238,58 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val leaf = file.findElementAt(info.startOffset) ?: return false
         val function = PsiTreeUtil.getParentOfType(leaf, Function::class.java, false) ?: return false
         return function.isClosure
+    }
+
+    /**
+     * How many parameters PhpStorm's "Required parameter '$b' missing" or "Required parameters
+     * '$b, $c' missing" names (each name has its `$`), 0 when [description] is neither.
+     */
+    private fun missingArguments(description: String): Int {
+        MISSING_ARGUMENT?.let { (prefix, suffix) -> if (description.startsWith(prefix) && description.endsWith(suffix)) return 1 }
+        MISSING_ARGUMENTS?.let { (prefix, suffix) ->
+            if (description.startsWith(prefix) && description.endsWith(suffix)) {
+                return description.substring(prefix.length, description.length - suffix.length).count { it == '$' }.coerceAtLeast(2)
+            }
+        }
+        return 0
+    }
+
+    /**
+     * Whether the trailing `...` of [call] answers the [missing] required parameters PhpStorm
+     * reports on it: it stands for them when it is the call's last argument, so creating the
+     * closure lacks none. But a closure called at once needs an argument for each of them and
+     * for each `?`: `$s |> frame('[', ...)` gives it one of two, `label('a', ...)()` none of
+     * one, and PHP throws `ArgumentCountError` there. Nor does PHP create one through `?->`.
+     */
+    private fun restStandsForTheMissing(call: PsiElement, missing: Int): Boolean {
+        if (!PhaenonPartialApplication.takesTheRest(call)) return false
+        if (call is MemberReference && call.hasNullSafeDereference()) return false
+        val shape = PhaenonPartialApplication.of(call) ?: return false
+        val given = argumentsGivenAtOnce(call) ?: return true
+        return shape.placeholders + missing <= given
+    }
+
+    /**
+     * How many arguments the closure [call] creates is called with at once: one as a pipe stage,
+     * `A |> f(B, ...)`, the call's own as the callee of a call, `f(B, ...)(C)`; 0 when that call
+     * names or unpacks an argument, which a count cannot judge; null when nothing calls it at once.
+     */
+    private fun argumentsGivenAtOnce(call: PsiElement): Int? {
+        var expression = call
+        while (expression.parent is ParenthesizedExpression) expression = expression.parent
+        val parent = expression.parent
+        if (parent is BinaryExpression && parent.operation?.text == "|>" && parent.rightOperand === expression) return 1
+        if (parent is FunctionReference && parent.firstChild === expression) {
+            val list = parent.parameterList ?: return 0
+            var child: PsiElement? = list.firstChild
+            while (child != null) {
+                val type = PsiUtilCore.getElementType(child)
+                if (type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opVARIADIC) return 0
+                child = child.nextSibling
+            }
+            return list.parameters.size
+        }
+        return null
     }
 
     /**
@@ -339,10 +400,11 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
 
         val SPREAD_WITHOUT_EXPRESSION: String = PhpBundle.message("expected.expression.after.spread.operator")
 
-        /** "Required parameter '{0}' missing", "Required parameters '{0}' missing", around the names the inspection fills in. */
-        val MISSING_ARGUMENTS: List<Pair<String, String>> = listOf("inspection.missing_param", "required.parameters.missing")
-            .mapNotNull { phpMessage(it, "\u0000") }
-            .map { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
+        /** "Required parameter '{0}' missing" and "Required parameters '{0}' missing", around the names the inspection fills in. */
+        val MISSING_ARGUMENT: Pair<String, String>? = phpMessage("inspection.missing_param", "\u0000")
+            ?.let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
+        val MISSING_ARGUMENTS: Pair<String, String>? = phpMessage("required.parameters.missing", "\u0000")
+            ?.let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
 
         /** What PhpStorm 2026.2 says of a pipe stage it does not take for a callable; absent from 2025.1, which has no pipe. */
         val NOT_A_VALID_CALLABLE: List<Pair<String, String>> = listOf(
