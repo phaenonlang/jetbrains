@@ -24,15 +24,19 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpTypeProvider4
  * - A parameter or property whose declared type was erased by [PhaenonLexer]: the type is rebuilt
  *   from the erased text by [PhaenonTypeText] (`list<User>` → `User[]`).
  * - A function or method whose return type was erased, likewise.
- * - A partial application, PHP 8.6's `f(?, 1)`, `$o->m(b: ?)`, `C::m(1, ...)`: the closure it
- *   creates (design/php-versions.md §5.2), its parameters the ones the placeholders stand for —
- *   positional ones first, then named ones in the order written, then what `...` leaves — and its
- *   return type the callee's. PhpStorm, which parses the call as a call ([PhaenonLexer] hands it
- *   `?` as a constant), adds the callee's return type itself; the extension point cannot take a
- *   type away, so `$g = f(?, 1)` is the callee's return type and the closure, and a call of `$g`
- *   is checked against the closure's signature.
+ * - A partial application up to PhpStorm 2026.2, PHP 8.6's `f(?, 1)`, `$o->m(b: ?)`,
+ *   `C::m(1, ...)`: the closure it creates (design/php-versions.md §5.2), its parameters the ones
+ *   the placeholders stand for — positional ones first, then named ones in the order written, then
+ *   what `...` leaves — and its return type the callee's. PhpStorm, which parses the call as a call
+ *   ([PhaenonLexer] hands it `?` as a constant), adds the callee's return type itself; the
+ *   extension point cannot take a type away, so `$g = f(?, 1)` is the callee's return type and the
+ *   closure, and a call of `$g` is checked against the closure's signature. From 2026.3 on
+ *   PhpStorm parses the placeholders itself: the call is its own partial application, no
+ *   [FunctionReference], which it types as the closure alone, and this provider leaves it to
+ *   PhpStorm.
  * - A pipe whose stage is a partial application, `$x |> $o->m(1, ?)`: the call it becomes. PhpStorm
- *   types a pipe by the function its right side names, which for a method call is no function.
+ *   types a pipe by the function its right side names, which for a method call is no function;
+ *   a stage that is its own partial application (2026.3) it types itself.
  *
  * A type that only an index lookup can decode is deferred the way the extension point intends:
  * [getType] returns a signature under this provider's key and [complete] resolves it when the

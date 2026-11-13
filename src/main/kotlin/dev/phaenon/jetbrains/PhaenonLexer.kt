@@ -36,11 +36,15 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  * - `type Name = …;` aliases are erased whole.
  * - `(bytes)` is re-typed as a `(string)` cast: one token spanning the parentheses.
  * - PHP 8.6's argument placeholders (`f(?, 1)`, `f(b: ?)`, `$o->m(?)`, design/php-versions.md
- *   §5): a `?` that stands alone as an argument is handed over as an identifier, its text kept,
- *   so the call parses as a call with a constant for an argument and the bound arguments stay
- *   PSI. PhpStorm's levels stop at PHP 8.5 and read `?` there as a syntax error.
- *   [PhaenonTypeProvider] types the call as the closure it creates. The variadic placeholder
- *   `f(1, ...)` is left to PhpStorm, which parses it as a spread without an operand.
+ *   §5): up to 2026.2, whose parser reads `?` there as a syntax error, a `?` that stands alone
+ *   as an argument is handed over as an identifier, its text kept, so the call parses as a call
+ *   with a constant for an argument and the bound arguments stay PSI; [PhaenonTypeProvider] types
+ *   the call as the closure it creates. The variadic placeholder `f(1, ...)` is left to PhpStorm,
+ *   which parses it as a spread without an operand. A PhpStorm whose parser makes placeholders
+ *   itself (2026.3 on, [PhaenonPartialApplication.phpStormParsesPlaceholders]) gets PHP's own
+ *   `?`: the call is then its partial application, `?` and `...` alike, typed by PhpStorm. Were
+ *   `?` a constant there, a call that also ends in `...` would be PhpStorm's partial application
+ *   with the constant for a bound argument, and its closure a parameter short.
  * - D18 (design/functions.md §3, §4): a named function's `throws A|B` clause, after its parameters
  *   or its return type, is erased whole, its names references like any erased type's; an expression
  *   body `=> expr;` is handed over as the block it compiles to, the arrow's two characters split into
@@ -461,10 +465,11 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
      * `?` standing alone as an argument — after `(`, `,` or a named argument's `name:`, before `,`
      * or `)` — is PHP 8.6's placeholder: an identifier to the parser, so that the call stays a call.
      * Nowhere else in PHP does a lone `?` sit between those tokens: a nullable type is followed by
-     * its type, a ternary's `?` by its operand.
+     * its type, a ternary's `?` by its operand. Left as it is where PhpStorm's parser takes
+     * placeholders itself.
      */
     private fun tryPlaceholder(c: Tok): Plan? {
-        if (c.type != PhpTokenTypes.opQUEST) return null
+        if (c.type != PhpTokenTypes.opQUEST || PhaenonPartialApplication.phpStormParsesPlaceholders) return null
         val opens = prevSig == PhpTokenTypes.chLPAREN || prevSig == PhpTokenTypes.opCOMMA ||
             // A named argument's name may be a reserved word: `f(array: ?)`.
             prevSig == PhpTokenTypes.opCOLON && (prevPrevSig == PhpTokenTypes.IDENTIFIER || prevPrevSig in PhpTokenTypes.tsKEYWORDS)

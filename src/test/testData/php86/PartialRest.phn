@@ -1,0 +1,28 @@
+namespace App;
+
+final class Meter
+{
+    public static round(float $value, int $precision): float {
+        return $value;
+    }
+
+    scale(int $by, float $value): float {
+        return $value * $by;
+    }
+}
+
+final class Ruler
+{
+    public static width(int $indent, string $s): int {
+        return $indent;
+    }
+}
+
+final class Rests
+{
+    run(Meter $meter, string $ns): void {
+        $method = $meter->scale(2, ...);
+        $static = Meter::round(1.5, ...);
+        $width = $ns |> Ruler::width(2, ...);
+    }
+}

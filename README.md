@@ -23,7 +23,7 @@ the **full PHP toolchain** rather than a syntax-colouring approximation of it:
 
 Phaenon's own syntax parses too — generics, `list<T>`, `map<K, V>`, `bytes`, tuples, `class<T>`,
 `Closure(T): U`, `type` aliases, expression bodies `=> expr;` and `throws A|B`, and PHP 8.6's
-partial application, which no PhpStorm parses yet — and its types reach PhpStorm: a
+partial application, which PhpStorm parses only from 2026.3 on — and its types reach PhpStorm: a
 `list<User>` is a `User[]` to completion and the inspections, a `class<User>` names `User` behind
 `::` and `new`, a `Closure(int): string` checks the calls made through it. A list, a map and bytes
 are the array and the string they compile to, so `->` on them means what it means in PHP: they are
@@ -46,7 +46,7 @@ PhpStorm. A `.phn` file *is* a PHP file to the IDE: PHP file type, PHP language,
 | `PhaenonFileViewProviderFactory` | `lang.fileViewProviderFactory` for PHP, `order="first"` | Claims `.phn` files and hands every other PHP file to PhpStorm's own factory. |
 | `PhaenonFileViewProvider` | created by the factory | A single-root PHP view provider that, right after creating the `PhpFileImpl`, sets its content element type to `PhaenonFileElementType`. That is the same hook PhpStorm's template view provider uses to give the HTML side of a `.php` file its own parser, and it happens before any AST exists. Single-rooted on purpose: PhpStorm's provider also hosts an HTML tree built from inline-HTML tokens, which for a Phaenon file would only yield spurious HTML inspections. |
 | `PhaenonFileElementType` | root AST node of `.phn` files | An `IFileElementType` of the PHP language whose `parseContents` builds the `PsiBuilder` with `PhaenonLexer` and runs the stock PHP parser, the way PhpStorm parses its own code fragments. Everything below the root is ordinary PHP PSI, so the stub builder, indices, inspections and refactorings never notice. |
-| `PhaenonLexer` | the parser's lexer | PhpStorm's `PhpWithOptionalOpenTagLexer` (starts in scripting mode unless the first token is an open tag) wrapped in a `LookAheadLexer` that erases Phaenon-only syntax into `PhaenonTokenTypes.ERASED` tokens — comments to the parser (`PhaenonParserDefinition` adds the type to PHP's comment set), text and offsets untouched. See [Phaenon syntax](#phaenon-syntax). A method declared without a keyword (D27, design/functions.md §1.1) — at the member level of a class, interface, trait or enum body, anonymous classes included, `[modifiers] [&]name(` or `name<…>(` — gets an empty `PhaenonTokenTypes.FUNCTION` token before its `&` or name, which `PhaenonPsiBuilder` shows the parser as `function` and whose leaf is PHP's `function` leaf with no text: it parses as PHP's method and, without a visibility, as public, as PHP reads it and as the compiler writes it. The lexer follows the scopes it hands over — class bodies, blocks, expression bodies — so a bare `name(` in a body, a property's hooks or an expression body stays a call or a hook; the names that keep PHP's `function` (a modifier, `var`, `const`, `function`, `fn`, `Closure`) are never given one. `fun` is an identifier. A PHP 8.6 placeholder `?` standing alone as an argument is handed over as an identifier, so `f(?, 1)` parses as a call with a constant for an argument (see [PHP 8.6](#php-86)). A named function's `throws A\|B` is erased whole, and its expression body's arrow is handed over as `{` and `return` (see [D18](#d18-expression-bodies-throws-layout)). |
+| `PhaenonLexer` | the parser's lexer | PhpStorm's `PhpWithOptionalOpenTagLexer` (starts in scripting mode unless the first token is an open tag) wrapped in a `LookAheadLexer` that erases Phaenon-only syntax into `PhaenonTokenTypes.ERASED` tokens — comments to the parser (`PhaenonParserDefinition` adds the type to PHP's comment set), text and offsets untouched. See [Phaenon syntax](#phaenon-syntax). A method declared without a keyword (D27, design/functions.md §1.1) — at the member level of a class, interface, trait or enum body, anonymous classes included, `[modifiers] [&]name(` or `name<…>(` — gets an empty `PhaenonTokenTypes.FUNCTION` token before its `&` or name, which `PhaenonPsiBuilder` shows the parser as `function` and whose leaf is PHP's `function` leaf with no text: it parses as PHP's method and, without a visibility, as public, as PHP reads it and as the compiler writes it. The lexer follows the scopes it hands over — class bodies, blocks, expression bodies — so a bare `name(` in a body, a property's hooks or an expression body stays a call or a hook; the names that keep PHP's `function` (a modifier, `var`, `const`, `function`, `fn`, `Closure`) are never given one. `fun` is an identifier. Up to 2026.2 a PHP 8.6 placeholder `?` standing alone as an argument is handed over as an identifier, so `f(?, 1)` parses as a call with a constant for an argument; a PhpStorm whose parser takes placeholders itself (2026.3) gets PHP's own `?` (see [PHP 8.6](#php-86)). A named function's `throws A\|B` is erased whole, and its expression body's arrow is handed over as `{` and `return` (see [D18](#d18-expression-bodies-throws-layout)). |
 | `PhaenonPsiBuilder` | the parser's `PsiBuilder` | A `PsiBuilderAdapter` that intercepts PhpStorm's lazy function bodies and parses them on the spot, so the whole file goes through one lexer. PhpStorm expands a lazy block by re-lexing its text with a plain PHP lexer, which would discard the erasures inside every body. A body is parsed by running PhpStorm's parser — the public `PsiParser` that parses the file — again on the same builder, which for that run ends its input at the body's closing brace (a *fence*) and drops the two markers the parser opens around its statements, so that they become the body's children; a body inside it gets a fence of its own. An expression body's block, which the lexer opens at the arrow, has no `}` in the source: its fence stands behind the `;` that ends the expression, where the lexer ends the body's scope, and the block is closed there. [Internal API](#internal-api) says what this rests on. |
 | `PhaenonBaseLexerProvider` | `com.jetbrains.php.baseLexerProvider` | Editor highlighting does not go through the parser: PhpStorm's editor highlighter is keyed by file type and builds its own lexer, asking this EP first. It gets the plain open-tag-optional lexer, so Phaenon syntax is coloured as the PHP tokens it is made of; Phaenon adds no keyword, and a method's name without one is the identifier it is. |
 | `PhaenonTypeProvider` | `com.jetbrains.php.typeProvider4` | Reads the erased Phaenon types back from the erased leaves (`PhaenonErasedTypes`, `PhaenonTypeSyntax`, `PhaenonTypeText`) and gives parameters, properties and return types their types: `list<User>` and `map<string, User>` → `User[]`, `bytes` → `string`, the array and the string they erase to; a type parameter → its bound, as the compiler writes it; `class<T>` → `class-string<Bound>` alone, the type PhpStorm gives a docblock-only `@return class-string<Bound>`, on which `$c::m()`, `new $c` and `$c::CONST` resolve; `Closure(A, B=, C...): R` → `\Closure` plus the signature in PhpStorm's own encoding. Types a partial application as the closure it creates and a pipe stage that is one as the call it becomes. |
@@ -116,7 +116,7 @@ provider reads it back, and the class names in it are references.
 | `[modifiers] [&]name(…)`, `name<T>(…)` at a class body's member level (D27) | PHP's method: an empty `function` token before the `&` or the name, its leaf PHP's `function` with no text | PHP's: a method without a visibility is public |
 | `name(): T => expr;` (D18) | `{ return expr;` — the arrow split into `{` and `return`, closed behind the expression's `;`; `{ expr;` under `void` and `never` | the declared return type; the value is checked as a `return`'s |
 | `throws A\|B` after the parameters or the return type (D18) | erased | — (the names are references) |
-| `f(?, 1)`, `f(b: ?)`, `$o->m(?)`, `C::m(1, ...)` (PHP 8.6) | the call; `?` an identifier, a constant named `?`; `...` PhpStorm's spread without an operand | the callee's result, which PhpStorm adds, and the closure: `Closure(int): string` from the placeholders' parameters and the callee's return type |
+| `f(?, 1)`, `f(b: ?)`, `$o->m(?)`, `C::m(1, ...)` (PHP 8.6) | up to 2026.2 the call, `?` an identifier, a constant named `?`, and `...` PhpStorm's spread without an operand; from 2026.3 PhpStorm's own partial application | up to 2026.2 the callee's result, which PhpStorm adds, and the closure: `Closure(int): string` from the placeholders' parameters and the callee's return type; from 2026.3 PhpStorm's closure alone |
 | `Closure(A, B=, C...): R` | erased: to PhpStorm a bare `Closure` is a class of the file's namespace | `\Closure`, in any namespace, and the signature as PhpStorm encodes the docblock `\Closure(A, B, C): R` |
 | `\Closure(A): R` | `\Closure`, the signature erased | the same as the bare spelling |
 | a type parameter `T` | erased | its bound, `mixed` without one |
@@ -177,31 +177,49 @@ after a signature and a name after a return type are syntax errors in any PHP fi
 
 ## PHP 8.6
 
-PHP 8.6 ships on 2026-11-19 and the compiler supports it (design/php-versions.md). No PhpStorm
-does yet: the language levels stop at PHP 8.5, from 2026.1 to 2026.3, so in plain PHP each 8.6
-construct is a finding, the same in all:
+PHP 8.6 ships on 2026-11-19 and the compiler supports it (design/php-versions.md). PhpStorm 2026.1
+and 2026.2 do not: their language levels stop at PHP 8.5, so in plain PHP each 8.6 construct is a
+finding at any level. PhpStorm 2026.3 has a PHP 8.6 level and parses partial application at every
+level; below 8.6 its language-level inspection (on by default) reports what 8.6 brings, and at 8.6
+only the write through a constant stays an error:
 
-| PHP 8.6 | PhpStorm 2026.1 to 2026.3 in a `.php` file | `.phn`, target 8.6 | `.phn`, target 8.5 |
-|---|---|---|---|
-| partial application: `f(?, 1)`, `f(b: ?)`, `$o->m(?)`, `C::m(?)`, in pipes and constant expressions | syntax errors from the `?` on ("Expected: )"); `f(1, ...)`: "Expected: expression after spread operator"; in a constant: "Expression is not allowed as constant value" | parses, no finding, typed (below) | the same: the compiler lowers it for 8.5 |
-| `public readonly string $name = 'x';` | "'readonly' property cannot have default value" | no finding | PhpStorm's finding stays (the compiler: "needs PHP 8.6") |
-| `#[\Override]` on a class constant, an enum case | on a constant: "Attribute cannot be applied to a class constant because it does not contain the 'Attribute::TARGET_CLASS CONSTANT' flag" (the stubs' targets); on a case: nothing | no finding | no finding: the compiler checks it and drops the attribute |
-| `__debugInfo()` in an enum | "Enum may not include '__debugInfo'" | no finding | PhpStorm's finding stays |
-| `CONFIG->prop = $v` | "Can't use temporary expression in write context" | no finding | PhpStorm's finding stays |
+| PHP 8.6 | PhpStorm 2026.1 and 2026.2 in a `.php` file | PhpStorm 2026.3 in a `.php` file, level 8.5 | `.phn`, target 8.6 | `.phn`, target 8.5 |
+|---|---|---|---|---|
+| partial application: `f(?, 1)`, `f(b: ?)`, `$o->m(?)`, `C::m(?)`, in pipes and constant expressions | syntax errors from the `?` on ("Expected: )"); `f(1, ...)`: "Expected: expression after spread operator"; in a constant: "Expression is not allowed as constant value" | "Partial function application is only allowed since PHP 8.6"; in a constant also "Expression is not allowed as constant value" | parses, no finding, typed (below) | the same: the compiler lowers it for 8.5 |
+| `public readonly string $name = 'x';` | "'readonly' property cannot have default value" | "Default value of a 'readonly' property is only available in PHP 8.6 and later" | no finding | PhpStorm's finding stays (the compiler: "needs PHP 8.6") |
+| `#[\Override]` on a class constant, an enum case | on a constant: "Attribute cannot be applied to a class constant because it does not contain the 'Attribute::TARGET_CLASS CONSTANT' flag" (the stubs' targets); on a case: nothing | "'#[Override]' on class constants and enum cases is only allowed since PHP 8.6" | no finding | no finding: the compiler checks it and drops the attribute |
+| `__debugInfo()` in an enum | "Enum may not include '__debugInfo'" | "'__debugInfo' magic method in enums is only available in PHP 8.6 and later" | no finding | PhpStorm's finding stays |
+| `CONFIG->prop = $v` | "Can't use temporary expression in write context" | the same, at any level | no finding | PhpStorm's finding stays |
+
+PhpStorm takes its level from composer.json's `require.php` by default, as the compiler takes the
+target, so an 8.5 target is usually read at 8.5, where 2026.3's findings on 8.6 code are the ones
+a `.phn` drops or keeps by the table. Read at 8.6, 2026.3 reports no readonly default and no
+`__debugInfo()` in an enum, so on an 8.5 target those two keep nothing: `phn lsp` reports the
+compiler's refusal there.
 
 The target is the compiler's (§2): `phaenon.json`'s `"php"`, otherwise the lowest version
 composer.json's `require.php` admits (Composer's constraint grammar, ported from the compiler's
 `phpversion.LowestAdmitted`), otherwise 8.5; the nearest of each file at or above the source;
 clamped to 8.5…8.6 (`PhaenonTarget`).
 
-A partial application is a call to PhpStorm, with a constant named `?` for each placeholder, so
-its bound arguments are code: they complete, navigate and are type-checked. The plugin types it as
+Up to 2026.2 a partial application is a call to PhpStorm, with a constant named `?` for each
+placeholder, so its bound arguments are code: they complete, navigate and are type-checked. The plugin types it as
 the closure it creates — parameters from the placeholders in PHP's order (positional, then named
 as written, then what `...` leaves, a variadic by its element), return type the callee's — and
 PhpStorm adds the callee's return type, as it does for any call: `$g = format(?, 'kg')` is
 `string|(Closure(int): string)`, and `$g(5)` is checked against the closure. In a pipe, the stage
 `$x |> Style::width(2, ?)` is typed as the call it becomes, so the next stage sees `int`; PhpStorm
 types a function stage that way itself and a method stage not at all.
+
+PhpStorm 2026.3 parses placeholders itself, at every level: its parser makes a node of its own
+for each (`PhpElementTypes.PARTIAL_ARGUMENT_PLACEHOLDER`, which the plugin looks up by name), and
+the call is its own partial application. There the lexer hands `?` over as PHP's `?`, so a
+partial application in a `.phn` is PhpStorm's, as in a `.php`: typed as the closure alone, with
+the parameters' names and a variadic in PhpStorm's encoding as an array (`format(?, ...)` is
+`Closure(int, string, string[]): string`), and as a pipe stage as the call it becomes; the plugin
+adds no type and only drops the findings the target answers. Had `?` stayed a constant there,
+`format(?, ...)` would be PhpStorm's partial application with the constant for a bound argument,
+its closure a parameter short.
 
 ## Line map: navigation and debugging
 
@@ -470,14 +488,20 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   bytes is PhpStorm's (`User[]`, `string`); a function or method prints its signature as written,
   `function` only where the source has it, one parameter per line in the popup, and keeps
   PhpStorm's docblock sections.
-- `PhaenonPhp86Test`: `testData/php86/`: partial applications parse without a syntax error or a
-  finding on either target, are typed as their closures and come back from Reformat Code as
-  written; on 2026.2 a pipe stage is typed as its call (`PartialPipe.phn`); readonly defaults,
-  `#[\Override]` on constants and enum cases, `__debugInfo()` in an enum and a write through a
-  constant raise nothing on an 8.6 target, and on an 8.5 target PhpStorm's three findings stay; the
-  target follows `phaenon.json` and composer.json, and Composer constraints read as the compiler's
-  `phpversion` tests read them. PhpStorm's bundled `Core_c.php` stub is copied in from the PHP
-  plugin for `Attribute` and `Override`.
+- `PhaenonPhp86Test`: `testData/php86/`: partial applications — `?`, named, a trailing `...`,
+  both together, on functions, methods and static methods, as pipe stages — parse without a
+  syntax error or a finding on either target, at the 8.5 level and at the IDE's highest (2026.3's
+  language-level inspection on), are typed as their closures (by the plugin up to 2026.2, by
+  PhpStorm, the closure alone, from 2026.3) and come back from Reformat Code as written; a pipe
+  stage is typed as its call (`PartialPipe.phn`, `PartialRest.phn`); readonly defaults,
+  `#[\Override]` on constants and enum cases, `__debugInfo()` in an enum, directly or from a trait,
+  and a write through a constant raise nothing on an 8.6 target at either level, and on an 8.5
+  target read at 8.5 PhpStorm's findings stay, in each build's words (its language-level
+  inspection's where the build has the feature, else its annotator's); a `.php` keeps them all;
+  the target follows `phaenon.json` and composer.json, and Composer constraints read as the
+  compiler's `phpversion` tests read them. PhpStorm's bundled `Core_c.php` stub is copied in from
+  the PHP plugin for `Attribute` and `Override`. Each test puts the light project's language
+  level back.
 - `PhaenonImportOptimizerTest`: Optimize Imports on `testData/imports/X.phn` gives `X.after.phn`:
   an import used only in a type argument, union member, return type or closure signature (both
   spellings) stays, as one a docblock or PHP code uses does, and goes where
@@ -665,12 +689,19 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   closed where the source has no `}`, so a refactoring that adds a statement to the body —
   Introduce Variable on part of the expression — writes it between the arrow's two characters and
   breaks the arrow. Write the body as a block first; nothing converts one into the other yet.
-- **A partial application is also its callee's result to PhpStorm.** It parses as a call, and the
-  extension point that types it can add the closure but not take PhpStorm's own type away:
-  `format(?, 'kg')` is `string|(Closure(int): string)`. The compiler's refusals for an 8.5 target
-  (a bound argument by reference, a computed receiver, …) are not reported in the editor, nor is
-  `#[\Override]` on a constant that overrides nothing (`P2503`). On an 8.5 target the findings
-  that stay are PhpStorm's, in its wording, not the compiler's "… needs PHP 8.6 (target 8.5)".
+- **Up to 2026.2 a partial application is also its callee's result to PhpStorm.** It parses as a
+  call, and the extension point that types it can add the closure but not take PhpStorm's own
+  type away: `format(?, 'kg')` is `string|(Closure(int): string)`. A trailing `...` that stands for
+  a required parameter, `$o->scale(2, ...)`, draws PhpStorm's "Required parameter '$value'
+  missing" there. From 2026.3 the partial application is PhpStorm's, the closure alone. The
+  compiler's refusals for an 8.5 target (a bound argument by reference, a computed receiver, …)
+  are not reported in the editor, nor is `#[\Override]` on a constant that overrides nothing
+  (`P2503`). On an 8.5 target the findings that stay are PhpStorm's, in its wording, not the
+  compiler's "… needs PHP 8.6 (target 8.5)". In 2026.3 below 8.6, a placeholder of a `new` nested
+  in a partial application's arguments, `make(?, new Box(1, ...))`, loses PhpStorm's finding with
+  the partial application's, as the finding is judged by the call around it (the compiler still
+  refuses it). Batch **Inspect Code** shows 2026.3's language-level findings on a `.phn`'s 8.6 code:
+  the highlight filter reaches the editor only.
 - **Phaenon's spelling reaches the definition line only.** Quick documentation and the Ctrl+hover
   hint print a Phaenon declaration's types as written and a variable's in Phaenon's spelling;
   PhpStorm's docblock sections below it (Parameters, Returns) are PhpStorm's and show an erased
@@ -708,9 +739,9 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
 - **The plugin erases Phaenon, not PHP.** PHP syntax newer than the IDE's highest language level
   is a syntax error in `.phn` exactly as in `.php` (the floor, 2026.1.4, reaches PHP 8.5, the
   language's own floor, as every PhpStorm from 2025.3 on does: below 2025.3 the pipe operator `|>`
-  broke the enclosing class body). PHP 8.6 is the exception the compiler's support makes: its placeholders
-  are handed over as identifiers in both, and its other constructs are valid PHP to the parser
-  already.
+  broke the enclosing class body). PHP 8.6 is the exception the compiler's support makes: up to 2026.2 its
+  placeholders are handed over as identifiers, and its other constructs are valid PHP to the
+  parser already.
 - **An erased return type leaves no PHP return type.** For `function f(): map<string, mixed>`
   PhpStorm sees a function without a return type, so besides the type the plugin supplies it also
   infers one from the body, as it does for untyped PHP functions. The union is wider than the
@@ -813,7 +844,11 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   — when PhpStorm stops writing it, its popup is shown unchanged. `PhaenonParameterInfoHandler` finds
   PhpStorm's handler in the `codeInsight.parameterInfo` extension point by its class name, a string,
   and reproduces its presentation of a parameter (`[`optional`]`, `&`, `...`, `name: type`,
-  ` = default`). The filter's PHP 8.6 messages are PhpStorm's bundle keys; the pipe's
+  ` = default`). The filter's PHP 8.6 messages are PhpStorm's bundle keys, and 2026.3's
+  language-level ones `PhpLanguageFeature`'s messages, each constant looked up by name; a
+  placeholder PhpStorm parsed itself is recognised by its node type,
+  `PhpElementTypes.PARTIAL_ARGUMENT_PLACEHOLDER`, also looked up by name, whose presence is what
+  makes the lexer hand `?` over as PHP's own; the pipe's
   ("… is not a valid callable") are read only where the bundle has them (2026.2).
 
 ## VS Code

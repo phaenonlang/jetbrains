@@ -46,9 +46,12 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   `PhaenonParameterInfoHandler` print Phaenon's types as written in quick documentation, the
   Ctrl+hover hint and parameter info (`PhaenonTypePresentation` turns a `PhpType` back into
   Phaenon's spelling; fixtures `testData/docs/`, `testData/classstring/`); PHP 8.6 placeholders
-  are identifiers to the parser (`PhaenonLexer`), typed as closures (`PhaenonPartialApplication`),
-  and PhpStorm's findings on 8.6 code are dropped by target (`PhaenonTarget` reads `phaenon.json` and
-  composer.json; fixtures `testData/php86/`); `concurrently` and `spawn` are names like any other
+  are identifiers to the parser (`PhaenonLexer`) and typed as closures (`PhaenonPartialApplication`)
+  up to 2026.2, and PHP's own `?` from 2026.3 on, whose parser makes placeholders and types partial
+  application itself; PhpStorm's findings on 8.6 code, 2026.3's language-level ones below 8.6
+  included, are dropped by target (`PhaenonTarget` reads `phaenon.json` and composer.json; fixtures
+  `testData/php86/`, tested at the 8.5 level and the IDE's highest); `concurrently` and `spawn` are
+  names like any other
   since D25 withdrew the concurrency syntax (`PhaenonUnreservedWordsTest`); D18's `throws` clause
   is erased (`PhaenonThrows` answers the exception findings it covers) and an expression body is
   the block it compiles to, opened by the lexer and closed by `PhaenonPsiBuilder`; `.phn` is
@@ -100,7 +103,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   rests on how that parser drives a builder and on no API (README § Internal API): this test is
   what fails when a PhpStorm build changes it, with `PhaenonD18Test`, `PhaenonMethodsTest` and
   `PhaenonSyntaxTest` for what only Phaenon has in a body. So run the whole suite with `testInIde`
-  against every new PhpStorm line and EAP (those four for a quick look), and after every builder
+  against every new PhpStorm line and EAP (those four and `PhaenonPhp86Test`, where PhpStorm's own
+  PHP 8.6 support meets the plugin's, for a quick look), and after every builder
   change. A change that
   alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
   `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update
