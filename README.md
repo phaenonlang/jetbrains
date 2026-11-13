@@ -431,7 +431,9 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   without errors or error highlighting; the erased text is an erased leaf at its original offsets;
   `is` and `as` read as PHP reads them (D26: a leftover test is the syntax error of the same `.php`
   file); `(bytes)` is a string cast; bodies are not lazy; PHP without
-  Phaenon syntax lexes exactly as PhpStorm lexes it; reformatting leaves each erased construct as written.
+  Phaenon syntax lexes exactly as PhpStorm lexes it; reformatting leaves each erased construct as written;
+  a file that ends in an unfinished construct — after a `(`, inside a `<…>`, behind a return type —
+  lexes and parses, and so does every beginning of three fixtures, cut at each of its characters.
 - `PhaenonTreeEqualityTest`: PHP that reads the same with and without its open tag parses, as a
   `.phn`, into the tree PhpStorm builds of the `.php` once its lazy bodies are expanded: the same
   element types over the same ranges and the same errors, but for the open tag and a body's node
