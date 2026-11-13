@@ -1,0 +1,64 @@
+namespace App\Trees;
+
+use App\Trees\Model\Box;
+use App\Trees\Model\User;
+
+/**
+ * What a body of a Phaenon file holds that a body of a PHP file does not: erased types and
+ * expression bodies, at every depth.
+ */
+final class Canary<T of object>
+{
+    private list<T> $items = [];
+
+    /** A body with bodies in it: each one is parsed with the file. */
+    run(list<User> $users, class<T> $type): map<string, int>
+    {
+        $box = new Box<int>(1);
+        $first = first<User>($users);
+        $visitor = new class ($box) {
+            __construct(private Box<int> $box) {}
+
+            value(): int => $this->box->value;
+
+            names(list<User> $users): list<string>
+            {
+                return array_map(fn (User $user): string => $user->name, $users);
+            }
+        };
+        $pick = function (list<T> $from) use ($type): ?T {
+            try {
+                return pick<T>($from, $type);
+            } catch (\Throwable) {
+                return null;
+            } finally {
+                $this->items = [];
+            }
+        };
+
+        return [
+            'names' => $visitor->value() + \count($visitor->names($users)),
+            'picked' => $pick($this->items) === null ? 0 : 1,
+            'first' => $first === null ? 0 : 1,
+        ];
+    }
+
+    filter(): \Closure => function (T $item): bool {
+        $seen = new Box<bool>(false);
+        $again = new class { seen(list<bool> $flags): bool => \in_array(true, $flags, true); };
+
+        return !$seen->value && !$again->seen([]) && $item instanceof \Countable;
+    };
+
+    last(): ?T => $this->items === [] ? null : $this->items[\count($this->items) - 1];
+}
+
+function tally(list<int> $numbers): int
+{
+    $sum = fn (int ...$n): int => array_sum($n);
+    $inner = new class {
+        total(list<int> $n): int => array_sum($n);
+    };
+
+    return $sum(...$numbers) + $inner->total($numbers);
+}
