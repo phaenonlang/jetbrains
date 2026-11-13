@@ -86,6 +86,51 @@ class PhaenonD18Test : BasePlatformTestCase() {
         assertEquals("names", (names.resolve() as? com.jetbrains.php.lang.psi.elements.Field)?.name)
     }
 
+    fun testAnExpressionBodyEndsBehindTheSemicolonOfItsExpression() {
+        // Not at a `;` inside the expression: in a closure's body, a `match`, an anonymous class, a string.
+        myFixture.configureByFile("d18/Ends.phn")
+
+        assertEmpty(PsiTreeUtil.findChildrenOfType(myFixture.file, PsiErrorElement::class.java).map { "${it.errorDescription} at ${it.textOffset}" })
+        val functions = functions()
+        val members = listOf(
+            "plain", "closure", "arrow", "arrows", "matched", "heredoc", "nowdoc", "log", "fail", "anonymous", "of", "reference", "keyed", "interpolated", "block",
+        )
+        assertEquals(members.sorted(), PsiTreeUtil.findChildrenOfType(myFixture.file, PhpClass::class.java).single { it.name == "Ends" }.ownMethods.map { it.name }.sorted())
+        for (name in members.map { "Ends::$it" } + listOf("::twice", "::generated", "::count", "::inner", "::deep")) {
+            if (name == "Ends::block") continue
+            val function = functions.getValue(name)
+            val body = PsiTreeUtil.getChildOfType(function, GroupStatement::class.java)!!
+            assertEquals(name, "=", body.firstChild.text)
+            assertEquals(name, 1, body.statements.size)
+            assertTrue(name, body.text.endsWith(";"))
+            assertEquals(name, function.textRange.endOffset, body.textRange.endOffset)
+            assertSame(name, body, body.statements.single().parent)
+        }
+        assertEquals("=> 2;", PsiTreeUtil.getChildOfType(functions.getValue("::deep"), GroupStatement::class.java)!!.text)
+    }
+
+    fun testAnUnfinishedExpressionBodyEndsWhereItsScopeDoes() {
+        // No `;` yet: the body runs as far as the lexer reads it, to the next `;` outside braces…
+        myFixture.configureByText(
+            "Typing.phn",
+            "namespace App;\n\nfinal class Typing\n{\n    a(): int => \$this->x\n\n    b(): int { return 1; }\n\n    private int \$y = 1;\n\n    c(): int => 2;\n}\n",
+        )
+        assertNotEmpty(PsiTreeUtil.findChildrenOfType(myFixture.file, PsiErrorElement::class.java))
+        var functions = functions()
+        assertTrue(PsiTreeUtil.getChildOfType(functions.getValue("Typing::a"), GroupStatement::class.java)!!.text.endsWith("\$y = 1;"))
+        assertEquals("=> 2;", PsiTreeUtil.getChildOfType(functions.getValue("Typing::c"), GroupStatement::class.java)!!.text)
+
+        // … or to the brace that closes what the body stands in, which stays that brace.
+        myFixture.configureByText(
+            "Last.phn",
+            "namespace App;\n\nfinal class Last\n{\n    a(): int => \$this->x\n}\n\nfinal class Next\n{\n    b(): int => 2;\n}\n",
+        )
+        assertEquals(listOf("Expected: semicolon"), PsiTreeUtil.findChildrenOfType(myFixture.file, PsiErrorElement::class.java).map { it.errorDescription })
+        functions = functions()
+        assertEquals("=> \$this->x", PsiTreeUtil.getChildOfType(functions.getValue("Last::a"), GroupStatement::class.java)!!.text)
+        assertEquals("=> 2;", PsiTreeUtil.getChildOfType(functions.getValue("Next::b"), GroupStatement::class.java)!!.text)
+    }
+
     fun testTheValueIsCheckedAsAReturnIs() {
         myFixture.enableInspections(
             PhpIncompatibleReturnTypeInspection::class.java,

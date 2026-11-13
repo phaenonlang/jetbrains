@@ -19,7 +19,7 @@ import com.jetbrains.php.lang.PhpLanguage
  * an explicit lexer and hand it to the stock PHP parser. The builder takes its comment tokens from
  * [PhaenonParserDefinition], so the erased constructs are skipped as comments, and is wrapped in
  * [PhaenonPsiBuilder] so that no block is parsed lazily (a lazy block would be re-lexed later
- * without the erasures). Everything below the root is therefore ordinary PHP PSI, produced by
+ * without the erasures): the builder runs the same parser on each body in its turn. Everything below the root is therefore ordinary PHP PSI, produced by
  * PhpStorm, and the stub builder, indices, inspections and refactorings never learn that the file
  * was special.
  *
@@ -41,7 +41,8 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
      * as closures; 6: `throws` clauses erased, expression bodies as blocks; 7: `list`, `map` and
      * `bytes` typed as the array and the string they erase to, D20; 8: `concurrently` and `spawn`
      * plain identifiers again, D25; 9: `is`, `as` and `as?` no longer erased, D26; 10: methods
-     * without a keyword, `fun` an identifier, D27).
+     * without a keyword, `fun` an identifier, D27; 11: an expression body without its `;` runs to
+     * the end of the lexer's scope for it, not of its first statement).
      *
      * The stub trees PhpStorm stores for `.phn` files are versioned by the PHP file type (the
      * platform asks the language's parser definition, never the file's content element type), so
@@ -50,13 +51,15 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
      * [PhaenonReindexActivity] re-indexes the `.phn` files of a project once this number differs
      * from the one it stored.
      */
-    const val PSI_VERSION: Int = 10
+    const val PSI_VERSION: Int = 11
 
     override fun parseContents(chameleon: ASTNode): ASTNode? {
         val project = chameleon.psi.project
         val php = LanguageParserDefinitions.INSTANCE.forLanguage(PhpLanguage.INSTANCE)
         val builder = PsiBuilderImpl(project, PhaenonParserDefinition(php), PhaenonLexer(), chameleon, chameleon.chars)
 
-        return php.createParser(project).parse(this, PhaenonPsiBuilder(project, builder)).firstChildNode
+        val parser = php.createParser(project)
+
+        return parser.parse(this, PhaenonPsiBuilder(parser, builder)).firstChildNode
     }
 }
