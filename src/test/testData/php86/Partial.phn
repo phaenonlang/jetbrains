@@ -32,3 +32,4 @@ final class Partials
 }
 
 const FORMAT = format(?, 'm');
+const FORMAT_REST = format(1, ...);

@@ -3,19 +3,26 @@ package dev.phaenon.jetbrains
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiWhiteSpace
+import com.intellij.psi.tree.IElementType
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtilCore
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
+import com.jetbrains.php.lang.parser.PhpElementTypes
 import com.jetbrains.php.lang.psi.elements.ConstantReference
 import com.jetbrains.php.lang.psi.elements.FunctionReference
 import com.jetbrains.php.lang.psi.elements.Parameter
+import com.jetbrains.php.lang.psi.elements.ParameterList
+import com.jetbrains.php.lang.psi.elements.PhpCallableFunction
 
 /**
  * A PHP 8.6 partial application as the editor sees it (design/php-versions.md §5): a call in a
  * `.phn` file with a placeholder among its arguments — `?` for one argument, `name: ?` for a named
  * one, a trailing `...` for all that remain. [PhaenonLexer] hands each `?` to PhpStorm's parser
  * as an identifier, so the call is ordinary PSI with a constant named `?` for an argument; the
- * trailing `...` is PhpStorm's own spread without an operand.
+ * trailing `...` is PhpStorm's own spread without an operand up to 2026.2. PhpStorm 2026.3 parses
+ * the trailing `...` itself: the call is then PhpStorm's partial application, a
+ * [PhpCallableFunction] (the element of a first-class callable) whose placeholder is a node of
+ * PhpStorm's ([isPhpStormsPlaceholder]), and PhpStorm types it as the closure it creates.
  *
  * The shape is what the closure's parameters are made from: one flag per positional argument
  * (placeholder or bound), the named arguments in the order written, and whether `...` ends the
@@ -60,10 +67,27 @@ class PhaenonPartialApplication private constructor(
         /** The text of a placeholder argument. */
         const val PLACEHOLDER = "?"
 
-        /** Whether [element] is a `?` placeholder of a `.phn` file: the constant [PhaenonLexer] made of it. */
+        /**
+         * The node PhpStorm's parser makes of a placeholder from 2026.3 on,
+         * `PhpElementTypes.PARTIAL_ARGUMENT_PLACEHOLDER`: looked up by name, as the plugin is built
+         * against a PhpStorm that has none, and null in such a PhpStorm.
+         */
+        private val PHPSTORM_PLACEHOLDER: IElementType? = try {
+            PhpElementTypes::class.java.getField("PARTIAL_ARGUMENT_PLACEHOLDER").get(null) as? IElementType
+        } catch (e: ReflectiveOperationException) {
+            null
+        }
+
+        /** Whether [element] is a placeholder PhpStorm's own parser made, `...` or `?` in a node of its own (2026.3 on). */
+        @JvmStatic
+        fun isPhpStormsPlaceholder(element: PsiElement?): Boolean =
+            PHPSTORM_PLACEHOLDER != null && PsiUtilCore.getElementType(element) === PHPSTORM_PLACEHOLDER
+
+        /** Whether [element] is a `?` placeholder of a `.phn` file: the constant [PhaenonLexer] made of it, or PhpStorm's own. */
         @JvmStatic
         fun isPlaceholder(element: PsiElement?): Boolean =
-            element is ConstantReference && element.text == PLACEHOLDER && PhaenonErasedTypes.isPhaenon(element)
+            element is ConstantReference && element.text == PLACEHOLDER && PhaenonErasedTypes.isPhaenon(element) ||
+                element != null && isPhpStormsPlaceholder(element) && element.textMatches(PLACEHOLDER)
 
         /**
          * Whether [leaf] is the trailing `...` of a partial application, `f(1, ...)`: a spread
@@ -80,11 +104,15 @@ class PhaenonPartialApplication private constructor(
             return PsiUtilCore.getElementType(previous) === PhpTokenTypes.opCOMMA
         }
 
-        /** The shape of [call] when it is a partial application of a `.phn` file, null otherwise. */
+        /**
+         * The shape of [call] — a call, or PhpStorm's own partial application ([PhpCallableFunction],
+         * 2026.3 on) — when it is a partial application of a `.phn` file, null otherwise.
+         */
         @JvmStatic
-        fun of(call: FunctionReference): PhaenonPartialApplication? {
+        fun of(call: PsiElement): PhaenonPartialApplication? {
+            if (call !is FunctionReference && call !is PhpCallableFunction) return null
             if (!PhaenonErasedTypes.isPhaenon(call)) return null
-            val list = call.parameterList ?: return null
+            val list = PsiTreeUtil.getChildOfType(call, ParameterList::class.java) ?: return null
             val positional = ArrayList<Boolean>()
             val named = ArrayList<Pair<String, Boolean>>()
             var variadic = false
@@ -98,6 +126,10 @@ class PhaenonPartialApplication private constructor(
                     type === PhpTokenTypes.opCOLON -> Unit
                     type === PhpTokenTypes.opVARIADIC -> {
                         if (!isVariadicPlaceholder(child)) return null // unpacking: no placeholders with it
+                        variadic = true
+                        any = true
+                    }
+                    isPhpStormsPlaceholder(child) && child.textMatches("...") -> {
                         variadic = true
                         any = true
                     }

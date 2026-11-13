@@ -30,9 +30,12 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpTypeProvider4
  *   return type the callee's. PhpStorm, which parses the call as a call ([PhaenonLexer] hands it
  *   `?` as a constant), adds the callee's return type itself; the extension point cannot take a
  *   type away, so `$g = f(?, 1)` is the callee's return type and the closure, and a call of `$g`
- *   is checked against the closure's signature.
+ *   is checked against the closure's signature. PhpStorm 2026.3 parses a trailing `...` itself:
+ *   `f(1, ...)` is then its own partial application, no [FunctionReference], which it types as the
+ *   closure alone, and this provider leaves it to PhpStorm.
  * - A pipe whose stage is a partial application, `$x |> $o->m(1, ?)`: the call it becomes. PhpStorm
- *   types a pipe by the function its right side names, which for a method call is no function.
+ *   types a pipe by the function its right side names, which for a method call is no function;
+ *   a stage that is its own partial application (2026.3) it types itself.
  *
  * A type that only an index lookup can decode is deferred the way the extension point intends:
  * [getType] returns a signature under this provider's key and [complete] resolves it when the

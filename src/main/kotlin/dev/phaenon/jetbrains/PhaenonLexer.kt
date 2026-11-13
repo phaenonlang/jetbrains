@@ -38,9 +38,11 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  * - PHP 8.6's argument placeholders (`f(?, 1)`, `f(b: ?)`, `$o->m(?)`, design/php-versions.md
  *   §5): a `?` that stands alone as an argument is handed over as an identifier, its text kept,
  *   so the call parses as a call with a constant for an argument and the bound arguments stay
- *   PSI. PhpStorm's levels stop at PHP 8.5 and read `?` there as a syntax error.
- *   [PhaenonTypeProvider] types the call as the closure it creates. The variadic placeholder
- *   `f(1, ...)` is left to PhpStorm, which parses it as a spread without an operand.
+ *   PSI. PhpStorm up to 2026.2 reads `?` there as a syntax error; 2026.3 parses it, and the
+ *   lexer hands it over all the same, so that a call with `?` reads alike in every PhpStorm of
+ *   the range. [PhaenonTypeProvider] types the call as the closure it creates. The variadic
+ *   placeholder `f(1, ...)` is left to PhpStorm, which parses it as a spread without an operand,
+ *   and from 2026.3 on as its own partial application ([PhaenonPartialApplication]).
  * - D18 (design/functions.md §3, §4): a named function's `throws A|B` clause, after its parameters
  *   or its return type, is erased whole, its names references like any erased type's; an expression
  *   body `=> expr;` is handed over as the block it compiles to, the arrow's two characters split into

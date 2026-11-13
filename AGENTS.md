@@ -43,9 +43,11 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   `PhaenonParameterInfoHandler` print Phaenon's types as written in quick documentation, the
   Ctrl+hover hint and parameter info (`PhaenonTypePresentation` turns a `PhpType` back into
   Phaenon's spelling; fixtures `testData/docs/`, `testData/classstring/`); PHP 8.6 placeholders
-  are identifiers to the parser (`PhaenonLexer`), typed as closures (`PhaenonPartialApplication`),
-  and PhpStorm's findings on 8.6 code are dropped by target (`PhaenonTarget` reads `phaenon.json` and
-  composer.json; fixtures `testData/php86/`); `concurrently` and `spawn` are names like any other
+  are identifiers to the parser (`PhaenonLexer`) and typed as closures (`PhaenonPartialApplication`;
+  a trailing `...` PhpStorm 2026.3 parses and types itself), and PhpStorm's findings on 8.6 code,
+  2026.3's language-level ones below 8.6 included, are dropped by target (`PhaenonTarget` reads
+  `phaenon.json` and composer.json; fixtures `testData/php86/`, tested at the 8.5 level and the
+  IDE's highest); `concurrently` and `spawn` are names like any other
   since D25 withdrew the concurrency syntax (`PhaenonUnreservedWordsTest`); D18's `throws` clause
   is erased (`PhaenonThrows` answers the exception findings it covers) and an expression body is
   the block it compiles to, opened by the lexer and closed by `PhaenonPsiBuilder`; `.phn` is
