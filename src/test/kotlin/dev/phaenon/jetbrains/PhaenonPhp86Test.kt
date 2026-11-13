@@ -35,12 +35,14 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * - `__debugInfo()` in an enum: "Enum may not include '__debugInfo'";
  * - `CONFIG->level = $v`: "Can't use temporary expression in write context".
  *
- * PhpStorm 2026.3 has an 8.6 level and parses a trailing `...` itself, as its own partial
- * application, which it types. Below 8.6 its language-level inspection, on by default, reports
- * partial application, `#[\Override]` on a constant or an enum case, a readonly default and
- * `__debugInfo()` in an enum ("… is only allowed since PHP 8.6"); the write through a constant
- * stays an error at every level. So the tests run at PHP 8.5, the language's floor and what
- * PhpStorm takes from an 8.5 target's composer.json, and at the IDE's highest level.
+ * PhpStorm 2026.3 has an 8.6 level and parses placeholders itself: a `.phn`'s `?` reaches it as
+ * PHP's own, and a partial application is PhpStorm's, which it types. Below 8.6 its language-level
+ * inspection, on by default, reports partial application, `#[\Override]` on a constant or an enum
+ * case, a readonly default and `__debugInfo()` in an enum ("… is only allowed since PHP 8.6"); the
+ * write through a constant stays an error at every level. So the tests run at PHP 8.5, the
+ * language's floor and what PhpStorm takes from an 8.5 target's composer.json, and at the IDE's
+ * highest level, and expect each build's own types where they differ, chosen by what the build
+ * has.
  *
  * The test project lacks PhpStorm's bundled stubs, so the one declaring `Attribute` and
  * `Override` is copied in from the PHP plugin itself: the attribute targets are each IDE's own.
@@ -95,23 +97,33 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
         myFixture.configureByFiles("php86/Partial.phn")
 
         val types = assignedTypes()
-        assertTrue(types["positional"].toString(), closure(listOf("\\int"), "\\string") in types["positional"]!!)
-        val rest = assignedValue("rest")
-        assertNotNull("a trailing `...` makes a partial application", PhaenonPartialApplication.of(rest))
-        if (rest is PhpCallableFunction) {
-            // PhpStorm 2026.3 parses the trailing `...` itself, as its own partial application, and
-            // types it as the closure alone, in its encoding: the variadic `string ...$tags` is
-            // `string[]` there. The plugin adds nothing to it.
-            val closures = types["rest"]!!.filter { PhpType.removeParametrisedType(it) == PhpType._CLOSURE && PhpType.getParametrizedParts(it).isNotEmpty() }
-            assertEquals(types["rest"].toString(), listOf("\\string", "\\string[]", "\\string"), signature(closures.single()))
-            assertFalse("not the callee's result", "\\string" in types["rest"]!!)
-        } else {
-            assertTrue("`...` takes what is left, the variadic by its element", rest is FunctionReference && closure(listOf("\\string", "\\string"), "\\string") in types["rest"]!!)
-        }
-        assertTrue("a named placeholder", closure(listOf("\\string"), "\\string") in types["named"]!!)
-        assertTrue("a method", closure(listOf("\\float"), "\\float") in types["method"]!!)
-        assertTrue("a static method", closure(listOf("\\float"), "\\float") in types["static"]!!)
+        assertPartial(types, "positional", listOf("\\int"), "\\string")
+        // `...` takes what is left, the variadic by its element.
+        assertPartial(types, "rest", listOf("\\string", "\\string"), "\\string", variadic = true)
+        assertPartial(types, "mixed", listOf("\\int", "\\string", "\\string"), "\\string", variadic = true)
+        assertPartial(types, "named", listOf("\\string"), "\\string")
+        assertPartial(types, "method", listOf("\\float"), "\\float")
+        assertPartial(types, "static", listOf("\\float"), "\\float")
         assertTrue("a call of the closure", "\\string" in types["called"]!!)
+        assertTrue("a call of `...`'s closure", "\\string" in types["restCalled"]!!)
+        assertTrue("a call of the mixed form's closure", "\\string" in types["mixedCalled"]!!)
+    }
+
+    fun testMethodsAndPipeStagesTakeATrailingPlaceholder() = atEachLevel { level ->
+        myFixture.configureByFiles("php86/PartialRest.phn")
+
+        assertEmpty(level.name, syntaxErrors())
+        if (PhaenonPartialApplication.phpStormParsesPlaceholders) {
+            assertEmpty(level.name, findings())
+        } else {
+            // Up to 2026.2 the call is a call with a spread to PhpStorm, which misses the argument
+            // `...` stands for: "Required parameter '$value' missing", a known defect of its own.
+            assertSameElements(level.name, findings().map { it.substringAfter(" @") }, listOf("'(2, ...)'", "'(1.5, ...)'", "'(2, ...)'"))
+        }
+        val types = assignedTypes()
+        assertPartial(types, "method", listOf("\\float"), "\\float")
+        assertPartial(types, "static", listOf("\\int"), "\\float")
+        assertEquals("a pipe stage, the call it becomes", listOf("\\int"), types["width"])
     }
 
     fun testAPipeStageIsTypedAsTheCallItBecomes() {
@@ -188,6 +200,27 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
     private fun findings(): List<String> = myFixture.doHighlighting()
         .filter { it.severity.myVal >= HighlightSeverity.WEAK_WARNING.myVal }
         .map { "${it.description} @'${it.text}'" }
+
+    /**
+     * [name] holds the closure of a partial application from [parameters] to [returns], the last
+     * parameter [variadic]: PhpStorm's own partial application (2026.3), the closure alone in its
+     * encoding, parameter names included and a variadic as an array; or, up to 2026.2, a call the
+     * plugin types as its closure, beside the callee's result.
+     */
+    private fun assertPartial(types: Map<String, List<String>>, name: String, parameters: List<String>, returns: String, variadic: Boolean = false) {
+        val value = assignedValue(name)
+        val type = types[name]!!
+        assertNotNull("$name is a partial application", PhaenonPartialApplication.of(value))
+        assertEquals("$name is PhpStorm's own where its parser takes placeholders", PhaenonPartialApplication.phpStormParsesPlaceholders, value is PhpCallableFunction)
+        if (value is PhpCallableFunction) {
+            val closures = type.filter { PhpType.removeParametrisedType(it) == PhpType._CLOSURE && PhpType.getParametrizedParts(it).isNotEmpty() }
+            val expected = (if (variadic) parameters.dropLast(1) + (parameters.last() + "[]") else parameters) + returns
+            assertEquals("$name: $type", expected, signature(closures.single()))
+            assertFalse("$name: the closure alone, not the callee's result: $type", returns in type)
+        } else {
+            assertTrue("$name: $type", value is FunctionReference && closure(parameters, returns) in type)
+        }
+    }
 
     private fun assignedValue(name: String) =
         PsiTreeUtil.findChildrenOfType(myFixture.file, AssignmentExpression::class.java).single { (it.variable as? Variable)?.name == name }.value!!

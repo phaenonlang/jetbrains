@@ -28,6 +28,9 @@ final class Partials
         $method = $calc->scale(2, ?);
         $static = Calc::round(?, 0);
         $called = $positional(5);
+        $restCalled = $rest('kg', 'a', 'b');
+        $mixed = format(?, ...);
+        $mixedCalled = $mixed(3, 'kg');
     }
 }
 

@@ -75,16 +75,16 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * some other declaration is hand-written.
  *
  * PHP 8.6 (design/php-versions.md §4), which PhpStorm 2026.1 and 2026.2 do not know — their
- * language levels stop at 8.5 — and 2026.3 knows in part: it has an 8.6 level, parses a trailing
- * `...` placeholder itself, and below 8.6 its language-level inspection reports partial
- * application, `#[\Override]` on constants, readonly defaults and `__debugInfo()` in enums ("… is
- * only allowed since PHP 8.6", [PhpLanguageFeature]'s messages):
+ * language levels stop at 8.5 — and 2026.3 knows in part: it has an 8.6 level, parses
+ * placeholders itself, and below 8.6 its language-level inspection reports partial application,
+ * `#[\Override]` on constants, readonly defaults and `__debugInfo()` in enums ("… is only allowed
+ * since PHP 8.6", [PhpLanguageFeature]'s messages):
  *
- * - a partial application's `?` is a constant to PhpStorm ([PhaenonLexer]), "undefined", and its
- *   trailing `...` "a spread without an expression" up to 2026.2, "only allowed since PHP 8.6"
- *   in 2026.3; in a constant expression it is "not allowed", and as a pipe stage "not a valid
- *   callable" (PhpStorm types it as the callee's result). The compiler emits it as written for 8.6
- *   and lowers it for 8.5, so these go on either target;
+ * - up to 2026.2 a partial application's `?` is a constant to PhpStorm ([PhaenonLexer]),
+ *   "undefined", and its trailing `...` "a spread without an expression"; in 2026.3 each
+ *   placeholder is "only allowed since PHP 8.6". In a constant expression it is "not allowed", and
+ *   as a pipe stage "not a valid callable" (2026.2 types it as the callee's result). The compiler
+ *   emits it as written for 8.6 and lowers it for 8.5, so these go on either target;
  * - `#[\Override]` on a class constant or an enum case "cannot be applied" by the attribute's
  *   targets in PhpStorm's stubs, or is "only allowed since PHP 8.6"; PHP 8.6 allows it, and for 8.5
  *   the compiler checks it and drops the attribute, so this goes on either target too;
