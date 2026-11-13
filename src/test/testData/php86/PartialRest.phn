@@ -1,5 +1,17 @@
 namespace App;
 
+function label(string $prefix, string $value): string {
+    return $prefix . $value;
+}
+
+function frame(string $open, string $body, string $close): string {
+    return $open . $body . $close;
+}
+
+function take(\Closure $c): int {
+    return 1;
+}
+
 final class Meter
 {
     public static round(float $value, int $precision): float {
@@ -18,11 +30,21 @@ final class Ruler
     }
 }
 
+const LABELLED = label('✓ ', ...);
+
 final class Rests
 {
+    const LABEL = label('✓ ', ...);
+
     run(Meter $meter, string $ns): void {
+        $function = label('✓ ', ...);
         $method = $meter->scale(2, ...);
         $static = Meter::round(1.5, ...);
         $width = $ns |> Ruler::width(2, ...);
+        $line = $ns |> label('✓ ', ...);
+        $nested = take(label('✓ ', ...));
+        $named = label(value: 'x', ...);
+        $mixed = label(?, ...);
+        $frame = frame('[', ...);
     }
 }

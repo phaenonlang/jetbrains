@@ -185,7 +185,7 @@ only the write through a constant stays an error:
 
 | PHP 8.6 | PhpStorm 2026.1 and 2026.2 in a `.php` file | PhpStorm 2026.3 in a `.php` file, level 8.5 | `.phn`, target 8.6 | `.phn`, target 8.5 |
 |---|---|---|---|---|
-| partial application: `f(?, 1)`, `f(b: ?)`, `$o->m(?)`, `C::m(?)`, in pipes and constant expressions | syntax errors from the `?` on ("Expected: )"); `f(1, ...)`: "Expected: expression after spread operator"; in a constant: "Expression is not allowed as constant value" | "Partial function application is only allowed since PHP 8.6"; in a constant also "Expression is not allowed as constant value" | parses, no finding, typed (below) | the same: the compiler lowers it for 8.5 |
+| partial application: `f(?, 1)`, `f(b: ?)`, `$o->m(?)`, `C::m(?)`, in pipes and constant expressions | syntax errors from the `?` on ("Expected: )"); `f(1, ...)`: "Expected: expression after spread operator", and "Required parameter '$b' missing" when the `...` stands for a required one; in a constant: "Expression is not allowed as constant value" | "Partial function application is only allowed since PHP 8.6"; in a constant also "Expression is not allowed as constant value" | parses, no finding, typed (below) | the same: the compiler lowers it for 8.5 |
 | `public readonly string $name = 'x';` | "'readonly' property cannot have default value" | "Default value of a 'readonly' property is only available in PHP 8.6 and later" | no finding | PhpStorm's finding stays (the compiler: "needs PHP 8.6") |
 | `#[\Override]` on a class constant, an enum case | on a constant: "Attribute cannot be applied to a class constant because it does not contain the 'Attribute::TARGET_CLASS CONSTANT' flag" (the stubs' targets); on a case: nothing | "'#[Override]' on class constants and enum cases is only allowed since PHP 8.6" | no finding | no finding: the compiler checks it and drops the attribute |
 | `__debugInfo()` in an enum | "Enum may not include '__debugInfo'" | "'__debugInfo' magic method in enums is only available in PHP 8.6 and later" | no finding | PhpStorm's finding stays |
@@ -493,7 +493,12 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   syntax error or a finding on either target, at the 8.5 level and at the IDE's highest (2026.3's
   language-level inspection on), are typed as their closures (by the plugin up to 2026.2, by
   PhpStorm, the closure alone, from 2026.3) and come back from Reformat Code as written; a pipe
-  stage is typed as its call (`PartialPipe.phn`, `PartialRest.phn`); readonly defaults,
+  stage is typed as its call (`PartialPipe.phn`, `PartialRest.phn`); a trailing `...` that stands
+  for required parameters, in calls of functions, methods and static methods, pipe stages,
+  constants, nested calls and beside named arguments or `?`, raises no "Required parameter …
+  missing" on either target, while a call that lacks an argument keeps it (`PartialMissing.phn`:
+  no placeholder, `?` without `...`, a `...` that is not last, `new`, a call around a partial
+  application), as a `.php` keeps it of `f(1, ...)` up to 2026.2; readonly defaults,
   `#[\Override]` on constants and enum cases, `__debugInfo()` in an enum, directly or from a trait,
   and a write through a constant raise nothing on an 8.6 target at either level, and on an 8.5
   target read at 8.5 PhpStorm's findings stay, in each build's words (its language-level
@@ -690,18 +695,16 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   Introduce Variable on part of the expression — writes it between the arrow's two characters and
   breaks the arrow. Write the body as a block first; nothing converts one into the other yet.
 - **Up to 2026.2 a partial application is also its callee's result to PhpStorm.** It parses as a
-  call, and the extension point that types it can add the closure but not take PhpStorm's own
-  type away: `format(?, 'kg')` is `string|(Closure(int): string)`. A trailing `...` that stands for
-  a required parameter, `$o->scale(2, ...)`, draws PhpStorm's "Required parameter '$value'
-  missing" there. From 2026.3 the partial application is PhpStorm's, the closure alone. The
-  compiler's refusals for an 8.5 target (a bound argument by reference, a computed receiver, …)
-  are not reported in the editor, nor is `#[\Override]` on a constant that overrides nothing
-  (`P2503`). On an 8.5 target the findings that stay are PhpStorm's, in its wording, not the
-  compiler's "… needs PHP 8.6 (target 8.5)". In 2026.3 below 8.6, a placeholder of a `new` nested
-  in a partial application's arguments, `make(?, new Box(1, ...))`, loses PhpStorm's finding with
-  the partial application's, as the finding is judged by the call around it (the compiler still
-  refuses it). Batch **Inspect Code** shows 2026.3's language-level findings on a `.phn`'s 8.6 code:
-  the highlight filter reaches the editor only.
+  call, and the extension point that types it can add the closure but not take PhpStorm's own type
+  away: `format(?, 'kg')` is `string|(Closure(int): string)`. From 2026.3 the partial application
+  is PhpStorm's, the closure alone. The compiler's refusals for an 8.5 target (a bound argument by
+  reference, a computed receiver, …) are not reported in the editor, nor is `#[\Override]` on a
+  constant that overrides nothing (`P2503`). On an 8.5 target the findings that stay are
+  PhpStorm's, in its wording, not the compiler's "… needs PHP 8.6 (target 8.5)". In 2026.3 below
+  8.6, a placeholder of a `new` nested in a partial application's arguments, `make(?, new Box(1,
+  ...))`, loses PhpStorm's finding with the partial application's, as the finding is judged by the
+  call around it (the compiler still refuses it). Batch **Inspect Code** shows 2026.3's
+  language-level findings on a `.phn`'s 8.6 code: the highlight filter reaches the editor only.
 - **Phaenon's spelling reaches the definition line only.** Quick documentation and the Ctrl+hover
   hint print a Phaenon declaration's types as written and a variable's in Phaenon's spelling;
   PhpStorm's docblock sections below it (Parameters, Returns) are PhpStorm's and show an erased

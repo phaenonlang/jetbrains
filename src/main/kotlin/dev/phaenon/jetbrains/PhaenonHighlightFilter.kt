@@ -83,8 +83,12 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * - up to 2026.2 a partial application's `?` is a constant to PhpStorm ([PhaenonLexer]),
  *   "undefined", and its trailing `...` "a spread without an expression"; in 2026.3 each
  *   placeholder is "only allowed since PHP 8.6". In a constant expression it is "not allowed", and
- *   as a pipe stage "not a valid callable" (2026.2 types it as the callee's result). The compiler
- *   emits it as written for 8.6 and lowers it for 8.5, so these go on either target;
+ *   as a pipe stage "not a valid callable" (2026.2 types it as the callee's result). Up to 2026.2
+ *   PhpStorm also counts the arguments of the call it parses, so a trailing `...` that stands for
+ *   a required parameter leaves it "missing": that goes where the `...` is the call's last
+ *   argument ([PhaenonPartialApplication.takesTheRest]), which stands for every parameter left,
+ *   and stays on any other call. The compiler emits a partial application as written for 8.6 and
+ *   lowers it for 8.5, so these go on either target;
  * - `#[\Override]` on a class constant or an enum case "cannot be applied" by the attribute's
  *   targets in PhpStorm's stubs, or is "only allowed since PHP 8.6"; PHP 8.6 allows it, and for 8.5
  *   the compiler checks it and drops the attribute, so this goes on either target too;
@@ -115,6 +119,11 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         if (description == SPREAD_WITHOUT_EXPRESSION) return !PhaenonPartialApplication.isVariadicPlaceholder(file.findElementAt(info.startOffset))
         if (NOT_A_VALID_CALLABLE.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) return !partialApplicationAt(info, file)
         if (description == PARTIAL_APPLICATION_NEEDS_86) return !partialApplicationAt(info, file)
+        if (MISSING_ARGUMENTS.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
+            // The finding marks the call's `(`: its parent is the call.
+            val call = file.findElementAt(info.startOffset)?.parent ?: return true
+            return !PhaenonPartialApplication.takesTheRest(call)
+        }
         if (description.startsWith(ATTRIBUTE_TARGET.first) && description.endsWith(ATTRIBUTE_TARGET.second)) return !overrideOnConstant(info, file)
         if (description == OVERRIDE_ON_CONSTANT_NEEDS_86) return !overrideOnConstant(info, file)
         if (description in PHP86_ONLY) return !php86Construct(info, file, description)
@@ -329,6 +338,11 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
             .map { it.substringBefore("#ref") to it.substringAfter("#ref") }
 
         val SPREAD_WITHOUT_EXPRESSION: String = PhpBundle.message("expected.expression.after.spread.operator")
+
+        /** "Required parameter '{0}' missing", "Required parameters '{0}' missing", around the names the inspection fills in. */
+        val MISSING_ARGUMENTS: List<Pair<String, String>> = listOf("inspection.missing_param", "required.parameters.missing")
+            .mapNotNull { phpMessage(it, "\u0000") }
+            .map { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
 
         /** What PhpStorm 2026.2 says of a pipe stage it does not take for a callable; absent from 2025.1, which has no pipe. */
         val NOT_A_VALID_CALLABLE: List<Pair<String, String>> = listOf(

@@ -155,6 +155,23 @@ class PhaenonPartialApplication private constructor(
             return if (any) PhaenonPartialApplication(positional, named, variadic) else null
         }
 
+        /**
+         * Whether [call] is a partial application whose last argument is the trailing `...`, which
+         * stands for every parameter its other arguments leave (PHP 8.6): the call then lacks no
+         * argument, whatever it calls. A `...` before another argument is no such call: PHP
+         * rejects it ("Variadic placeholder must be last").
+         */
+        @JvmStatic
+        fun takesTheRest(call: PsiElement): Boolean {
+            if (of(call) == null) return false
+            val list = PsiTreeUtil.getChildOfType(call, ParameterList::class.java) ?: return false
+            var last: PsiElement? = list.lastChild
+            while (last is PsiWhiteSpace || last is PsiComment || last != null && PsiUtilCore.getElementType(last) === PhpTokenTypes.opCOMMA) {
+                last = last.prevSibling
+            }
+            return isVariadicPlaceholder(last) || last != null && isPhpStormsPlaceholder(last) && last.textMatches("...")
+        }
+
         private fun nextIsColon(element: PsiElement): Boolean {
             var next = element.nextSibling
             while (next is PsiWhiteSpace || next is PsiComment) next = next.nextSibling
