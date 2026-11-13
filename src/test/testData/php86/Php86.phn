@@ -38,6 +38,21 @@ enum Level: int implements HasName
     }
 }
 
+trait Describes
+{
+    public __debugInfo(): array
+    {
+        return [];
+    }
+}
+
+enum Mode: int
+{
+    use Describes;
+
+    case On = 1;
+}
+
 function configure(int $level): void
 {
     CONFIG->level = $level;

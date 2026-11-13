@@ -78,7 +78,7 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * language levels stop at 8.5 — and 2026.3 knows in part: it has an 8.6 level, parses
  * placeholders itself, and below 8.6 its language-level inspection reports partial application,
  * `#[\Override]` on constants, readonly defaults and `__debugInfo()` in enums ("… is only allowed
- * since PHP 8.6", [PhpLanguageFeature]'s messages):
+ * since PHP 8.6", "… is only available in PHP 8.6 and later": [PhpLanguageFeature]'s messages):
  *
  * - up to 2026.2 a partial application's `?` is a constant to PhpStorm ([PhaenonLexer]),
  *   "undefined", and its trailing `...` "a spread without an expression"; in 2026.3 each
@@ -89,9 +89,10 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  *   targets in PhpStorm's stubs, or is "only allowed since PHP 8.6"; PHP 8.6 allows it, and for 8.5
  *   the compiler checks it and drops the attribute, so this goes on either target too;
  * - "readonly property cannot have default value", "Enum may not include '__debugInfo'" (or 2026.3's
- *   "only available in PHP 8.6 and later" of each) and "Can't use temporary expression in write
- *   context" on `CONFIG->prop = $v` go when the file's target ([PhaenonTarget]) is 8.6. On an 8.5
- *   target they stay: the compiler refuses them there, "… needs PHP 8.6 (target 8.5)".
+ *   "only available in PHP 8.6 and later" of each, on the method or on the `use` of a trait that
+ *   declares it) and "Can't use temporary expression in write context" on `CONFIG->prop = $v` go
+ *   when the file's target ([PhaenonTarget]) is 8.6. On an 8.5 target they stay: the compiler
+ *   refuses them there, "… needs PHP 8.6 (target 8.5)".
  *
  * A function's `throws A|B` clause is what its compiled `@throws` tag says, but PhpStorm's exception
  * analysis reads only docblocks: "Unhandled X" (or "Unhandled exceptions") goes where the clauses
@@ -248,7 +249,10 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val leaf = file.findElementAt(info.startOffset) ?: return false
         return when (description) {
             READONLY_DEFAULT, READONLY_DEFAULT_NEEDS_86 -> PsiTreeUtil.getParentOfType(leaf, Field::class.java) != null
-            ENUM_DEBUG_INFO, ENUM_DEBUG_INFO_NEEDS_86 -> PsiTreeUtil.getParentOfType(leaf, Method::class.java)?.containingClass?.isEnum == true
+            // On the method, or on the `use` of a trait that declares it.
+            ENUM_DEBUG_INFO, ENUM_DEBUG_INFO_NEEDS_86 ->
+                PsiTreeUtil.getParentOfType(leaf, false, Method::class.java, PhpUse::class.java) != null &&
+                    PsiTreeUtil.getParentOfType(leaf, PhpClass::class.java)?.isEnum == true
             TEMPORARY_IN_WRITE -> {
                 val write = PsiTreeUtil.getParentOfType(leaf, FieldReference::class.java, false) ?: return false
                 write.classReference is ConstantReference
@@ -360,8 +364,9 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         val PHP86_ONLY: Set<String> =
             setOfNotNull(READONLY_DEFAULT, ENUM_DEBUG_INFO, TEMPORARY_IN_WRITE, READONLY_DEFAULT_NEEDS_86, ENUM_DEBUG_INFO_NEEDS_86)
 
+        /** Fails soft, as [phpMessage] does: a PhpStorm that changed the enum loses these rules, not the filter. */
         private fun languageFeatureMessage(name: String): String? =
-            PhpLanguageFeature.values().firstOrNull { it.name == name }?.notSupportedErrorMessage
+            runCatching { PhpLanguageFeature.values().firstOrNull { it.name == name }?.notSupportedErrorMessage }.getOrNull()
 
         /** A message of PhpStorm's bundle, or null when this PhpStorm does not have the key. */
         private fun phpMessage(key: String, vararg arguments: Any): String? {

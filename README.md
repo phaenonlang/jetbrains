@@ -191,10 +191,11 @@ only the write through a constant stays an error:
 | `__debugInfo()` in an enum | "Enum may not include '__debugInfo'" | "'__debugInfo' magic method in enums is only available in PHP 8.6 and later" | no finding | PhpStorm's finding stays |
 | `CONFIG->prop = $v` | "Can't use temporary expression in write context" | the same, at any level | no finding | PhpStorm's finding stays |
 
-The `.phn` columns hold at any level. PhpStorm takes its level from composer.json's `require.php`
-by default, as the compiler takes the target, so an 8.5 target is usually read at 8.5, where
-2026.3's findings on 8.6 code are the ones a `.phn` drops or keeps by the table; read at 8.6,
-2026.3 has none of them to keep.
+PhpStorm takes its level from composer.json's `require.php` by default, as the compiler takes the
+target, so an 8.5 target is usually read at 8.5, where 2026.3's findings on 8.6 code are the ones
+a `.phn` drops or keeps by the table. Read at 8.6, 2026.3 reports no readonly default and no
+`__debugInfo()` in an enum, so on an 8.5 target those two keep nothing: `phn lsp` reports the
+compiler's refusal there.
 
 The target is the compiler's (§2): `phaenon.json`'s `"php"`, otherwise the lowest version
 composer.json's `require.php` admits (Composer's constraint grammar, ported from the compiler's
@@ -493,12 +494,14 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   language-level inspection on), are typed as their closures (by the plugin up to 2026.2, by
   PhpStorm, the closure alone, from 2026.3) and come back from Reformat Code as written; a pipe
   stage is typed as its call (`PartialPipe.phn`, `PartialRest.phn`); readonly defaults,
-  `#[\Override]` on constants and enum cases, `__debugInfo()` in an enum and a write through a
-  constant raise nothing on an 8.6 target at either level, and on an 8.5 target read at 8.5
-  PhpStorm's three findings stay, in each build's words; the target follows `phaenon.json` and
-  composer.json, and Composer constraints read as the compiler's `phpversion` tests read them.
-  PhpStorm's bundled `Core_c.php` stub is copied in from the PHP plugin for `Attribute` and
-  `Override`.
+  `#[\Override]` on constants and enum cases, `__debugInfo()` in an enum, directly or from a trait,
+  and a write through a constant raise nothing on an 8.6 target at either level, and on an 8.5
+  target read at 8.5 PhpStorm's findings stay, in each build's words (its language-level
+  inspection's where the build has the feature, else its annotator's); a `.php` keeps them all;
+  the target follows `phaenon.json` and composer.json, and Composer constraints read as the
+  compiler's `phpversion` tests read them. PhpStorm's bundled `Core_c.php` stub is copied in from
+  the PHP plugin for `Attribute` and `Override`. Each test puts the light project's language
+  level back.
 - `PhaenonImportOptimizerTest`: Optimize Imports on `testData/imports/X.phn` gives `X.after.phn`:
   an import used only in a type argument, union member, return type or closure signature (both
   spellings) stays, as one a docblock or PHP code uses does, and goes where
@@ -694,7 +697,11 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
   compiler's refusals for an 8.5 target (a bound argument by reference, a computed receiver, …)
   are not reported in the editor, nor is `#[\Override]` on a constant that overrides nothing
   (`P2503`). On an 8.5 target the findings that stay are PhpStorm's, in its wording, not the
-  compiler's "… needs PHP 8.6 (target 8.5)".
+  compiler's "… needs PHP 8.6 (target 8.5)". In 2026.3 below 8.6, a placeholder of a `new` nested
+  in a partial application's arguments, `make(?, new Box(1, ...))`, loses PhpStorm's finding with
+  the partial application's, as the finding is judged by the call around it (the compiler still
+  refuses it). Batch **Inspect Code** shows 2026.3's language-level findings on a `.phn`'s 8.6 code:
+  the highlight filter reaches the editor only.
 - **Phaenon's spelling reaches the definition line only.** Quick documentation and the Ctrl+hover
   hint print a Phaenon declaration's types as written and a variable's in Phaenon's spelling;
   PhpStorm's docblock sections below it (Parameters, Returns) are PhpStorm's and show an erased

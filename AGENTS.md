@@ -103,7 +103,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   rests on how that parser drives a builder and on no API (README § Internal API): this test is
   what fails when a PhpStorm build changes it, with `PhaenonD18Test`, `PhaenonMethodsTest` and
   `PhaenonSyntaxTest` for what only Phaenon has in a body. So run the whole suite with `testInIde`
-  against every new PhpStorm line and EAP (those four for a quick look), and after every builder
+  against every new PhpStorm line and EAP (those four and `PhaenonPhp86Test`, where PhpStorm's own
+  PHP 8.6 support meets the plugin's, for a quick look), and after every builder
   change. A change that
   alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
   `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update

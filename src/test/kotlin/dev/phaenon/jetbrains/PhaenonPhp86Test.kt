@@ -7,6 +7,8 @@ import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.jetbrains.php.PhpBundle
+import com.jetbrains.php.config.PhpLanguageFeature
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.PhpLanguage
@@ -38,11 +40,11 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * PhpStorm 2026.3 has an 8.6 level and parses placeholders itself: a `.phn`'s `?` reaches it as
  * PHP's own, and a partial application is PhpStorm's, which it types. Below 8.6 its language-level
  * inspection, on by default, reports partial application, `#[\Override]` on a constant or an enum
- * case, a readonly default and `__debugInfo()` in an enum ("… is only allowed since PHP 8.6"); the
- * write through a constant stays an error at every level. So the tests run at PHP 8.5, the
- * language's floor and what PhpStorm takes from an 8.5 target's composer.json, and at the IDE's
- * highest level, and expect each build's own types where they differ, chosen by what the build
- * has.
+ * case, a readonly default and `__debugInfo()` in an enum ("… is only allowed since PHP 8.6", "…
+ * is only available in PHP 8.6 and later"); the write through a constant stays an error at every
+ * level. So the tests run at PHP 8.5, the language's floor and what PhpStorm takes from an 8.5
+ * target's composer.json, and at the IDE's highest level, and expect each build's own types and
+ * words where they differ, chosen by what the build has.
  *
  * The test project lacks PhpStorm's bundled stubs, so the one declaring `Attribute` and
  * `Override` is copied in from the PHP plugin itself: the attribute targets are each IDE's own.
@@ -51,8 +53,12 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
 
     override fun getTestDataPath(): String = "src/test/testData"
 
+    /** The light project's level before this test: it outlives the test, so it is put back. */
+    private var levelBefore: PhpLanguageLevel? = null
+
     override fun setUp() {
         super.setUp()
+        levelBefore = PhpProjectConfigurationFacade.getInstance(project).languageLevel
         PhpProjectConfigurationFacade.getInstance(project).languageLevel = PhpLanguageLevel.values().last()
         val core = PhpLanguage::class.java.classLoader.getResource("stubs/Core/Core_c.php")?.readText()
         if (core != null) myFixture.addFileToProject("stubs/Core_c.php", core)
@@ -63,6 +69,16 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
             PhpInapplicableAttributeTargetDeclarationInspection::class.java,
             PhpLanguageLevelInspection::class.java,
         )
+    }
+
+    override fun tearDown() {
+        try {
+            levelBefore?.let { PhpProjectConfigurationFacade.getInstance(project).languageLevel = it }
+        } catch (e: Throwable) {
+            addSuppressedException(e)
+        } finally {
+            super.tearDown()
+        }
     }
 
     /** PHP 8.5, and the IDE's highest level: 8.5 up to 2026.2, 8.6 from 2026.3 on. */
@@ -158,11 +174,31 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
         assertEquals(PhaenonTarget.PHP85, PhaenonTarget.of(myFixture.file))
         // The compiler refuses these for 8.5 ("… needs PHP 8.6 (target 8.5)"); it drops
         // `#[\Override]` on a constant, which PHP 8.5 rejects, after checking it. PhpStorm's
-        // findings stay in its words: up to 2026.2 "'readonly' property cannot have default value"
-        // and "Enum may not include '__debugInfo'", in 2026.3 "… is only available in PHP 8.6 and
-        // later" of each; "Can't use temporary expression in write context" in all.
-        val found = findings()
-        assertSameElements(found.toString(), found.map { it.substringAfter(" @") }, listOf("''derived''", "'__debugInfo'", "'CONFIG->level'"))
+        // findings stay in its words: its language-level inspection's where the build has the
+        // feature (2026.3, "… is only available in PHP 8.6 and later"), else its annotator's.
+        val readonlyDefault = featureMessage("READONLY_PROPERTY_DEFAULTS") ?: PhpBundle.message("readonly.property.cannot.have.default.value")
+        val debugInfo = featureMessage("DEBUG_INFO_IN_ENUMS") ?: PhpBundle.message("enum.may.not.include.0", "__debugInfo")
+        val temporary = PhpBundle.message("cant.use.temporary.expression.in.write.context")
+        assertSameElements(
+            findings(),
+            "$readonlyDefault @''derived''",
+            "$debugInfo @'__debugInfo'",
+            "$debugInfo @'Describes'",
+            "$temporary @'CONFIG->level'",
+        )
+    }
+
+    fun testPhpFilesKeepPhpStormsFindings() {
+        myFixture.addFileToProject("phaenon.json", """{"php": "8.6"}""")
+        PhpProjectConfigurationFacade.getInstance(project).languageLevel = PhpLanguageLevel.PHP850
+        val text = java.io.File(testDataPath, "php86/Php86.phn").readText()
+        myFixture.configureByText("Php86.php", "<?php\n" + text.replace("public __debugInfo", "public function __debugInfo"))
+
+        // The `.phn` rules reach no `.php`, whatever the target: each construct keeps its finding.
+        assertSameElements(
+            findings().map { it.substringAfter(" @") },
+            "'\\Override'", "'\\Override'", "''derived''", "'__debugInfo'", "'Describes'", "'CONFIG->level'",
+        )
     }
 
     fun testTheTargetFollowsTheProjectFiles() {
@@ -200,6 +236,10 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
     private fun findings(): List<String> = myFixture.doHighlighting()
         .filter { it.severity.myVal >= HighlightSeverity.WEAK_WARNING.myVal }
         .map { "${it.description} @'${it.text}'" }
+
+    /** [PhpLanguageFeature]'s message of the feature named, null where this PhpStorm has none. */
+    private fun featureMessage(name: String): String? =
+        PhpLanguageFeature.values().firstOrNull { it.name == name }?.notSupportedErrorMessage
 
     /**
      * [name] holds the closure of a partial application from [parameters] to [returns], the last
