@@ -29,8 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * (`PhpElementTypes.ANY_GROUP_STATEMENT`).
  *
  * **How a body is parsed.** PhpStorm's statement parser is internal API, its parser is not: it is
- * the `PsiParser` of the PHP parser definition, the one that parses the file, and its statement
- * loop is the one PhpStorm's expansion of a lazy block runs. So the body is parsed by running that
+ * the `PsiParser` of the PHP parser definition, the one that parses the file, and it reads a
+ * statement as PhpStorm's expansion of a lazy block does. So the body is parsed by running that
  * parser again, on this builder, between the body's braces. While it runs the builder has a
  * *fence* at the body's closing brace and answers there as it does at the end of the input —
  * [eof] is true, there is no token, [advanceLexer] does nothing, the text ends — so the parser
@@ -39,6 +39,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the statements as the children of the body; the tree it asks for at the end is not built yet,
  * and it gets a node nobody looks at. A body inside the body is collapsed in its turn, with a fence of its own
  * inside the first.
+ *
+ * The parser's loop over the statements (`Program.parse`) is not the expansion's
+ * (`StatementList.parseBlockDeep`), and the two part on code that is no PHP. A `?>` ends the code
+ * for the parser where the expansion reads on: at the start of the input, which [closingTagFirst]
+ * makes up for, and after a token no statement took, where the rest of the body stays unparsed. A
+ * `}` between statements is such a token to the parser, while the expansion takes the first one
+ * for the block's end and goes on. And a parse PhpStorm gives up (`PhpParserException`) fails the
+ * file here, where the expansion leaves the body empty. `PhaenonTreeEqualityTest` names the trees
+ * that differ for it.
  *
  * None of that is a contract of PhpStorm's. It rests on how its parser drives a builder: that a
  * body is collapsed into `GROUP_STATEMENT` on a marker that starts at its `{`, that `parse` opens
@@ -94,6 +103,13 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
 
     override fun advanceLexer() {
         if (!atFence()) super.advanceLexer()
+    }
+
+    /** No further than the fence. PhpStorm's parser does not advance by raw tokens; if it comes to, it stays in the body. */
+    override fun rawAdvanceLexer(steps: Int) {
+        val end = fence ?: return super.rawAdvanceLexer(steps)
+        val left = end.index - rawTokenIndex()
+        if (left > 0) super.rawAdvanceLexer(minOf(steps, left))
     }
 
     override fun lookAhead(steps: Int): IElementType? {
@@ -264,8 +280,13 @@ class PhaenonPsiBuilder(private val parser: PsiParser, delegate: PsiBuilder) : P
             delegate.collapse(type)
         }
 
-        /** The fallback for a block that does not start with `{`; mirrors StatementList.parseFast. */
+        /**
+         * The fallback for a block that does not start with `{`; mirrors StatementList.parseFast.
+         * PhpStorm's parser skips a block only at a `{`: should it come here, the block stays lazy,
+         * loses its erasures when it is expanded, and that is said.
+         */
         private fun skipBlockAsPhpStormDoes() {
+            reportParserChange("it skipped a block that does not begin with a brace, which stays lazy")
             val marker = super@PhaenonPsiBuilder.mark()
             var balance = 0
             while (true) {
