@@ -359,6 +359,15 @@ newer PhpStorm has:
 ./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents
 ```
 
+To run the tests inside another PhpStorm with the plugin as `platformVersion` builds it — what the
+released plugin meets in a newer build — name the IDE to the task `testInIde`, which exists only
+then. It takes the options and the variables of `test`:
+
+```bash
+./gradlew testInIde -PtestInIdePath=/Applications/PhpStorm.app/Contents
+./gradlew testInIde -PtestInIdePath=/path/to/PhpStorm-EAP/Contents --tests '*RealTree*'
+```
+
 The layout tests run `phn fmt --stdin` and are skipped without a compiler; with one they also
 reformat the compiler's `internal/format/testdata` goldens:
 

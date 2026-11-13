@@ -222,7 +222,23 @@ tasks.withType<VerifyPluginTask>().configureEach {
     finalizedBy(verifyInternalApi)
 }
 
-tasks.test {
+// `./gradlew testInIde -PtestInIdePath=/Applications/PhpStorm.app/Contents` runs the suite inside that
+// IDE with the plugin as platformVersion builds it: what the released plugin meets in a newer PhpStorm.
+// (-PtestIdePath, above, builds against the IDE as well.)
+providers.gradleProperty("testInIdePath").orNull?.let { path ->
+    intellijPlatformTesting.testIde.register("testInIde") {
+        localPath = file(path)
+        plugins {
+            bundledPlugins("com.jetbrains.php", "org.jetbrains.plugins.textmate", "tanvd.grazi")
+            bundledModule("intellij.spellchecker")
+        }
+        testFramework(TestFrameworkType.Platform)
+        // The task is given the test classes; their resources (linemap/vectors.json) come with the source set's output.
+        task { classpath += sourceSets["test"].output }
+    }
+}
+
+tasks.withType<Test>().configureEach {
     useJUnit()
     // PhaenonRealTreeTest parses every .phn file under the directories named by PHAENON_TREES
     // (colon-separated) and skips when the variable is unset. Passed on as a system property, and

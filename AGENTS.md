@@ -12,7 +12,8 @@ the commit rules are in the compiler repo: read `../phaenon/AGENTS.md` first.
 ./gradlew buildPlugin    # → build/distributions/phaenon-jetbrains-<version>.zip
 ./gradlew verifyPlugin   # JetBrains Plugin Verifier across the declared range, then verifyInternalApi
 ./gradlew runIde         # sandboxed PhpStorm with the plugin
-./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # tests against an installed, newer IDE
+./gradlew test -PtestIdePath=/Applications/PhpStorm.app/Contents   # build and test against an installed, newer IDE
+./gradlew testInIde -PtestInIdePath=/path/to/PhpStorm/Contents     # the suite inside another IDE, the plugin as platformVersion builds it
 
 PHAENON_TREES=/path/to/a/phaenon/project:/path/to/another \
   ./gradlew test --tests '*RealTree*'   # parse every .phn of any Phaenon trees named; skipped when unset
