@@ -47,6 +47,10 @@ covers.
   `BREAKING CHANGE:` footer, minor for `feat`, patch for `fix` and `revert`, none for the rest. The
   PR semantics check holds every pull request to this (`.github/scripts/pr-semantics.sh`); merge
   commits are exempt, and `fixup!` / `squash!` commits are squashed before the merge.
+- The base is `main`, never the branch of another open pull request: CI and the PR semantics
+  check run only on pull requests into `main`, and GitHub closes a stacked pull request when the
+  branch under it is deleted. A change that depends on an unmerged one goes into the same pull
+  request, or waits for its merge.
 
 ## Releases
 
