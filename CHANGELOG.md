@@ -4,6 +4,17 @@ From 0.2.1 on, release-please writes each entry from the Conventional Commits me
 previous release (`release-please-config.json`); the entry is the Marketplace's change notes for
 that version. The first release was written by hand.
 
+## [0.6.2](https://github.com/phaenonlang/jetbrains/compare/v0.6.1...v0.6.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* a class parses in time linear in its expression bodies ([0c8583e](https://github.com/phaenonlang/jetbrains/commit/0c8583e0b261ff85c2e7970fa0b8b721683fe151))
+* a class parses in time linear in its expression bodies ([cddfe0a](https://github.com/phaenonlang/jetbrains/commit/cddfe0a2f721fddfdc939d6a4418e11d043a9c15))
+* a skip ends for an error too, and a body's end is found once ([b4467d0](https://github.com/phaenonlang/jetbrains/commit/b4467d044ebfcc64e13fb2327b76a27030589456))
+* the lexer no longer throws on a file that ends mid-construct ([ffe2415](https://github.com/phaenonlang/jetbrains/commit/ffe24152853f24c58bda9438587823c0dab6c41c))
+* the lexer no longer throws on a file that ends mid-construct ([124e0d3](https://github.com/phaenonlang/jetbrains/commit/124e0d353012e39678e7425003f6ceb95b62e872))
+
 ## [0.6.1](https://github.com/phaenonlang/jetbrains/compare/v0.6.0...v0.6.1) (2026-11-13)
 
 
