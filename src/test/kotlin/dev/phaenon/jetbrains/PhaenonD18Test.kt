@@ -5,14 +5,18 @@ import com.intellij.codeInsight.actions.OptimizeImportsProcessor
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiErrorElement
+import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.codeStyle.CodeStyleManager
+import com.intellij.psi.impl.DebugUtil
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.PhpBundle
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
+import com.jetbrains.php.lang.PhpFileType
 import com.jetbrains.php.lang.PhpLanguage
 import com.jetbrains.php.lang.formatter.ui.predefinedStyle.PSR12CodeStyle
 import com.jetbrains.php.lang.inspections.PhpInconsistentReturnPointsInspection
@@ -129,7 +133,96 @@ class PhaenonD18Test : BasePlatformTestCase() {
         functions = functions()
         assertEquals("=> \$this->x", PsiTreeUtil.getChildOfType(functions.getValue("Last::a"), GroupStatement::class.java)!!.text)
         assertEquals("=> 2;", PsiTreeUtil.getChildOfType(functions.getValue("Next::b"), GroupStatement::class.java)!!.text)
+
+        // … or to the end of the file, where no brace closes anything yet: after its expression, and after its arrow alone.
+        myFixture.configureByText("Open.phn", "namespace App;\n\nfinal class Open\n{\n    a(): int => 1;\n\n    b(): int => \$this->x")
+        assertEquals(listOf("Expected: semicolon"), PsiTreeUtil.findChildrenOfType(myFixture.file, PsiErrorElement::class.java).map { it.errorDescription })
+        assertEquals(mapOf("Open::a" to "=> 1;", "Open::b" to "=> \$this->x"), bodyTexts())
+        myFixture.configureByText("Arrow.phn", "namespace App;\n\nfunction f(): int =>")
+        assertEquals(listOf("Expected: semicolon"), PsiTreeUtil.findChildrenOfType(myFixture.file, PsiErrorElement::class.java).map { it.errorDescription })
+        assertEquals(mapOf("::f" to "=>"), bodyTexts())
     }
+
+    /**
+     * Code that is broken around expression bodies, or in one: each body ends where the lexer ends
+     * its scope, and the bodies behind it are found or not as that leaves them. PhpStorm's skip of
+     * a block is cut short at an expression body in each of these ([PhaenonPsiBuilder]); what the
+     * block is parsed into does not depend on where the skip stopped.
+     */
+    fun testBrokenCodeAroundExpressionBodiesLeavesTheirEnds() {
+        fun broken(text: String): Map<String, String> {
+            myFixture.configureByText("Broken.phn", text)
+            assertNotEmpty(PsiTreeUtil.findChildrenOfType(myFixture.file, PsiErrorElement::class.java))
+            assertEquals(text, myFixture.file.text)
+            return bodyTexts()
+        }
+
+        // Unfinished in an anonymous class in a block: to the brace of that class; the block and the class around it go on.
+        var bodies = broken(
+            "namespace App;\n\nfinal class Holder\n{\n    make(): object\n    {\n        return new class {\n            a(): int => 1;\n\n            b(): int => \$this->x\n        };\n    }\n\n    after(): int => 2;\n}\n",
+        )
+        assertEquals(setOf("Holder::make", "::a", "::b", "Holder::after"), bodies.keys)
+        assertEquals(listOf("=> 1;", "=> \$this->x", "=> 2;"), listOf("::a", "::b", "Holder::after").map(bodies::getValue))
+        assertTrue(bodies.getValue("Holder::make").endsWith("};\n    }"))
+
+        // A block left open takes the members behind it for its statements: no methods, and their arrows no bodies.
+        bodies = broken(
+            "namespace App;\n\nfinal class Left\n{\n    make(): object\n    {\n        return new class {\n            a(): int => 1;\n        };\n\n    after(): int => 2;\n\n    last(): int => 3;\n}\n",
+        )
+        assertEquals(setOf("Left::make", "::a"), bodies.keys)
+        assertEquals("=> 1;", bodies.getValue("::a"))
+        assertTrue(bodies.getValue("Left::make").endsWith("last(): int => 3;\n}"))
+
+        // A closure left open in an expression body: the body has no `;` of its own level and runs to the end of the file.
+        bodies = broken("namespace App;\n\nfinal class Shut\n{\n    a(): \\Closure => function () { return 1;\n\n    b(): int => 2;\n}\n\nfunction c(): int => 3;\n")
+        assertTrue(bodies.getValue("Shut::a").endsWith("function c(): int => 3;"))
+        assertEquals("=> 3;", bodies.getValue("Shut::c"))
+        assertFalse("Shut::b" in bodies)
+
+        // A brace too many closes the class: the method behind it is no method, the function behind the class is one.
+        bodies = broken("namespace App;\n\nfinal class Stray\n{\n    a(): int => 1;\n    }\n\n    b(): int => 2;\n}\n\nfunction c(): int => 3;\n")
+        assertEquals(mapOf("Stray::a" to "=> 1;", "::c" to "=> 3;"), bodies)
+
+        // Unfinished one after the other: each runs to the `;` of the last, one inside the other.
+        bodies = broken("namespace App;\n\nfunction a(): int => 1\n\nfunction b(): int => 2\n\nfunction c(): int => 3;\n")
+        assertEquals(setOf("::a", "::b", "::c"), bodies.keys)
+        assertEquals("=> 2\n\nfunction c(): int => 3;", bodies.getValue("::b"))
+        assertTrue(bodies.getValue("::a").endsWith(bodies.getValue("::b")))
+        assertEquals("=> 3;", bodies.getValue("::c"))
+    }
+
+    /**
+     * An edit reparses the whole file, since no body is lazy, and the platform keeps the nodes the
+     * edit did not change: after each one the file's tree is the tree of its new text parsed from
+     * nothing. The edits open and close expression bodies, on `testData/d18/Ends.phn`: a `;` and
+     * an arrow deleted and typed again, braces typed in a closure of an expression body, a member
+     * added before the others.
+     */
+    fun testAnEditLeavesTheTreeOfTheNewText() {
+        myFixture.configureByText("Edited.phn", File(testDataPath, "d18/Ends.phn").readText())
+        val document = myFixture.editor.document
+        fun at(text: String): Int = document.text.indexOf(text).also { assertTrue(text, it >= 0) }
+        fun edit(what: String, change: () -> Unit) {
+            WriteCommandAction.runWriteCommandAction(project) { change() }
+            PsiDocumentManager.getInstance(project).commitDocument(document)
+            val anew = PsiFileFactory.getInstance(project).createFileFromText("Edited.phn", PhpFileType.INSTANCE, document.text)
+            assertEquals(what, DebugUtil.psiToString(anew, true, true), DebugUtil.psiToString(myFixture.file, true, true))
+        }
+
+        edit("the `;` of an expression body deleted") { at("plain(): int => 1;").let { document.deleteString(it + 17, it + 18) } }
+        edit("and typed again") { document.insertString(at("plain(): int => 1") + 17, ";") }
+        edit("a character typed in a closure of an expression body") { document.insertString(at("\$y = \$x;") + 2, "y") }
+        edit("a brace opened there") { document.insertString(at("\$yy = \$x;"), "{") }
+        edit("and closed") { document.insertString(at("{\$yy = \$x;") + 1, "}") }
+        edit("the arrow of an expression body in a class in a closure in an expression body deleted") { at("deep(): int => 2;").let { document.deleteString(it + 12, it + 14) } }
+        edit("and typed again") { document.insertString(at("deep(): int  2;") + 12, "=>") }
+        edit("a member added before the others") { document.insertString(at("    plain(): int => 1;"), "    first(): int => 0;\n\n") }
+        assertEmpty(PsiTreeUtil.findChildrenOfType(myFixture.file, PsiErrorElement::class.java).map { "${it.errorDescription} at ${it.textOffset}" })
+    }
+
+    /** The text of the body of every named function of the file, by `Class::name`. */
+    private fun bodyTexts(): Map<String, String> =
+        functions().mapNotNull { (name, function) -> PsiTreeUtil.getChildOfType(function, GroupStatement::class.java)?.let { name to it.text } }.toMap()
 
     fun testTheValueIsCheckedAsAReturnIs() {
         myFixture.enableInspections(
