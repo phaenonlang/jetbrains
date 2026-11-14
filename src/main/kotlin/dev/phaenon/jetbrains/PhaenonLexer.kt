@@ -152,7 +152,14 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
 
     // ---------------------------------------------------------------- token access
 
+    /**
+     * The pending token at [i], pulled from the base lexer if need be; null where there is none:
+     * behind the last token of the file, and at -1, which is what [sig] answers there. A file ends
+     * anywhere while it is typed — after a `(`, inside a `<…>`, behind a return type — so every
+     * look ahead may be handed that -1, and it is answered here, once, for all of them.
+     */
     private fun tok(i: Int): Tok? {
+        if (i < 0) return null
         while (pending.size <= i) {
             val type = base.tokenType ?: return null
             pending.add(Tok(type, base.tokenStart, base.tokenEnd))
@@ -161,7 +168,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         return pending[i]
     }
 
-    /** Index of the first significant token at or after [i], or -1 at the end of the file. */
+    /** Index of the first significant token at or after [i], or -1 at the end of the file, of which -1 is the end as well. */
     private fun sig(i: Int): Int {
         var j = i
         while (true) {
@@ -171,7 +178,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         }
     }
 
-    private fun typeAt(i: Int): IElementType? = if (i < 0) null else tok(i)?.type
+    private fun typeAt(i: Int): IElementType? = tok(i)?.type
 
     private fun text(t: Tok): String = buffer.subSequence(t.start, t.end).toString()
 

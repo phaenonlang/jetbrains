@@ -4,6 +4,7 @@ import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiErrorElement
+import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.tree.IElementType
@@ -12,6 +13,7 @@ import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
+import com.jetbrains.php.lang.PhpFileType
 import com.jetbrains.php.lang.lexer.PhpTokenTypes
 import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
 import com.jetbrains.php.lang.parser.PhpElementTypes
@@ -20,6 +22,7 @@ import com.jetbrains.php.lang.psi.elements.BinaryExpression
 import com.jetbrains.php.lang.psi.elements.If
 import com.jetbrains.php.lang.psi.elements.PhpTypedElement
 import com.jetbrains.php.lang.psi.elements.UnaryExpression
+import java.io.File
 
 /**
  * Phaenon syntax reaches PhpStorm's PHP parser through [PhaenonLexer] and [PhaenonPsiBuilder];
@@ -186,6 +189,89 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
         """.trimIndent()
 
         assertEquals(tokens(PhpWithOptionalOpenTagLexer(), php), tokens(PhaenonLexer(), php))
+    }
+
+    /**
+     * A file that ends where a construct has only begun: what is on screen while a call, a type
+     * list or a return type is typed at the end of a file. The lexer looks ahead for what Phaenon
+     * adds, and there the tokens it looks for are not there: an opening parenthesis (a `(bytes)`
+     * cast?), a `<` (type arguments, their variance, an `of` bound?), a return type (a `throws`
+     * behind it?). Each text lexes into tokens that cover it and parses into a file of that text.
+     */
+    fun testAFileEndingInAnUnfinishedConstructLexesAndParses() {
+        val texts = listOf(
+            "f(",
+            "f(\n    ",
+            "\$this->stream(",
+            "parent::__construct(sprintf(\n        ",
+            "final class C\n{\n    __construct(\n        ",
+            "final class C\n{\n    static fromString(",
+            "new Box<",
+            "new Box<int",
+            "new Box<int, ",
+            "class C<",
+            "class C<in ",
+            "class C<T",
+            "class C<T of ",
+            "class C<T of object = ",
+            "interface Stream extends \\Traversable<",
+            "function first<",
+            "\$f = fn<",
+            "type Pair<",
+            "type Pair<A",
+            "final class C\n{\n    get(class<Event",
+            "final class C\n{\n    __construct(public map<string, m",
+            "final class C\n{\n    all(): list<",
+            "final class C\n{\n    all(): list<int",
+            "final class C<T>\n{\n    id(): T",
+            "final class C<T>\n{\n    final id(): T ",
+            "final class C\n{\n    all(): list<int> ",
+            "final class C\n{\n    load(): bytes /* soon */ ",
+            "function f(Closure(int",
+            "function f(Closure(int, ",
+            "function f(Closure(int): ",
+            "function f(?",
+            "function f((A, ",
+            "function f(): ",
+            "function f(): ?",
+            "function f(): A|",
+            "function f(): int throws ",
+            "function f(): int throws A|",
+            "function f(): int =>",
+            "final class C\n{\n    &",
+            "final class C\n{\n    name<",
+            "f(?",
+            "f(1, ?",
+        )
+        for (text in texts) assertLexesAndParses(text, "`${text.replace("\n", "\\n")}`")
+    }
+
+    /**
+     * Every beginning of a file is a file: the text of three fixtures cut at each of its
+     * characters, as it stands while it is typed from the top, lexes into tokens that cover it and
+     * parses into a file of that text, without an exception.
+     */
+    fun testEveryBeginningOfAFileLexesAndParses() {
+        for (name in listOf("syntax/Constructs.phn", "d18/Ends.phn", "methods/Shapes.phn")) {
+            val text = File(testDataPath, name).readText()
+            for (end in 0..text.length) assertLexesAndParses(text.substring(0, end), "$name cut at $end")
+        }
+    }
+
+    private fun assertLexesAndParses(text: String, what: String) {
+        val tokens = try {
+            tokens(PhaenonLexer(), text)
+        } catch (e: RuntimeException) {
+            throw AssertionError("$what: the lexer threw $e", e)
+        }
+        assertEquals("$what: the tokens cover the text", text, tokens.joinToString("") { it.second })
+        val file = try {
+            PsiFileFactory.getInstance(project).createFileFromText("Cut.phn", PhpFileType.INSTANCE, text).also { it.node.firstChildNode }
+        } catch (e: RuntimeException) {
+            throw AssertionError("$what: the parse threw $e", e)
+        }
+        assertSame(what, PhaenonFileElementType, file.node.elementType)
+        assertEquals(what, text, file.text)
     }
 
     fun testReformatLeavesErasedSyntaxAsWritten() {
