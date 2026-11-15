@@ -118,8 +118,9 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
   `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update
   (README § How it works).
-- Known limits (README § Limitations): a `type` alias has no Find Usages, Rename or structure view
-  entry and stays a class reference to PhpStorm beside its type, type arguments of user
+- Known limits (README § Limitations): a `type` alias has no Find Usages or structure view entry,
+  its Rename is refused (`PhaenonAliasRename`), and it stays a class reference to PhpStorm beside
+  its type, type arguments of user
   generics are dropped, tuples type as element-array unions, a partial application is also its
   callee's result to PhpStorm; the implied `strict_types` is not modelled; the lexer, the editor
   colouring (`com.jetbrains.php.baseLexerProvider`) and debugging
