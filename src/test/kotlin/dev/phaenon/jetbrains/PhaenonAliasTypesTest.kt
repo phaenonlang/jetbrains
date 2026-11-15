@@ -213,4 +213,20 @@ class PhaenonAliasTypesTest : BasePlatformTestCase() {
         val hierarchy = warnings().filter { it.contains("compatible") }.map { it.substringBefore(":") + " @" + it.substringAfter(" at '").removeSuffix("'") }
         assertEquals(listOf("PhaenonHierarchyChecks @Order", "PhaenonHierarchyChecks @Lines"), hierarchy)
     }
+
+    fun testADefaultOfAnAliasIsNoError() {
+        add(
+            "src/Http/defaults.phn",
+            "namespace Shop\\Http;\n\nuse Shop\\Orders\\{Customer, Line};\n\nfinal class Defaults\n{\n" +
+                "    const Line DEFAULT = ['sku' => 'a', 'qty' => 1];\n\n    const list<Line> ALL = [];\n\n" +
+                "    private Line \$line = ['sku' => 'b', 'qty' => 2];\n\n    private Customer \$buyer = [];\n\n" +
+                "    sku(): string => \$this->line['sku'] . self::DEFAULT['sku'];\n}\n",
+        )
+
+        // A constant and a property typed with an alias take the array their shape is; a class takes none.
+        val errors = warnings().filter { it.contains("default value") }
+        assertEquals(1, errors.size)
+        assertTrue(errors.single(), errors.single().contains("Customer"))
+        assertEquals("\\string", access("\$this->line['sku']"))
+    }
 }
