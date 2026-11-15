@@ -19,6 +19,7 @@ import com.jetbrains.php.lang.psi.elements.Field
 import com.jetbrains.php.lang.psi.elements.FieldReference
 import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocComment
 import com.jetbrains.php.lang.parser.PhpElementTypes
+import com.jetbrains.php.lang.psi.elements.AssignmentExpression
 import com.jetbrains.php.lang.psi.elements.BinaryExpression
 import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.FunctionReference
@@ -73,6 +74,16 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  *
  * A docblock type naming a type parameter in scope, `@var T $x`, is "Undefined class 'T'" to
  * PhpStorm, which has no `@template` to read it from; the name is declared in the erased list.
+ * So is the name of a `type` alias (design/generics.md §11.6) wherever a type is named, in a
+ * signature, a constant's type, a docblock or a `use`: a class to PhpStorm, declared in an erased
+ * `type` declaration of this file or another, which [PhaenonAliases] finds. Where a class is
+ * named, `new Row`, `Row::make()`, `extends Row`, `catch (Row $e)`, the finding stays: an alias
+ * is no class. And PhpStorm holds a value against the class it takes the name for: "Return value
+ * is expected to be 'Row', 'array' returned", its strict-types twin, "Incompatible types: Expected
+ * property of type …" on an assignment, "Argument passed must be of the type …" on a parameter's
+ * default and "… of type 'Row' may not have default value" on a property's or a typed constant's
+ * go where the declared type is an alias's. Whether the value fits what the alias stands for is
+ * the compiler's finding.
  *
  * "Other declarations of class 'X' exist at X.php" is PhpStorm seeing the `.php` the compiler
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
@@ -148,12 +159,13 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         }
         if (UNDEFINED_CLASS.let { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
-            return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf)
+            return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf) && !PhaenonAliases.isTypeNamedAt(leaf)
         }
         if (UNUSED_IMPORT.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             return !importIsUsedInAnErasedType(info, file)
         }
         if (description.startsWith(CLOSURE_ARGUMENT.first) && description.endsWith(CLOSURE_ARGUMENT.second)) return !argumentFitsPhaenonClosure(info, file)
+        if (EXPECTED_TYPE.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) return !expectedTypeIsAnAlias(info, file)
         if (description == RETURN_TYPE_MISSING) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
             val function = PsiTreeUtil.getParentOfType(leaf, Function::class.java) ?: return true
@@ -331,6 +343,22 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         }
     }
 
+    /**
+     * Whether the type a value was held against is an alias's: the return type of the function a
+     * `return`, an expression body or an arrow function's expression stands in, the type of the
+     * property assigned to, the type of the parameter, property or class constant a default is
+     * written for. Whether the value fits what the alias stands for is
+     * the compiler's finding, not this one.
+     */
+    private fun expectedTypeIsAnAlias(info: HighlightInfo, file: PsiFile): Boolean {
+        val leaf = file.findElementAt(info.startOffset) ?: return false
+        val assignment = PsiTreeUtil.getParentOfType(leaf, AssignmentExpression::class.java, false)
+        val assigned = (assignment?.variable as? FieldReference)?.takeIf { assignment.textRange.startOffset == info.startOffset }
+        if (assigned != null) return assigned.multiResolve(false).any { (it.element as? Field)?.let(PhaenonAliases::typesWithAlias) == true }
+        val declaration = PsiTreeUtil.getParentOfType(leaf, false, Field::class.java, Parameter::class.java, Function::class.java) as? PhpNamedElement ?: return false
+        return PhaenonAliases.typesWithAlias(declaration)
+    }
+
     /** `use App\Event\DomainEvent;` is used by `list<DomainEvent>`, which PhpStorm cannot see. */
     private fun importIsUsedInAnErasedType(info: HighlightInfo, file: PsiFile): Boolean {
         val leaf = file.findElementAt(info.startOffset) ?: return false
@@ -378,6 +406,21 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         /** What PhpStorm says of an argument its closure-signature check rejects, split around the two types. */
         val CLOSURE_ARGUMENT: Pair<String, String> =
             PhpBundle.message("parameter.type.is.not.compatible.with.declaration", "\u0000", "\u0000").let { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
+
+        /**
+         * What PhpStorm says of a value that is not of the declared type, each split around the
+         * two types: a returned value (two inspections), a value assigned to a property, a default
+         * of a parameter, of a property or of a typed class constant. A key a PhpStorm lacks is no rule.
+         */
+        val EXPECTED_TYPE: List<Pair<String, String>> = listOf(
+            "inspection.incompatible.return.type",
+            "inspection.strict.type.checking.return",
+            "inspection.field.assignment.type.mismatch",
+            "argument.passed.must.be.of.the.type.0.1.given",
+        ).mapNotNull { phpMessage(it, "\u0000", "\u0000") }.map { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') } +
+            // "Property|Class constant of type '{1}' may not have default value": a default the alias's class could not have.
+            listOf(0, 1).mapNotNull { phpMessage("php.annotator.typed.property.illegal.value", it, "\u0000") }
+                .map { it.substringBefore('\u0000') to it.substringAfterLast('\u0000') }
 
         /** "Undefined class '#ref'", split around the name: `T` in a docblock type is a type parameter, not a class. */
         val UNDEFINED_CLASS: Pair<String, String> =

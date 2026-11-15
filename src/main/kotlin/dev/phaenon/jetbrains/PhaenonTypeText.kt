@@ -33,18 +33,21 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * `class Repo<T of Aggregate>`, `$aggregate->id()` resolves against `Aggregate`, as PHPStan
  * resolves it against the template's bound and as the emitted `save(Aggregate $aggregate)` says.
  */
-class PhaenonTypeText(private val context: PsiElement, private val typeParameters: Map<String, PhaenonErasedTypes.TypeParameterInScope>) {
+class PhaenonTypeText(private val context: PsiElement?, private val typeParameters: Map<String, PhaenonErasedTypes.TypeParameterInScope>) {
+
+    /** For a type whose names are qualified already ([qualified]): it reads the same anywhere. */
+    constructor() : this(null, emptyMap())
 
     private val namespace: String by lazy {
-        PhpPsiUtil.getParentOfClass(context, PhpNamespace::class.java)?.fqn?.trimEnd('\\') ?: ""
+        context?.let { PhpPsiUtil.getParentOfClass(it, PhpNamespace::class.java) }?.fqn?.trimEnd('\\') ?: ""
     }
 
     private val aliases: Map<String, String> by lazy {
-        val scope = PhpCodeInsightUtil.findScopeForUseOperator(context) ?: return@lazy emptyMap()
+        val scope = context?.let { PhpCodeInsightUtil.findScopeForUseOperator(it) } ?: return@lazy emptyMap()
         PhpCodeInsightUtil.getAliasesInScope(scope)
     }
 
-    private val enclosingClass: String? by lazy { PhpPsiUtil.getParentOfClass(context, PhpClass::class.java)?.fqn }
+    private val enclosingClass: String? by lazy { context?.let { PhpPsiUtil.getParentOfClass(it, PhpClass::class.java) }?.fqn }
 
     /** The bounds being translated: `<T of list<T>>` must not recurse. */
     private val visiting = HashSet<String>()
@@ -58,6 +61,8 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         is PhaenonType.Intersection -> PhpType().also { t -> node.members.forEach { t.add(type(it)) } }
         // A tuple is a positional array.
         is PhaenonType.Tuple -> PhpType().also { t -> node.elements.forEach { t.add(type(it).pluralise()) } }
+        // Written in a `type` declaration alone: anywhere else it is the array it erases to.
+        is PhaenonType.Shape -> PhpType.ARRAY
         is PhaenonType.Closure -> closure(node)
         is PhaenonType.Named -> named(node)
     }
@@ -76,6 +81,32 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
             if (node.simple == "self" || node.simple == "static") return enclosingClass?.let { PhpType().add(it) } ?: PhpType.OBJECT
         }
         return PhpType().add(resolveClass(node.name))
+    }
+
+    /**
+     * [node] as it reads outside this file: each class name qualified through the imports and the
+     * namespace, `self` and `static` as the enclosing class, a type parameter in scope as its
+     * bound (`mixed` without one). What is left bare is a keyword. A name qualified here may be a
+     * `type` alias's, which only the index can tell: [PhaenonTypeProvider] hands this text on.
+     */
+    fun qualified(node: PhaenonType): PhaenonType = node.map { named ->
+        if (named.qualified) return@map named.copy(name = resolveClass(named.name))
+        val simple = named.simple
+        if (simple.lowercase() in KEYWORDS) return@map named
+        typeParameters[simple]?.let { return@map qualifiedBound(it) }
+        if (simple == "self" || simple == "static") return@map enclosingClass?.let { named.copy(name = it) } ?: PhaenonType.Named("object")
+        if (simple == "parent") return@map PhaenonType.Named("object")
+        named.copy(name = resolveClass(named.name))
+    }
+
+    private fun qualifiedBound(parameter: PhaenonErasedTypes.TypeParameterInScope): PhaenonType {
+        val bound = parameter.bound ?: return PhaenonType.Named("mixed")
+        if (!visiting.add(parameter.name)) return PhaenonType.Named("mixed")
+        try {
+            return qualified(bound)
+        } finally {
+            visiting.remove(parameter.name)
+        }
     }
 
     /** A type parameter is what its bound is; `mixed` when it has none. */
@@ -131,6 +162,8 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         if (name.startsWith("\\")) return name
         val first = name.substringBefore('\\')
         val rest = name.substring(first.length)
+        // `namespace\Row` is the current namespace's, whatever the imports.
+        if (first.equals("namespace", ignoreCase = true) && rest.isNotEmpty()) return namespace + rest
         aliases[first]?.let { return "\\" + it.trimStart('\\') + rest }
         return if (namespace.isEmpty()) "\\$name" else "$namespace\\$name"
     }
@@ -162,6 +195,9 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
             "void" to PhpType.VOID, "never" to PhpType.NEVER, "object" to PhpType.OBJECT, "array" to PhpType.ARRAY,
             "callable" to PhpType.CALLABLE, "iterable" to PhpType.ITERABLE, "resource" to PhpType.RESOURCE,
         )
+
+        /** The bare words of a type that name no class: Phaenon's collections and PHP's own types. */
+        private val KEYWORDS: Set<String> = PRIMITIVES.keys + setOf("list", "map", "bytes", "class", "scalar", "numeric")
 
         /** The parameter names of a declaration list: `<in TIn, out TOut, K of int|string = string>` → TIn, TOut, K. */
         fun parameterNames(list: String): List<String> = PhaenonType.typeParameters(list).map { it.name }

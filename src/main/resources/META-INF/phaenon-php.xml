@@ -36,6 +36,10 @@
         </intentionAction>
         <daemon.intentionActionFilter implementation="dev.phaenon.jetbrains.PhaenonPipeQuickFixFilter"/>
 
+        <!-- Enter in a `type` declaration, one comment to PhpStorm: its docblock is continued with ` * `, and a
+             shape's braces just opened are parted. -->
+        <enterHandlerDelegate implementation="dev.phaenon.jetbrains.PhaenonTypeDeclarationEnterHandler" order="first"/>
+
         <!-- `/**` + Enter: PhpStorm's stub without the @param/@return tags a declared (or erased) type makes redundant. -->
         <enterHandlerDelegate implementation="dev.phaenon.jetbrains.PhaenonDocCommentEnterHandler" order="before phpEnterHandler"/>
 
@@ -77,6 +81,14 @@
         <pom.declarationSearcher implementation="dev.phaenon.jetbrains.PhaenonTypeParameterDeclarations"/>
         <findUsagesHandlerFactory implementation="dev.phaenon.jetbrains.PhaenonTypeParameterFindUsagesHandlerFactory"/>
         <referencesSearch implementation="dev.phaenon.jetbrains.PhaenonDocTypeReferenceSearcher"/>
+
+        <!-- `type` declarations by qualified name: an alias is a name of its namespace, found from any file. -->
+        <fileBasedIndex implementation="dev.phaenon.jetbrains.PhaenonAliasIndex"/>
+        <!-- Rename knows a third of an alias's uses, the ones in erased constructs: it is refused for an
+             alias, with the reason, from its declaration and from every use. -->
+        <vetoRenameCondition implementation="dev.phaenon.jetbrains.PhaenonAliasRenameVeto"/>
+        <renameHandler implementation="dev.phaenon.jetbrains.PhaenonAliasRenameHandler" order="first"/>
+        <renamePsiElementProcessor implementation="dev.phaenon.jetbrains.PhaenonAliasRenameProcessor" order="first"/>
 
         <!-- The stubs of .phn files carry PhpStorm's stub version: after a plugin update that changed
              the PSI they are re-indexed once (PhaenonFileElementType.PSI_VERSION). -->

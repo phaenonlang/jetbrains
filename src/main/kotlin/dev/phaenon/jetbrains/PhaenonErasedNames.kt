@@ -16,7 +16,12 @@ import com.jetbrains.php.lang.psi.elements.PhpUse
 /**
  * The class names inside erased constructs — `list<DomainEvent>`, `Box<User, Role>`,
  * `class<Aggregate>` — and how they resolve: the way PHP would, through the file's `use`
- * statements, then the current namespace, then the global one.
+ * statements, then the current namespace, then the global one. A name no class bears may be a
+ * `type` alias's, which [PhaenonAliases] finds.
+ *
+ * A `type` declaration is erased whole, so its text holds more than names of types: the keys of a
+ * shape (`id` in `array{id: int}`), quoted keys, comments and the declaration's docblock. [names]
+ * is the one reading of an erased text that tells them apart, and everything here goes by it.
  */
 object PhaenonErasedNames {
 
@@ -36,18 +41,73 @@ object PhaenonErasedNames {
      */
     fun classNames(leaf: PsiElement): List<Pair<TextRange, String>> {
         val text = leaf.text
-        val typeParameters = PhaenonErasedTypes.typeParametersInScope(leaf)
+        val alias = PhaenonType.alias(text)
+        val typeParameters = PhaenonErasedTypes.typeParametersInScope(leaf) + alias?.parameters.orEmpty().map { it.name }
         val names = ArrayList<Pair<TextRange, String>>()
-        for (match in NAME.findAll(text)) {
-            val name = match.value
+        for ((at, name) in names(text)) {
             val plain = name.trimStart('\\')
             if (plain.lowercase() in NOT_A_CLASS || plain in typeParameters) continue
-            if (isAliasDeclaration(text, match.range.first)) continue
+            if (alias != null && at <= alias.offset) continue
             val last = name.lastIndexOf('\\') + 1
-            val range = TextRange(match.range.first + last, match.range.last + 1)
+            val range = TextRange(at + last, at + name.length)
             names.add(range to if (name == "Closure" && isClosureSignatureAt(text, range.endOffset)) "\\Closure" else name)
         }
         return names
+    }
+
+    /**
+     * The names in an erased text, each with its offset: every word or qualified name that stands
+     * where a type may. Left out are a shape's keys (a word right after the `{` or a `,` of a
+     * shape, before `:` or `?:`), what a quoted key holds, and comments, a docblock among them.
+     */
+    fun names(text: String): List<Pair<Int, String>> {
+        val names = ArrayList<Pair<Int, String>>()
+        val open = ArrayList<Char>()
+        var previous = ' '
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                c.isWhitespace() -> i++
+                text.startsWith("/*", i) -> i = text.indexOf("*/", i + 2).let { if (it < 0) text.length else it + 2 }
+                text.startsWith("//", i) || c == '#' -> i = text.indexOf('\n', i).let { if (it < 0) text.length else it + 1 }
+                c == '\'' || c == '"' -> {
+                    i = text.indexOf(c, i + 1).let { if (it < 0) text.length else it + 1 }
+                    previous = c
+                }
+                c.isLetter() || c == '_' || c == '\\' -> {
+                    val match = NAME.matchAt(text, i)
+                    if (match == null) {
+                        i++
+                    } else {
+                        val key = open.lastOrNull() == '{' && (previous == '{' || previous == ',') && isKeyAt(text, match.range.last + 1)
+                        if (!key) names.add(i to match.value)
+                        i = match.range.last + 1
+                    }
+                    previous = 'a'
+                }
+                else -> {
+                    when (c) {
+                        '{', '<', '(' -> open.add(c)
+                        '}', '>', ')' -> if (open.isNotEmpty()) open.removeAt(open.size - 1)
+                    }
+                    previous = c
+                    i++
+                }
+            }
+        }
+        return names
+    }
+
+    /** Whether what follows a word at [at] makes it a shape's key: `:`, or `?` and `:`, blanks aside. */
+    private fun isKeyAt(text: String, at: Int): Boolean {
+        var i = at
+        while (i < text.length && text[i].isWhitespace()) i++
+        if (i < text.length && text[i] == '?') {
+            i++
+            while (i < text.length && text[i].isWhitespace()) i++
+        }
+        return i < text.length && text[i] == ':'
     }
 
     /** Whether a closure signature `(…)` starts at [at], whitespace aside. */
@@ -57,20 +117,25 @@ object PhaenonErasedNames {
         return i < text.length && text[i] == '('
     }
 
-    /** Each use of a type parameter in scope in an erased leaf's text: its range and name. */
+    /**
+     * Each use of a type parameter in scope in an erased leaf's text: its range and name. In a
+     * `type` declaration the parameters are its own, `T` in `type Page<T> = array{items: list<T>}`,
+     * used wherever the name stands again after its declaration.
+     */
     fun typeParameters(leaf: PsiElement): List<Pair<TextRange, String>> {
+        val text = leaf.text
+        val alias = PhaenonType.alias(text)
+        if (alias != null) {
+            val declared = alias.parameters.associate { it.name to it.offset }
+            return names(text)
+                .filter { (at, name) -> declared[name]?.let { at > it } == true }
+                .map { (at, name) -> TextRange(at, at + name.length) to name }
+        }
         val typeParameters = PhaenonErasedTypes.typeParametersInScope(leaf)
         if (typeParameters.isEmpty()) return emptyList()
-        return NAME.findAll(leaf.text)
-            .filter { it.value in typeParameters }
-            .map { TextRange(it.range.first, it.range.last + 1) to it.value }
-            .toList()
-    }
-
-    /** `type UserMap = …;` declares `UserMap`; it is not a reference. */
-    private fun isAliasDeclaration(text: String, at: Int): Boolean {
-        val before = text.substring(0, at).trimEnd()
-        return before.endsWith("type") && (before.length == 4 || !before[before.length - 5].isLetterOrDigit())
+        return names(text)
+            .filter { it.second in typeParameters }
+            .map { (at, name) -> TextRange(at, at + name.length) to name }
     }
 
     /** The classes, interfaces and traits a name written in context resolves to; empty for keywords and type parameters. */
@@ -81,10 +146,39 @@ object PhaenonErasedNames {
         val first = name.substringBefore('\\')
         val rest = name.substring(first.length)
         imports(context.containingFile)[first.lowercase()]?.let { return index.getAnyByFQN(it + rest).toList() }
-        val namespace = PsiTreeUtil.getParentOfType(context, PhpNamespace::class.java)?.fqn?.trim('\\').orEmpty()
+        val namespace = namespaceOf(context)?.fqn?.trim('\\').orEmpty()
         val inNamespace = if (namespace.isEmpty()) "\\$name" else "\\$namespace\\$name"
         index.getAnyByFQN(inNamespace).takeIf { it.isNotEmpty() }?.let { return it.toList() }
         return index.getAnyByFQN("\\$name").toList()
+    }
+
+    /**
+     * The qualified name a name written in context stands for where it is no class's: through the
+     * file's imports, else in its namespace, and never the global one (generics.md §11.6), which is
+     * where an alias is looked for. Null for keywords.
+     */
+    fun qualified(name: String, context: PsiElement): String? {
+        if (name.trimStart('\\').lowercase() in NOT_A_CLASS) return null
+        if (name.startsWith("\\")) return name
+        val first = name.substringBefore('\\')
+        val namespace = namespaceOf(context)?.fqn?.trim('\\').orEmpty()
+        // `namespace\Row` is the current namespace's, whatever the imports.
+        if (first.equals("namespace", ignoreCase = true) && first.length < name.length) return (if (namespace.isEmpty()) "" else "\\$namespace") + name.substring(first.length)
+        imports(context.containingFile)[first.lowercase()]?.let { return it + name.substring(first.length) }
+        return if (namespace.isEmpty()) "\\$name" else "\\$namespace\\$name"
+    }
+
+    /**
+     * The namespace [element] stands in: the one around it, or, for what the parser leaves behind
+     * a file's last statement, the last one opened before it. An erased `type` declaration is a
+     * comment to the parser, and comments at the end of `namespace App; type Row = …;` are the
+     * file's, outside the namespace's element.
+     */
+    fun namespaceOf(element: PsiElement): PhpNamespace? {
+        PsiTreeUtil.getParentOfType(element, PhpNamespace::class.java)?.let { return it }
+        val file = element.containingFile ?: return null
+        val at = element.textRange.startOffset
+        return PsiTreeUtil.findChildrenOfType(file, PhpNamespace::class.java).lastOrNull { it.textRange.startOffset < at }
     }
 
     /**
@@ -97,7 +191,7 @@ object PhaenonErasedNames {
         val first = qualifier.substringBefore('\\')
         val rest = qualifier.substring(first.length)
         imports(context.containingFile)[first.lowercase()]?.let { return (it + rest).trim('\\') }
-        val namespace = PsiTreeUtil.getParentOfType(context, PhpNamespace::class.java)?.fqn?.trim('\\').orEmpty()
+        val namespace = namespaceOf(context)?.fqn?.trim('\\').orEmpty()
         if (namespace.isEmpty()) return qualifier
         val index = PhpIndex.getInstance(context.project)
         val inNamespace = "$namespace\\$qualifier"
@@ -122,7 +216,7 @@ object PhaenonErasedNames {
             val words = HashSet<String>()
             for (leaf in PsiTreeUtil.collectElementsOfType(file, PsiComment::class.java)) {
                 if (!PhaenonTokenTypes.isErased(leaf)) continue
-                for (match in NAME.findAll(leaf.text)) words.add(match.value.trimStart('\\').substringBefore('\\').lowercase())
+                for ((_, name) in names(leaf.text)) words.add(name.trimStart('\\').substringBefore('\\').lowercase())
             }
             CachedValueProvider.Result.create(words, file)
         }.contains(shortName.lowercase())

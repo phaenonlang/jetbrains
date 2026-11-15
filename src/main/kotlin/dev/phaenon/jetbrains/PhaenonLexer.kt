@@ -33,7 +33,12 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  * - `Closure(T): U` is erased whole: a bare `Closure` with a signature is `\Closure` whatever the
  *   namespace and imports (the compiler's reading), where PhpStorm would resolve the name in the
  *   file's namespace. `\Closure(T): U` keeps its name and erases the signature.
- * - `type Name = …;` aliases are erased whole.
+ * - `type Name = …;` aliases are erased whole (`generics.md` §11.6, §11.7), the keyword in any
+ *   letter case, with the docblock above the declaration and the comments between the two: PhpStorm
+ *   would give that docblock to the next declaration, as PHP does. Between `=` and `;` a brace
+ *   after `array` opens a shape, `array{id: int, name?: string, ...}` (`collections.md` §6), which
+ *   is syntax nowhere else. A declaration that does not scan to its `;`, as while it is typed, is
+ *   left to the parser, and its braces are then PHP's.
  * - `(bytes)` is re-typed as a `(string)` cast: one token spanning the parentheses.
  * - PHP 8.6's argument placeholders (`f(?, 1)`, `f(b: ?)`, `$o->m(?)`, design/php-versions.md
  *   §5): up to 2026.2, whose parser reads `?` there as a syntax error, a `?` that stands alone
@@ -76,8 +81,46 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
 
     private class Tok(val type: IElementType, val start: Int, val end: Int)
 
+    /**
+     * The tokens read ahead, oldest first. They go out from the front, and a look ahead that read
+     * far before it gave up — a shape left open runs to wherever it stops fitting — leaves many
+     * behind: taking one from the front costs nothing in those.
+     */
+    private class Pending {
+        private val tokens = ArrayList<Tok>()
+        private var head = 0
+
+        val size: Int get() = tokens.size - head
+
+        operator fun get(i: Int): Tok = tokens[head + i]
+
+        fun add(token: Tok) {
+            tokens.add(token)
+        }
+
+        fun clear() {
+            tokens.clear()
+            head = 0
+        }
+
+        /** Forgets the first [count] tokens; the list behind them is moved only once it is the smaller half. */
+        fun drop(count: Int) {
+            head += count
+            if (head == tokens.size) {
+                clear()
+            } else if (head >= COMPACT_FROM && head * 2 >= tokens.size) {
+                tokens.subList(0, head).clear()
+                head = 0
+            }
+        }
+
+        private companion object {
+            const val COMPACT_FROM = 1024
+        }
+    }
+
     /** Tokens pulled from the base lexer and not yet handed to the cache. */
-    private val pending = ArrayList<Tok>()
+    private val pending = Pending()
     private var prevSig: IElementType? = null
     private var prevSigText: String = ""
     /** The significant token before [prevSig], to tell a named argument's `name:` from other colons. */
@@ -134,7 +177,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             return
         }
         if (c.type in SKIPPABLE) {
-            emit(Plan(1))
+            emit(tryAliasDocblock(c) ?: Plan(1))
             return
         }
         val plan = tryThrows(c)
@@ -290,7 +333,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             }
             i = j
         }
-        pending.subList(0, plan.count).clear()
+        pending.drop(plan.count)
     }
 
     /**
@@ -502,21 +545,52 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
 
     /** `type Name<…> = T;` at statement level: erased whole. */
     private fun tryTypeAlias(c: Tok): Plan? {
-        if (c.type != PhpTokenTypes.IDENTIFIER || text(c) != "type" || prevSig !in STATEMENT_START) return null
-        var i = sig(1)
+        if (c.type != PhpTokenTypes.IDENTIFIER) return null
+        val end = scanTypeAlias(0) ?: return null
+        return Plan(end).erase(0 until end)
+    }
+
+    /**
+     * The docblock of a `type` declaration goes with it, and so do the comments between the two
+     * (`generics.md` §11.7): PhpStorm gives a docblock to the declaration after it across comments,
+     * which an erased declaration is, so that a `@deprecated` left above an alias would deprecate
+     * the class that follows.
+     */
+    private fun tryAliasDocblock(c: Tok): Plan? {
+        if (c.type !== PhpDocElementTypes.DOC_COMMENT) return null
+        val end = scanTypeAlias(sig(1)) ?: return null
+        return Plan(end).erase(0 until end)
+    }
+
+    /**
+     * The index after the `;` of the `type` declaration whose keyword is at [at], or null when the
+     * tokens there are not one: `type`, in any letter case as the compiler reads it, a name, its
+     * type parameters, `=`, a type and `;`. A shape is read in the type and nowhere before the `=`:
+     * not in a bound, not in a default.
+     *
+     * The scan reads each token once and gives up at the first one that does not fit. A second
+     * `type` cannot begin a scan of its own inside a declaration that scans: where a statement may
+     * start there, after a `{`, the word is a key, and no name follows it.
+     */
+    private fun scanTypeAlias(at: Int): Int? {
+        val keyword = tok(at) ?: return null
+        if (keyword.type != PhpTokenTypes.IDENTIFIER || !text(keyword).equals("type", ignoreCase = true) || prevSig !in STATEMENT_START) return null
+        var i = sig(at + 1)
         if (typeAt(i) != PhpTokenTypes.IDENTIFIER) return null
         i = sig(i + 1)
-        val s = Scan()
         if (typeAt(i) == PhpTokenTypes.opLESS) {
-            i = scanTypeArguments(i, s, declaration = false) ?: return null
+            val parameters = Scan()
+            i = scanTypeArguments(i, parameters, declaration = false) ?: return null
+            if (parameters.extraClosers > 0) return null
             i = sig(i)
         }
         if (typeAt(i) != PhpTokenTypes.opASGN) return null
+        val s = Scan(shapes = true)
         val u = scanUnion(sig(i + 1), s) ?: return null
         if (s.extraClosers > 0) return null
         val semi = sig(u.end)
         if (typeAt(semi) != PhpTokenTypes.opSEMICOLON) return null
-        return Plan(semi + 1).erase(0..semi)
+        return semi + 1
     }
 
     /** `class Box<T>`, `interface I<in T>`, `function f<T>`, `fn<T>`: the list is erased, the names recorded. */
@@ -600,11 +674,14 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
 
     // ---------------------------------------------------------------- the type scanner
 
-    private class Scan {
+    /** One scan of a type; [shapes] where `array{…}` is one, the right-hand side of a `type` declaration. */
+    private class Scan(val shapes: Boolean = false) {
         val erase = ArrayList<IntRange>()
         val names = ArrayList<String>()
         /** A `>>` closed one more list than the one that consumed it. */
         var extraClosers = 0
+        /** How many types the scan stands inside. */
+        var depth = 0
     }
 
     private class Member(val start: Int, val end: Int, val native: Boolean)
@@ -651,7 +728,22 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         return Union(end, allErased)
     }
 
+    /**
+     * One member of a type at [i]. Types nest through here — type arguments, tuples, closure
+     * signatures, shapes — and a nesting deeper than any written type is given up, so that no
+     * input, however long, takes the lexer's stack.
+     */
     private fun scanAtom(i: Int, s: Scan): Member? {
+        if (s.depth >= MAX_NESTING) return null
+        s.depth++
+        try {
+            return scanAtomAt(i, s)
+        } finally {
+            s.depth--
+        }
+    }
+
+    private fun scanAtomAt(i: Int, s: Scan): Member? {
         if (i < 0) return null
         val t = tok(i) ?: return null
         when (t.type) {
@@ -693,6 +785,10 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
                     s.erase.add(lt until end)
                     return Member(i, end, native = true)
                 }
+                if (s.shapes && t.type == PhpTokenTypes.kwARRAY && typeAt(lt) == PhpTokenTypes.chLBRACE) {
+                    val end = scanShape(lt, s) ?: return null
+                    return Member(i, end, native = false)
+                }
                 return Member(i, i + 1, native = true)
             }
             PhpTokenTypes.IDENTIFIER, PhpTokenTypes.NAMESPACE_RESOLUTION -> {
@@ -726,6 +822,68 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             }
             else -> return null
         }
+    }
+
+    /**
+     * The entries of a shape from its `{` at [open], `{id: int, name?: string, 'a-b': int, 0: T, ...}`
+     * (`collections.md` §6.1); returns the index after the `}`. Every entry is a key, `?` when it
+     * may be absent, `:` and a type, which may hold shapes of its own; `...` ends an open shape, and
+     * a comma may follow the last entry. Comments and line breaks are trivia here as anywhere.
+     */
+    private fun scanShape(open: Int, s: Scan): Int? {
+        var j = sig(open + 1)
+        while (true) {
+            when (typeAt(j)) {
+                PhpTokenTypes.chRBRACE -> return j + 1
+                PhpTokenTypes.opVARIADIC -> {
+                    j = sig(j + 1)
+                    if (typeAt(j) == PhpTokenTypes.opCOMMA) j = sig(j + 1)
+                    return if (typeAt(j) == PhpTokenTypes.chRBRACE) j + 1 else null
+                }
+            }
+            j = sig(scanShapeKey(j) ?: return null)
+            if (typeAt(j) == PhpTokenTypes.opQUEST) j = sig(j + 1)
+            if (typeAt(j) != PhpTokenTypes.opCOLON) return null
+            val u = scanUnion(sig(j + 1), s) ?: return null
+            if (s.extraClosers > 0) return null
+            j = sig(u.end)
+            when (typeAt(j)) {
+                PhpTokenTypes.opCOMMA -> j = sig(j + 1)
+                PhpTokenTypes.chRBRACE -> return j + 1
+                else -> return null
+            }
+        }
+    }
+
+    /**
+     * A shape's key at [i]; the index after it, or null: a name, PHP's reserved words included
+     * (`class`, `list`, `fn`, which reach us as their keywords), a quoted string without
+     * interpolation, or an integer, `0` or `-1`.
+     */
+    private fun scanShapeKey(i: Int): Int? {
+        val t = tok(i) ?: return null
+        return when (t.type) {
+            PhpTokenTypes.chLSINGLE_QUOTE -> closeQuote(i, PhpTokenTypes.STRING_LITERAL_SINGLE_QUOTE, PhpTokenTypes.chRSINGLE_QUOTE)
+            PhpTokenTypes.chLDOUBLE_QUOTE -> closeQuote(i, PhpTokenTypes.STRING_LITERAL, PhpTokenTypes.chRDOUBLE_QUOTE)
+            PhpTokenTypes.opMINUS -> sig(i + 1).takeIf { typeAt(it) == PhpTokenTypes.DECIMAL_INTEGER }?.let { it + 1 }
+            PhpTokenTypes.DECIMAL_INTEGER -> i + 1
+            else -> if (isSpelledAsName(t)) i + 1 else null
+        }
+    }
+
+    /** The index after the quote that closes the string opened at [open], whose text is [content] tokens alone. */
+    private fun closeQuote(open: Int, content: IElementType, close: IElementType): Int? {
+        var j = open + 1
+        while (typeAt(j) == content) j++
+        return if (typeAt(j) == close) j + 1 else null
+    }
+
+    /** Whether [t] is spelled as a name: an identifier, or a keyword, each of which PhpStorm's lexer gives a type of its own. */
+    private fun isSpelledAsName(t: Tok): Boolean {
+        if (t.type == PhpTokenTypes.IDENTIFIER) return true
+        if (t.start == t.end || !(buffer[t.start].isLetter() || buffer[t.start] == '_')) return false
+        for (k in t.start + 1 until t.end) if (!(buffer[k].isLetterOrDigit() || buffer[k] == '_')) return false
+        return true
     }
 
     /**
@@ -811,6 +969,9 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     }
 
     private companion object {
+        /** How deep a type may nest before the scan gives it up. */
+        const val MAX_NESTING = 200
+
         /** Trivia between significant tokens: whitespace, erased text, comments — a docblock is a token of its own, outside COMMENTS. */
         val SKIPPABLE: TokenSet = TokenSet.orSet(TokenSet.create(PhpTokenTypes.WHITE_SPACE, PhaenonTokenTypes.ERASED, PhpDocElementTypes.DOC_COMMENT), PhpTokenTypes.COMMENTS)
 

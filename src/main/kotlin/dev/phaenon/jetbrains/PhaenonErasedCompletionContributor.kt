@@ -10,6 +10,7 @@ import com.intellij.codeInsight.completion.CompletionUtil
 import com.intellij.codeInsight.completion.InsertHandler
 import com.intellij.codeInsight.completion.InsertionContext
 import com.intellij.codeInsight.completion.PlainPrefixMatcher
+import com.intellij.codeInsight.completion.PrefixMatcher
 import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.openapi.project.Project
@@ -18,9 +19,10 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.ProcessingContext
 import com.jetbrains.php.PhpIndex
 import com.jetbrains.php.codeInsight.PhpCodeInsightUtil
+import com.jetbrains.php.lang.psi.elements.ClassReference
 import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.PhpClass
-import com.jetbrains.php.lang.psi.elements.PhpNamespace
+import com.jetbrains.php.lang.psi.elements.PhpTypeDeclaration
 import com.jetbrains.php.lang.psi.resolve.types.PhpType
 import com.jetbrains.php.refactoring.PhpAliasImporter
 
@@ -34,6 +36,10 @@ import com.jetbrains.php.refactoring.PhpAliasImporter
  * After `throws` only the Throwables are offered, with the type parameters and `self`, `static`,
  * `parent`. PhpStorm sees the construct as a comment, so its own completion offers nothing there.
  *
+ * The `type` aliases of the project (design/generics.md §11.6) are offered among the classes,
+ * with their `use`, in an erased construct and where PhpStorm completes a class name in a
+ * signature: a parameter's, a property's or a return type, where it knows of no alias.
+ *
  * In a `.phn` file the contributor also sees the items of the contributors after it: PhpStorm's
  * override and implement items become Phaenon's ([PhaenonOverrides.decorate]).
  */
@@ -41,6 +47,7 @@ class PhaenonErasedCompletionContributor : CompletionContributor() {
 
     init {
         extend(CompletionType.BASIC, PlatformPatterns.psiElement(PhaenonTokenTypes.ERASED), Provider)
+        extend(CompletionType.BASIC, PlatformPatterns.psiElement().withParent(ClassReference::class.java), AliasesInSignatures)
     }
 
     override fun fillCompletionVariants(parameters: CompletionParameters, result: CompletionResultSet) {
@@ -122,34 +129,71 @@ class PhaenonErasedCompletionContributor : CompletionContributor() {
                         LookupElementBuilder.create(klass, klass.name)
                             .withIcon(klass.getIcon(0))
                             .withTailText(" " + klass.namespaceName.trim('\\'), true)
-                            .withInsertHandler(ImportingInsertHandler(klass)),
+                            .withInsertHandler(ImportingInsertHandler(klass.fqn)),
                     )
                 }
             }
+            // An alias is a type and no class: nothing a `throws` clause may name.
+            if (!throwsClause) aliases(leaf.project, matcher, out)
         }
     }
 
-    /** After the short name goes in, the `use` statement follows unless the class needs none. */
-    private class ImportingInsertHandler(private val klass: PhpClass) : InsertHandler<LookupElement> {
-
-        override fun handleInsert(context: InsertionContext, item: LookupElement) {
-            context.commitDocument()
-            val file = context.file
-            val at = file.findElementAt(context.startOffset) ?: return
-            val fqn = klass.fqn
-            val namespace = PsiTreeUtil.getParentOfType(at, PhpNamespace::class.java)?.fqn?.trim('\\').orEmpty()
-            if (klass.namespaceName.trim('\\') == namespace) return
-            when (PhaenonErasedNames.imports(file)[klass.name.lowercase()]) {
-                fqn -> return
-                null -> {
-                    val scope = PhpCodeInsightUtil.findScopeForUseOperator(at) ?: return
-                    PhpAliasImporter.insertUseStatement(fqn, scope)
-                }
-                else -> context.document.replaceString(context.startOffset, context.tailOffset, fqn)
+    /**
+     * A class name being written in a parameter's, a property's or a return type of a `.phn` file:
+     * PhpStorm offers the classes, and the aliases are added here. After a qualifier, those of the
+     * namespace it names, without an import.
+     */
+    private object AliasesInSignatures : CompletionProvider<CompletionParameters>() {
+        override fun addCompletions(parameters: CompletionParameters, context: ProcessingContext, result: CompletionResultSet) {
+            if (!PhaenonFiles.isPhaenonFile(parameters.originalFile.viewProvider.virtualFile)) return
+            val reference = parameters.position.parent as? ClassReference ?: return
+            if (reference.parent !is PhpTypeDeclaration) return
+            // The name as written, up to the caret: `Ord`, `Orders\Ord`, `\Shop\Orders\Ord`.
+            val written = reference.text.substringBeforeLast('\\', missingDelimiterValue = "")
+            if ('\\' !in reference.text) {
+                aliases(reference.project, result.prefixMatcher, result)
+                return
+            }
+            val namespace = (if (written.isEmpty()) "" else PhaenonErasedNames.resolveNamespace(written, parameters.position)) ?: return
+            for (alias in PhaenonAliases.all(reference.project)) {
+                if (alias.namespace.equals(namespace, ignoreCase = true)) result.addElement(aliasItem(alias))
             }
         }
     }
 }
+
+/** After the short name goes in, the `use` statement follows unless the name needs none. */
+private class ImportingInsertHandler(private val fqn: String) : InsertHandler<LookupElement> {
+
+    override fun handleInsert(context: InsertionContext, item: LookupElement) {
+        context.commitDocument()
+        val file = context.file
+        val at = file.findElementAt(context.startOffset) ?: return
+        val name = fqn.substringAfterLast('\\')
+        val namespace = PhaenonErasedNames.namespaceOf(at)?.fqn?.trim('\\').orEmpty()
+        if (fqn.trimStart('\\').substringBeforeLast('\\', "").equals(namespace, ignoreCase = true)) return
+        when (PhaenonErasedNames.imports(file)[name.lowercase()]) {
+            fqn -> return
+            null -> {
+                // A `type` declaration at the end of a file is a comment behind its namespace's element.
+                val behind = PhaenonErasedNames.namespaceOf(at)?.takeIf { !PsiTreeUtil.isAncestor(it, at, true) }
+                val scope = behind ?: PhpCodeInsightUtil.findScopeForUseOperator(at) ?: return
+                PhpAliasImporter.insertUseStatement(fqn, scope)
+            }
+            else -> context.document.replaceString(context.startOffset, context.tailOffset, fqn)
+        }
+    }
+}
+
+/** The project's aliases whose name [matcher] takes, each inserted with its `use`. */
+private fun aliases(project: Project, matcher: PrefixMatcher, out: CompletionResultSet) {
+    for (alias in PhaenonAliases.all(project)) {
+        if (matcher.prefixMatches(alias.name)) out.addElement(aliasItem(alias).withInsertHandler(ImportingInsertHandler(alias.fqn)))
+    }
+}
+
+private fun aliasItem(alias: PhaenonAliasIndex.Declaration): LookupElementBuilder =
+    LookupElementBuilder.create(alias.name).withTailText(" " + alias.namespace, true).withTypeText("type", true)
 
 /** The classes, interfaces, traits and child namespaces directly under [namespace] (no leading or trailing backslash). */
 private fun qualifiedMembers(namespace: String, prefix: String, project: Project, out: CompletionResultSet) {
@@ -170,6 +214,9 @@ private fun qualifiedMembers(namespace: String, prefix: String, project: Project
         out.addElement(
             klass?.let { LookupElementBuilder.create(it, name).withIcon(it.getIcon(0)) } ?: LookupElementBuilder.create(name),
         )
+    }
+    for (alias in PhaenonAliases.all(project)) {
+        if (alias.namespace.equals(namespace, ignoreCase = true) && alias.name.startsWith(prefix, ignoreCase = true)) out.addElement(aliasItem(alias))
     }
     for (child in index.getAllChildNamespacesFqns(qualified)) {
         val short = child.trim('\\').substringAfterLast('\\')

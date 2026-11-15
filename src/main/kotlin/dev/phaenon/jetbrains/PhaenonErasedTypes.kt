@@ -194,6 +194,8 @@ object PhaenonErasedTypes {
                 isClause(leaf) -> end = leaf
                 PhaenonTokenTypes.isErased(leaf) -> first = leaf
                 leaf is PsiWhiteSpace || leaf is PsiComment || type === PhpTokenTypes.opCOLON -> Unit
+                // An arrow function's `=>` stands between its return type and its expression.
+                type === PhpTokenTypes.opHASH_ARRAY -> end = leaf
                 PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> first = leaf
                 else -> break
             }
@@ -295,6 +297,10 @@ object PhaenonErasedTypes {
      * declaration list `<…>` that names it. Null when no enclosing declaration does.
      */
     fun typeParameterDeclaration(element: PsiElement, name: String): PhaenonTypeParameter? {
+        // In a `type` declaration the parameter is the alias's own, declared in the same leaf.
+        if (PhaenonTokenTypes.isErased(element)) {
+            PhaenonType.alias(element.text)?.parameters?.firstOrNull { it.name == name }?.let { return PhaenonTypeParameter(element, it.offset, name) }
+        }
         var scope: PsiElement? = element
         while (scope != null) {
             val list = declarationList(scope)

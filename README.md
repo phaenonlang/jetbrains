@@ -123,7 +123,7 @@ provider reads it back, and the class names in it are references.
 | a type parameter `T` | erased | its bound, `mixed` without one |
 | `?T`, `T\|null` with `T` erased | `?` and `\|` erased with it; a return type takes its `:` | the native members stay PhpStorm's |
 | `(bytes) $raw` | one `(string)` cast token | `string` |
-| `type Name = …;` | erased whole | — (uses of `Name` are unknown classes) |
+| `type Name<T> = …;`, a shape `array{id: int, name?: string, ...}` in it | erased whole, with the docblock above it | — : `Name` is a name of its namespace, see [Type aliases and named shapes](#type-aliases-and-named-shapes) |
 | `array<K, V>` (M3 spelling in migrated sources) | `array` | `array` |
 
 The rule for `Name<` is the compiler's (`generics.md` §2.4): PHP's relational operators are
@@ -134,6 +134,65 @@ Function bodies are parsed eagerly (see `PhaenonPsiBuilder` above), so an edit i
 reparses the file rather than the block — how PhpStorm worked before lazy blocks existed. An
 expression body that has no `;` yet runs as far as the lexer reads it: to the next `;` outside
 braces, or to the brace that closes the class or block it stands in.
+
+### Type aliases and named shapes
+
+A `type` declaration is erased whole, from the keyword (in any letter case) to its `;`, and a
+shape, `array{id: int, name?: string, 'a-b': int, 0: string, ...}`, is read only there, where the
+language has it (`design/collections.md` §6): its keys, `?`, `:`, a type that may hold shapes of
+its own, `...` and a trailing comma, over as many lines as it is written on. The docblock above the
+declaration, and the comments between the two, are erased with it: PhpStorm gives a docblock to
+the next declaration across comments, and a `@deprecated` over an alias would strike through the
+class after it. A declaration that does not scan to its `;`, which is what stands in the editor
+while one is typed, is not erased: PhpStorm's parser reads it as PHP and reports it, and the
+declarations after it are read as before.
+
+An alias is a name of its namespace, as a class is (`design/generics.md` §11.6, §11.7), and to
+PhpStorm it is a class reference that resolves to nothing. The plugin supplies what PhpStorm lacks:
+
+- **An index** of the `type` declarations of `.phn` files by qualified name
+  (`PhaenonAliasIndex`), lower-cased, since the names are compared as class names are. A
+  declaration is stored with the type it stands for, its names qualified as the declaring file
+  reads them. A class of the same name wins, as in the compiler, and a `.php` file names no alias.
+- **Resolution** of a name in a type position, a docblock, a `use` (plain, `as`, in a group) or
+  through a namespace's import (`Orders\Row`) to the declaration, in whatever file it is: go to
+  declaration lands on the name in the `type` declaration, from an erased construct
+  (`list<Row>`, another alias's shape) as well. "Undefined class" is dropped where the name is
+  an alias's and stands where a type may, in a signature's or a typed constant's type, a docblock
+  or a `use`; where a class is named, `new Row`, `Row::make()`, `extends Row`, `instanceof Row`,
+  `catch (Row $e)`, PhpStorm's finding stands, as the compiler's does (`P2001`). The names of a
+  shape's keys are no class names: `id` in `array{id: int}` is no reference and uses no import,
+  while a class named in an entry's type is one and does.
+- **Types.** A parameter, a property or a return whose type names an alias, in the signature or in
+  its docblock (`@var list<Order>`), is what the alias stands for, a generic alias with its
+  arguments, a missing argument being the parameter's default, its bound, or `mixed`. The type is
+  the docblock the compiler writes for the declaration (`array{id: int, lines: list<array{…}>}`),
+  read by PhpStorm as it reads that docblock, so `$row['id']`, a `foreach` over `$order['lines']`
+  and `$order['buyer']->name` resolve as in the compiled PHP. PhpStorm looks a key up through its
+  own shape index for a property, a function or a method, which the plugin's type feeds, and for
+  a parameter only in the parameter's docblock; a Phaenon parameter has its type in the
+  signature, so there the plugin looks the key up itself (`PhaenonTypeProvider`).
+- **Findings about the declared type.** PhpStorm holds a returned value (of a function, a method,
+  a closure or an arrow function), a value assigned to a property and the default of a parameter,
+  a property or a typed class constant against the type as written, a class of the alias's name:
+  "Return value is expected to be 'Row', 'array' returned", "Class constant of type 'Row' may not
+  have default value" and their kin are dropped where that type is an alias's. Whether the value
+  fits the shape is the compiler's finding, through `phn lsp`.
+- **Overrides.** PHP compares what a signature compiles to, and an alias compiles to what it
+  stands for: `toArray(): Order` overrides a framework's `toArray(): array`, `fill(Order $data)`
+  its `fill(array $data)`. An override with an alias on either side is judged by the plugin
+  (`PhaenonHierarchyInspection`, with PhpStorm's own finding dropped) on what each alias erases
+  to, a shape to `array`, `int|string` to both; a shape where the parent returns `string` is
+  still reported.
+- **Rename is refused.** PhpStorm knows one kind of an alias's uses, the plugin's references in
+  erased constructs, and its rename, started on `Line` in `list<Line>`, renamed those and left
+  the declaration, the imports and every signature. Rename on an alias's name, in its
+  declaration or in a use of any kind, now answers "Rename is not supported for the type alias
+  'Line'…" and changes nothing.
+- **Enter** in the docblock above a `type` declaration continues it with ` * `, and between the
+  braces of a shape just opened parts them, although both stand in what is one comment to PhpStorm.
+- **Completion** of alias names where a type is written, in a signature and in an erased
+  construct, among the classes and with the `use`.
 
 ## D18: expression bodies, `throws`, layout
 
@@ -506,6 +565,41 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   getter land on the method; parameter info prints `users: class<User>`; a `.php` file keeps
   PhpStorm's presentation (`classstring/Plain.php` records it: `string`, and `string|string` with a
   native `string` on 2026.2).
+- `PhaenonShapesTest`: `testData/shapes/Forms.phn` holds every form of a shape's entry, each in a
+  `type` declaration the compiler accepts: every declaration is one erased leaf, no brace reaches
+  the parser, the stubs match, and a declaration takes its docblock and the comments above it
+  (the class after it is not deprecated by the alias's `@deprecated`). A shape outside a `type`
+  declaration is not erased. Declarations cut short or malformed (28 of them), each with a class below
+  it, are left to the parser, and the class is still a class with its method; an open quote is an
+  open string, as in PHP; every beginning of the fixture lexes and parses. A shape of 40,000
+  entries, the same left open, and types nested 20,000 deep lex in one pass. The erased text is
+  read back (`PhaenonType`): a shape, its spelling for a docblock, a declaration with its docblock
+  and type parameters; a shape's keys, quoted keys and comments name no class. Enter continues a
+  declaration's docblock and parts a shape's braces just opened, and a class's docblock stays
+  PhpStorm's.
+- `PhaenonAliasesTest`, `PhaenonAliasTypesTest`, `PhaenonAliasCompletionTest`: `testData/shapes/shop/`
+  is the compiler's named-shapes program (`internal/emit/testdata/programs/named-shapes`) and
+  `Http/Uses.phn`, which names its aliases through an import, `as`, a group and a namespace's
+  import. The index holds each declaration under its qualified name, in any case, in braced
+  namespaces and the global one, with its type qualified; a class wins over an alias of its name.
+  No alias is an undefined class, in a signature, a docblock or a `use`, while a missing class
+  and a name in a `.php` file still are; Optimize Imports keeps the imports. A name leads to its
+  declaration from each of those places and from erased constructs. A key read off a parameter, a
+  property and a call typed with an alias has its entry's type, through `foreach`, a variable, a
+  closure's parameter, a generic alias's argument, default and bound, and a docblock's alias; an
+  alias that mentions itself ends. With every inspection PhpStorm enables by default, the four
+  files show no warning; a value that does not fit a class, and a missing class, still do. An
+  alias completes in a signature and in an erased construct with its `use`. The edges: an arrow
+  function returning an alias (typed, no finding, static and nested ones too); keys that would
+  end a docblock or start a tag in one; overrides of a PHP interface's `array` and of a Phaenon
+  interface's `map<…>` by aliases, with the two real incompatibilities left; a constant's and a
+  property's default; an alias used as a class, which stays undefined; an exclusion other than
+  `null`'s; a chain of 24 aliases each naming the next twice; `namespace\Line` and a name that is
+  not ASCII.
+- `PhaenonAliasRenameTest`: Rename on an alias's name answers "not supported" from an erased
+  construct, a generic alias's argument, a signature, a `use`, a docblock, the declaration and
+  another alias's shape, and no file changes; a class, a key and a keyword are PhpStorm's; a
+  rename that reaches the alias's element past the handlers is refused whole.
 - `PhaenonDocumentationTest`: `testData/docs/Types.phn`: declarations print their written types,
   variables `?class<User>` and `Closure(int): string`, while a variable holding a list, a map or
   bytes is PhpStorm's (`User[]`, `string`); a function or method prints its signature as written,
@@ -748,7 +842,38 @@ numbers (`PhaenonFileDebugTest`), which the real-tree test only counts; read the
 - **Completion inside erased constructs is the plugin's own**, not PhpStorm's: short class
   names (imported on insertion), the members of a namespace after a qualifier (`Event\Dom…`,
   `\App\Event\…`), type parameters and keywords.
-- **`type` aliases are erased whole**: the alias name is an unknown class wherever it is used.
+- **A `type` alias is a type to the plugin and a class reference to PhpStorm.** Navigation, the
+  type behind the name and the findings above are the plugin's; what PhpStorm does with a class
+  reference of its own is not:
+  - **Rename is refused** for an alias, from its declaration and from every use, with a message:
+    the plugin does not rename an alias's declaration, imports and signatures together yet.
+  - **Find Usages** on an alias finds nothing, the structure view and Go to Class do not list
+    aliases, and quick documentation shows nothing for one.
+  - **The docblock of a `type` declaration is part of the erased declaration.** Enter continues
+    it, but its tags are not highlighted, it does not fold, and it has no rendered view; a
+    multi-line shape does not fold either, and Enter inside one keeps the line's indent without
+    adding a level, except between braces just opened.
+  - **PhpStorm's own type for the name stays**, a class nobody declared, beside the alias's (a
+    type provider adds and never removes), so a member access on a value typed with an alias is
+    not reported as undefined.
+  - **Keys behind a parameter** are typed by the plugin, and neither completed nor checked
+    against the shape by PhpStorm, which does both where it looks them up itself (behind a
+    property or a call). A quoted key that could end a docblock or start a tag in one (`@`, a
+    brace, a line break, a `*` beside a `/`) is not given to PhpStorm at all: behind a property
+    or a call it is untyped, behind a parameter it is typed like any other.
+  - **Narrowing.** A key read off a value from which a test excluded `null` or `false` is typed;
+    after any other exclusion (`!is_array($x)` on `Order|string`) the plugin says nothing of it.
+  - **A long chain of aliases** is followed for 1,000 replacements in one type; what lies beyond
+    is `mixed`.
+  - **An alias in a docblock** is expanded where the docblock gives a declaration its type and
+    Phaenon's syntax reads it (`@var list<Order>`, not `Order[]`), and nowhere inside a docblock
+    shape PhpStorm reads itself (`@return array{first: Line}`).
+  - **A typed class constant's keys** (`self::DEFAULT['sku']`) are PhpStorm's reading of the
+    constant's value, not the alias's.
+  - **An unused import of an alias** is the compiler's to report (`P2013`): PhpStorm says nothing
+    of an import it cannot resolve.
+  - **A name that is not ASCII** is an alias in a signature, and no reference inside an erased
+    construct, where class names are read as ASCII words.
 - **A parameter description without a type is written `@param $x - prose`.** PhpStorm's PHPDoc
   parser reads `@param $x prose` as the variable followed by a type named `prose` (an undefined
   class, a type mismatch, and `prose|string` as the parameter's type); the dash, which `phn

@@ -29,6 +29,11 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  * `save(T $x)`, whatever `Store` bounds its own `T` with. [Signature] builds both sides that way:
  * the parent's type parameters are replaced by the type arguments written along the `extends` /
  * `implements` path from the child, and only then is anything compared.
+ *
+ * A `type` alias named in a `.phn` signature is what it stands for (`design/generics.md` §11.6):
+ * `toArray(): Order`, with `Order` a shape, is `toArray(): array` to PHP, and overrides a parent's
+ * `toArray(): array`. PhpStorm compares the names, so an override with an alias on either side is
+ * one the plugin judges ([hasErasedTypes]).
  */
 object PhaenonErasure {
 
@@ -47,10 +52,11 @@ object PhaenonErasure {
     /** One side of an override: a method's parameter types and return type, erased. */
     class Signature(val parameters: List<Set<Atom>>, val returnType: Set<Atom>?)
 
-    /** Whether [method]'s own signature has a Phaenon type the compiler erases (`T`, `list<…>`, `class<T>`, …). */
+    /** Whether [method]'s own signature has a Phaenon type the compiler erases (`T`, `list<…>`, `class<T>`, …, a `type` alias). */
     fun hasErasedTypes(method: Function): Boolean =
         PhaenonErasedTypes.isPhaenon(method) &&
-            (PhaenonErasedTypes.returnType(method).isNotEmpty() || method.parameters.any { PhaenonErasedTypes.beforeName(it).isNotEmpty() })
+            (PhaenonErasedTypes.returnType(method).isNotEmpty() || method.parameters.any { PhaenonErasedTypes.beforeName(it).isNotEmpty() } ||
+                PhaenonAliases.typesWithAlias(method) || method.parameters.any { PhaenonAliases.typesWithAlias(it) })
 
     /** [method]'s signature as its own class sees it: the class's type parameters are themselves. */
     fun ownSignature(method: Function): Signature = signature(method, inScope(method))
@@ -186,18 +192,29 @@ object PhaenonErasure {
         private fun native(type: PhpType, into: MutableSet<Atom>) {
             for (t in type.types) {
                 val name = t.removeSuffix("[]")
-                into.add(if (PhpType.isPrimitiveType(name) || name.equals("\\static", ignoreCase = true) || name.equals("\\self", ignoreCase = true)) {
-                    keyword(name.trimStart('\\').lowercase())
+                if (PhpType.isPrimitiveType(name) || name.equals("\\static", ignoreCase = true) || name.equals("\\self", ignoreCase = true)) {
+                    into.add(keyword(name.trimStart('\\').lowercase()))
                 } else {
-                    Atom.Native(name)
-                })
+                    into.addAll(classOrAlias(name))
+                }
             }
+        }
+
+        /**
+         * A qualified name as PHP sees it: the class, or, where a `.phn` names a `type` alias, what
+         * the alias stands for, erased in its turn (a shape is `array`, `int|string` both).
+         */
+        private fun classOrAlias(fqn: String): Set<Atom> {
+            if (!PhaenonErasedTypes.isPhaenon(context)) return setOf(Atom.Native(fqn))
+            val expanded = PhaenonAliases.expanded(context.project, PhaenonType.Named(fqn)) ?: return setOf(Atom.Native(fqn))
+            return atoms(expanded)
         }
 
         fun atoms(node: PhaenonType): Set<Atom> = when (node) {
             is PhaenonType.Union -> node.members.flatMapTo(LinkedHashSet()) { atoms(it) }
             is PhaenonType.Intersection -> node.members.flatMapTo(LinkedHashSet()) { atoms(it) }
             is PhaenonType.Tuple -> setOf(Atom.Native("array"))
+            is PhaenonType.Shape -> setOf(Atom.Native("array"))
             is PhaenonType.Closure -> setOf(Atom.Native("\\Closure"))
             is PhaenonType.Named -> named(node)
         }
@@ -212,7 +229,7 @@ object PhaenonErasure {
                 typeParameter(node.simple)?.let { return it }
                 if (lower in KEYWORDS) return setOf(keyword(lower))
             }
-            return setOf(Atom.Native(resolveClass(node.name)))
+            return classOrAlias(resolveClass(node.name))
         }
 
         /** `self` and `static` stand for the class declaring the method. */
