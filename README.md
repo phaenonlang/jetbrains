@@ -542,7 +542,7 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   `type` declaration the compiler accepts: every declaration is one erased leaf, no brace reaches
   the parser, the stubs match, and a declaration takes its docblock and the comments above it
   (the class after it is not deprecated by the alias's `@deprecated`). A shape outside a `type`
-  declaration is not erased. Thirty declarations cut short or malformed, each with a class below
+  declaration is not erased. Declarations cut short or malformed (28 of them), each with a class below
   it, are left to the parser, and the class is still a class with its method; an open quote is an
   open string, as in PHP; every beginning of the fixture lexes and parses. A shape of 40,000
   entries, the same left open, and types nested 20,000 deep lex in one pass. The erased text is
