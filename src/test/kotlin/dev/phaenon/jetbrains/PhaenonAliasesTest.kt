@@ -90,6 +90,21 @@ class PhaenonAliasesTest : BasePlatformTestCase() {
         assertEquals(listOf("Undefined class 'Line': Line", "Undefined class 'Line': Line"), findings())
     }
 
+    fun testAnAliasUsedAsAClassIsStillAnUndefinedClass() {
+        myFixture.enableInspections(PhpUndefinedClassInspection::class.java, PhpUnusedAliasInspection::class.java)
+        val file = myFixture.addFileToProject(
+            "src/Http/misused.phn",
+            "namespace Shop\\Http;\n\nuse Shop\\Orders\\Line;\n\nfinal class Misused extends Line\n{\n    const Line FIRST = ['sku' => 'a', 'qty' => 1];\n\n" +
+                "    run(mixed \$x): ?Line\n    {\n        \$made = new Line();\n        Line::make();\n        try {\n            return \$x instanceof Line ? \$x : null;\n        } catch (Line \$e) {\n            return null;\n        }\n    }\n}\n",
+        )
+        myFixture.configureFromExistingVirtualFile(file.virtualFile)
+
+        // An alias is a type and no class (§11.6): where PHP would look for a class, PhpStorm's finding stands.
+        val text = myFixture.file.text
+        val undefined = myFixture.doHighlighting().filter { it.description.orEmpty().startsWith("Undefined class") }.map { text.substring(0, it.startOffset).substringAfterLast('\n').trim() + "|" }
+        assertEquals(listOf("final class Misused extends|", "\$made = new|", "|", "return \$x instanceof|", "} catch (|"), undefined)
+    }
+
     fun testOptimizeImportsKeepsTheImportOfAnAlias() {
         val file = open("src/Http/Uses.phn")
         val imports = PsiTreeUtil.findChildrenOfType(file, PhpUse::class.java).map { it.fqn }

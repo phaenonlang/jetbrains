@@ -159,7 +159,7 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         }
         if (UNDEFINED_CLASS.let { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
-            return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf) && !PhaenonAliases.isNamedAt(leaf)
+            return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf) && !PhaenonAliases.isTypeNamedAt(leaf)
         }
         if (UNUSED_IMPORT.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             return !importIsUsedInAnErasedType(info, file)

@@ -34,6 +34,8 @@ import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.Parameter
 import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpReference
+import com.jetbrains.php.lang.psi.elements.PhpTypeDeclaration
+import com.jetbrains.php.lang.psi.elements.PhpUse
 import java.io.DataInput
 import java.io.DataOutput
 
@@ -124,8 +126,17 @@ object PhaenonAliases {
     /** The alias named at [leaf], in a signature, a docblock or a `use`: a name PhpStorm resolves to no class. */
     fun namedAt(leaf: PsiElement): List<PhaenonTypeAlias> = nameAt(leaf)?.let { declarations(leaf.project, it) }.orEmpty()
 
-    /** Whether the name at [leaf] is an alias's. */
-    fun isNamedAt(leaf: PsiElement): Boolean = nameAt(leaf)?.let { isAlias(leaf.project, it) } == true
+    /**
+     * Whether the name at [leaf] is an alias's and stands where a type may: in a signature's or a
+     * constant's type, in a docblock, in a `use`. Anywhere else, `new Row`, `Row::make()`,
+     * `extends Row`, `catch (Row $e)`, an alias is no class and PhpStorm is right to say so (the
+     * compiler's `P2001`).
+     */
+    fun isTypeNamedAt(leaf: PsiElement): Boolean {
+        val reference = PsiTreeUtil.getParentOfType(leaf, false, ClassReference::class.java, PhpDocType::class.java) ?: return false
+        val typed = reference is PhpDocType || reference.parent is PhpTypeDeclaration || PsiTreeUtil.getParentOfType(reference, PhpUse::class.java) != null
+        return typed && nameAt(leaf)?.let { isAlias(leaf.project, it) } == true
+    }
 
     /**
      * The type a docblock gives [declaration], as its tag spells it: `@var` over a property,
