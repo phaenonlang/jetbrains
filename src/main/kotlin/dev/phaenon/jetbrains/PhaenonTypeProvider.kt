@@ -211,7 +211,7 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
     /**
      * The type a deferred type of this provider denotes: the type itself with its aliases
      * replaced, an entry of one, or either as PhpStorm wraps it for the value of a `foreach` over
-     * it or after a test that excludes `null` or `false`. Null for anything else, which is
+     * it or with `null`, `false` or `mixed` excluded from it. Null for anything else, which is
      * PhpStorm's to type.
      */
     private fun denoted(signature: String, project: Project, depth: Int): Denoted? {
@@ -232,8 +232,15 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
                 val base = denoted(signature.substring(FOREACH_VALUE.length), project, depth + 1) ?: return null
                 entry(base.type, ANY_KEY)?.let { Denoted(it, base.aliased) }
             }
-            signature.startsWith(EXCLUDING) && EXCLUDED in signature ->
-                denoted(signature.substring(EXCLUDING.length).substringBeforeLast(EXCLUDED), project, depth + 1)
+            signature.startsWith(EXCLUDING) && EXCLUDED in signature -> {
+                // Only `null`, `false` and `mixed` are taken away here (`$x !== null`, `isset`, the
+                // result of a closure's call): what is left of a type once `array` or a class is
+                // excluded (`!is_array($x)`) is not this provider's to say, and it says nothing.
+                val excluded = signature.substringAfterLast(EXCLUDED)
+                if (excluded !in EXCLUDABLE) return null
+                val base = denoted(signature.substring(EXCLUDING.length).substringBeforeLast(EXCLUDED), project, depth + 1) ?: return null
+                without(base.type, EXCLUDABLE.getValue(excluded))?.let { Denoted(it, base.aliased) }
+            }
             else -> null
         }
     }
@@ -245,6 +252,12 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         is PhaenonType.Union -> union(type.members.mapNotNull { entry(it, key) })
         is PhaenonType.Named -> type.arguments.lastOrNull().takeIf { !type.qualified && type.simple.lowercase() in COLLECTIONS }
         else -> null
+    }
+
+    /** [type] without its member named [name], `null` or `false`; null when nothing is left. */
+    private fun without(type: PhaenonType, name: String): PhaenonType? {
+        if (type !is PhaenonType.Union) return type.takeIf { !(it is PhaenonType.Named && it.name == name) }
+        return union(type.members.filter { !(it is PhaenonType.Named && it.name == name) })
     }
 
     private fun union(members: List<PhaenonType>): PhaenonType? = when (members.size) {
@@ -353,12 +366,16 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
 
         /**
          * How PhpStorm wraps a type it defers: the value of a `foreach` over it, and the type left
-         * once a test excluded `null` or `false` (`#-…∆n`). They are PhpStorm's spellings, read
-         * here and never written: one this provider does not know leaves the access untyped.
+         * once something was excluded from it (`#-…∆n`). They are PhpStorm's spellings, read here
+         * and never written: one this provider does not know leaves the access untyped. PhpStorm
+         * has the two keys as constants (`PhpIteratedAccessTP.TYPE_KEY`, `PhpExcludeTypeTP.KEY`),
+         * internal API since 2026.3, so they are spelled out.
          */
         const val FOREACH_VALUE = "#顶"
         const val EXCLUDING = "#-"
         const val EXCLUDED = '∆'
+        /** What PhpStorm writes after [EXCLUDED] for the exclusions followed here, and the member each takes away. */
+        val EXCLUDABLE: Map<String, String> = mapOf("n" to "null", "f" to "false", "m" to "mixed")
         /** Introduces an escaped character of an alias signature: a letter, so the signature stays one word. */
         const val ESCAPE = 'ǂ'
         const val SEPARATOR = '¦'

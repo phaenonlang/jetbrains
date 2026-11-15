@@ -229,4 +229,16 @@ class PhaenonAliasTypesTest : BasePlatformTestCase() {
         assertTrue(errors.single(), errors.single().contains("Customer"))
         assertEquals("\\string", access("\$this->line['sku']"))
     }
+
+    fun testAnExclusionOtherThanNullLeavesNoType() {
+        add(
+            "src/Http/narrow.phn",
+            "namespace Shop\\Http;\n\nuse Shop\\Orders\\Order;\n\nfunction narrow(Order|string \$u, ?Order \$o): void\n{\n" +
+                "    if (!is_array(\$u)) {\n        \$u['id'];\n    }\n    if (\$o !== null) {\n        \$o['lines'];\n    }\n}\n",
+        )
+
+        // What is left of `Order|string` without arrays is no Order: nothing is said of the key.
+        assertEquals("", access("\$u['id']").replace("\\string", "").trim('|'))
+        assertEquals("\\array[]", access("\$o['lines']"))
+    }
 }
