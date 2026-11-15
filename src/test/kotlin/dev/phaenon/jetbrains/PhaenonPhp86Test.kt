@@ -125,6 +125,21 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
         assertTrue("a call of the mixed form's closure", "\\string" in types["mixedCalled"]!!)
     }
 
+    fun testAPartialApplicationOnAReceiverOfTwoTypesIsTheClosureOfEach() {
+        // The callee of `$unit->scale(2, ?)` is one method per type `$unit` may have, and PhpStorm
+        // names them in one string, joined with `|`: each is a callee of its own.
+        if (PhaenonPartialApplication.phpStormParsesPlaceholders) return
+        myFixture.configureByText(
+            "Units.phn",
+            "namespace App;\n\nfinal class Metre\n{\n    scale(int \$by, float \$length): float => \$length * \$by;\n}\n\n" +
+                "final class Foot\n{\n    scale(int \$by, int \$length): int => \$length * \$by;\n}\n\n" +
+                "function f(Metre|Foot \$unit): void\n{\n    \$scaled = \$unit->scale(2, ?);\n}\n",
+        )
+
+        val scaled = assignedTypes()["scaled"]!!
+        assertContainsElements(scaled, closure(listOf("\\float"), "\\float"), closure(listOf("\\int"), "\\int"))
+    }
+
     fun testATrailingPlaceholderStandsForTheRequiredParametersLeft() {
         // Up to 2026.2 the call is a call with a spread to PhpStorm, which counts its arguments:
         // "Required parameter '$value' missing" for each `...` here, on either target. The
