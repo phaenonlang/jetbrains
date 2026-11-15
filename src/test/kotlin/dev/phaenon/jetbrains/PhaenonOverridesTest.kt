@@ -93,6 +93,24 @@ class PhaenonOverridesTest : BasePlatformTestCase() {
         assertTrue(text, text.contains("    load(Id \$id): T throws AggregateNotFound {\n"))
     }
 
+    /**
+     * A PHP parent's `@throws void` says that nothing escapes (design/functions.md §4.5): it names no
+     * exception for a `throws` clause, which would name `void` and not compile. The override writes
+     * no clause and inherits the tag, as from a parent that says `nothrow`.
+     */
+    fun testAParentsThrowsVoidIsNoThrowsClause() {
+        myFixture.addFileToProject(
+            "Sized.php",
+            "<?php\nnamespace App\\User;\n\ninterface Sized\n{\n    /**\n     * @throws void\n     */\n    public function size(): int;\n}\n",
+        )
+        myFixture.configureByText("Box.phn", "namespace App\\User;\n\nfinal class Box implements Sized\n{\n<caret>}\n")
+
+        myFixture.performEditorAction("ImplementMethods")
+
+        val text = myFixture.editor.document.text
+        assertTrue(text, text.contains("    size(): int {"))
+    }
+
     fun testCompletionOffersOverridesSpelledAsPhaenon() {
         myFixture.configureByFile("implement/Repo.phn")
 

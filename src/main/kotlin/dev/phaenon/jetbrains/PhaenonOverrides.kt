@@ -171,8 +171,16 @@ internal object PhaenonOverrides {
         pointer.element?.let { CodeStyleManager.getInstance(project).reformat(it) }
     }
 
-    /** A `@throws` tag that is a type and nothing else, which the signature can say: `@throws A|B`. */
-    private fun liftable(tag: String): Boolean = tag.removePrefix("@throws").trim().matches(Regex("""\\?[A-Za-z_][\w\\]*(\s*\|\s*\\?[A-Za-z_][\w\\]*)*"""))
+    /**
+     * A `@throws` tag that is a type and nothing else, which the signature can say: `@throws A|B`.
+     * Not `@throws void`, which names no exception (design/functions.md §4.5): `throws void` would
+     * not compile, and an override that declares nothing inherits the parent's tag.
+     */
+    private fun liftable(tag: String): Boolean {
+        val types = tag.removePrefix("@throws").trim()
+        return types.matches(Regex("""\\?[A-Za-z_][\w\\]*(\s*\|\s*\\?[A-Za-z_][\w\\]*)*""")) &&
+            types.split('|').none { it.trim().equals("void", ignoreCase = true) }
+    }
 
     /**
      * The generated docblock in the canonical layout (design/functions.md §5): without the tags the
