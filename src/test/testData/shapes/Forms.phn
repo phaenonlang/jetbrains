@@ -1,0 +1,59 @@
+namespace App\Forms;
+
+use App\Model\Customer;
+use Closure;
+
+// Every form of a shape's entry (design/collections.md §6.1): a shape is
+// syntax in the right-hand side of a `type` declaration, and each of these
+// declarations is erased whole.
+
+type Row = array{id: int, name?: string};
+type Order = array{id: int, lines: list<array{sku: string, qty: int}>, buyer: ?Customer};
+type Page<T> = array{items: list<T>, total: int, next?: string};
+type Open = array{id: int, ...};
+type OpenWithComma = array{id: int, ..., };
+type Any = array{...};
+type None = array{};
+type Trailing = array{id: int, name?: string,};
+type Keys = array{class: string, list: int, fn: bool, default: int, 'a-b': int, '$set'?: bool, "x y": int, '': int, 0: int, -1: string, '7': float};
+type Nested = ?array{pair: (int, array{x: int}), f: Closure(array{a: int}): array{b: int}, either: array{a: int}|array{b: int}|null};
+type Bounded<T of object = Customer> = map<string, array{value: T, seen: list<class<T>>}>;
+type Spaced = array { id : int , name ? : string , - 1 : int };
+TYPE Shouted = array{id: int};
+
+type Lines = array{
+    id: int,
+    // the name, when it is known
+    name?: ?string,
+    lines: list<array{
+        sku: string, /* the stock keeping unit */
+        qty: int,
+    }>,
+    ...
+};
+
+/**
+ * A row as the table has it.
+ *
+ * @deprecated the class after this declaration is not
+ */
+// a note between the two
+type Documented = array{id: int};
+
+final class Table
+{
+    /** @var list<Row> */
+    private array $rows = [];
+
+    find(int $id): ?Row
+    {
+        return $this->rows[$id] ?? null;
+    }
+
+    page(int $offset): Page<Row> => ['items' => array_slice($this->rows, $offset), 'total' => count($this->rows)];
+
+    add(Row $row, Keys ...$keys): void
+    {
+        $this->rows[] = $row;
+    }
+}

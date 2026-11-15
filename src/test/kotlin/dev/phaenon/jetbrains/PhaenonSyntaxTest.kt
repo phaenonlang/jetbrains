@@ -57,6 +57,7 @@ class PhaenonSyntaxTest : BasePlatformTestCase() {
         assertContainsElements(
             erased,
             "type UserMap = map<Uuid, User>;",
+            "type Row = array{id: int, name?: string, tags: list<array{label: string, 'sort-key': int}>, ...};",
             "<in TIn, out TOut>",
             "<T of object = object>",
             "map<string, list<Event<T>>>",

@@ -43,7 +43,9 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
      * plain identifiers again, D25; 9: `is`, `as` and `as?` no longer erased, D26; 10: methods
      * without a keyword, `fun` an identifier, D27; 11: an expression body without its `;` runs to
      * the end of the lexer's scope for it, not of its first statement; 12: PHP 8.6's `?`
-     * placeholder handed over as PHP's own where PhpStorm's parser takes placeholders, 2026.3).
+     * placeholder handed over as PHP's own where PhpStorm's parser takes placeholders, 2026.3;
+     * 13: a shape erased with its `type` declaration, the declaration's docblock with it, `type` in
+     * any letter case).
      *
      * The stub trees PhpStorm stores for `.phn` files are versioned by the PHP file type (the
      * platform asks the language's parser definition, never the file's content element type), so
@@ -52,7 +54,7 @@ object PhaenonFileElementType : IFileElementType("phaenon.FILE", PhpLanguage.INS
      * [PhaenonReindexActivity] re-indexes the `.phn` files of a project once this number differs
      * from the one it stored.
      */
-    const val PSI_VERSION: Int = 12
+    const val PSI_VERSION: Int = 13
 
     override fun parseContents(chameleon: ASTNode): ASTNode? {
         val project = chameleon.psi.project

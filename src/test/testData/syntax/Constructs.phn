@@ -4,6 +4,7 @@ use Closure;
 
 type UserMap = map<Uuid, User>;
 type Result<T, E of \Throwable = \RuntimeException> = Ok<T> | Err<E>;
+type Row = array{id: int, name?: string, tags: list<array{label: string, 'sort-key': int}>, ...};
 
 interface Mapper<in TIn, out TOut>
 {
