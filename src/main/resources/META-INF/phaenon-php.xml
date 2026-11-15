@@ -80,6 +80,11 @@
 
         <!-- `type` declarations by qualified name: an alias is a name of its namespace, found from any file. -->
         <fileBasedIndex implementation="dev.phaenon.jetbrains.PhaenonAliasIndex"/>
+        <!-- Rename knows a third of an alias's uses, the ones in erased constructs: it is refused for an
+             alias, with the reason, from its declaration and from every use. -->
+        <vetoRenameCondition implementation="dev.phaenon.jetbrains.PhaenonAliasRenameVeto"/>
+        <renameHandler implementation="dev.phaenon.jetbrains.PhaenonAliasRenameHandler" order="first"/>
+        <renamePsiElementProcessor implementation="dev.phaenon.jetbrains.PhaenonAliasRenameProcessor" order="first"/>
 
         <!-- The stubs of .phn files carry PhpStorm's stub version: after a plugin update that changed
              the PSI they are re-indexed once (PhaenonFileElementType.PSI_VERSION). -->
