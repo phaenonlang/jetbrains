@@ -31,6 +31,8 @@ import com.jetbrains.php.lang.documentation.phpdoc.psi.PhpDocType
 import com.jetbrains.php.lang.psi.elements.ClassReference
 import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.PhpClass
+import com.jetbrains.php.lang.psi.elements.Parameter
+import com.jetbrains.php.lang.psi.elements.PhpNamedElement
 import com.jetbrains.php.lang.psi.elements.PhpReference
 import java.io.DataInput
 import java.io.DataOutput
@@ -119,10 +121,38 @@ object PhaenonAliases {
     /** Whether the name at [leaf] is an alias's. */
     fun isNamedAt(leaf: PsiElement): Boolean = nameAt(leaf)?.let { isAlias(leaf.project, it) } == true
 
+    /**
+     * The type a docblock gives [declaration], as its tag spells it: `@var` over a property,
+     * `@param` for a parameter, `@return` over a function; null without one. A docblock may name
+     * an alias (design/collections.md §6.5), `@var list<Order>` over `private array $orders`.
+     */
+    fun documentedType(declaration: PhpNamedElement): String? {
+        val tag: PsiElement = when (declaration) {
+            is Parameter -> declaration.docTag
+            is Function -> declaration.docComment?.returnTag
+            else -> declaration.docComment?.varTag
+        } ?: return null
+        val types = PsiTreeUtil.getChildrenOfType(tag, PhpDocType::class.java)?.takeIf { it.isNotEmpty() } ?: return null
+        return tag.containingFile.viewProvider.contents.subSequence(types.first().textRange.startOffset, types.last().textRange.endOffset).toString()
+    }
+
     /** The alias a name written in an erased construct stands for (`Row` in `list<Row>`, in another alias's shape). */
     fun inErased(name: String, context: PsiElement): List<PhaenonTypeAlias> {
         val fqn = PhaenonErasedNames.qualified(name, context) ?: return emptyList()
         return declarations(context.project, fqn)
+    }
+
+    /**
+     * Whether the type written for [declaration] names an alias: a parameter's or a property's
+     * type, a function's return type. PhpStorm compares a value with that type as written, a class
+     * of the alias's name, where the compiler compares it with what the alias stands for.
+     */
+    fun typesWithAlias(declaration: PhpNamedElement): Boolean {
+        if (!PhaenonErasedTypes.isPhaenon(declaration)) return false
+        val written = if (declaration is Function) PhaenonErasedTypes.writtenReturnType(declaration) else PhaenonErasedTypes.writtenType(declaration)
+        val type = written?.let(PhaenonType::parse) ?: return false
+        val qualified = PhaenonTypeText(declaration, PhaenonErasedTypes.typeParameterBounds(declaration)).qualified(type)
+        return qualified.names { it.name.startsWith("\\") && isAlias(declaration.project, it.name) }
     }
 
     /** The erased leaves of [file] that are `type` declarations of its namespaces: none inside a function or a class. */
