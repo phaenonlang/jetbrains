@@ -4,7 +4,7 @@
   "fileTypes": [
     "phn"
   ],
-  "comment": "A Phaenon file is PHP code from byte 0: the PHP code grammar (source.php, which VS Code and JetBrains IDEs ship) without the text.html.php wrapper that waits for an open tag, plus what Phaenon adds: type parameters and arguments, list, map, bytes, tuple and closure types, throws, type aliases, expression bodies, and methods declared without a keyword. A method is told from a call only by where it stands, so the class-like declarations are this grammar's own rules, injected ahead of PHP's, and their bodies hold the member rules (#class-members) that apply nowhere else. The rules reuse PHP's scope names wherever PHP has the construct, so themes colour them as PHP.",
+  "comment": "A Phaenon file is PHP code from byte 0: the PHP code grammar (source.php, which VS Code and JetBrains IDEs ship) without the text.html.php wrapper that waits for an open tag, plus what Phaenon adds: type parameters and arguments, list, map, bytes, tuple and closure types, throws and nothrow, type aliases, expression bodies, and methods declared without a keyword. A method is told from a call only by where it stands, so the class-like declarations are this grammar's own rules, injected ahead of PHP's, and their bodies hold the member rules (#class-members) that apply nowhere else. The rules reuse PHP's scope names wherever PHP has the construct, so themes colour them as PHP.",
   "patterns": [
     {
       "include": "source.php"
@@ -693,13 +693,14 @@
       ]
     },
     "return-type": {
+      "comment": "Ends at the body, the arrow or the ; of a declaration without one, and before a throws or nothrow clause: after a whole type, or at the start of a line, so that a return type named throws or nothrow stays a type.",
       "begin": ":",
       "beginCaptures": {
         "0": {
           "name": "keyword.operator.return-value.php"
         }
       },
-      "end": "(?=[{;]|=>|\\bthrows\\b)",
+      "end": "(?=[{;]|=>)|(?<=[\\w>)]|\\*/)(?=\\s+(?:throws|nothrow)\\b)|^(?=\\s*(?:throws|nothrow)\\b)",
       "patterns": [
         {
           "include": "source.php#comments"
@@ -710,7 +711,8 @@
       ]
     },
     "throws": {
-      "begin": "\\b(throws)\\b",
+      "comment": "throws A|B (functions.md §4), or nothrow (§4.5), which names nothing: one keyword scope for both.",
+      "begin": "\\b(throws|nothrow)\\b",
       "beginCaptures": {
         "1": {
           "name": "keyword.other.throws.phaenon"

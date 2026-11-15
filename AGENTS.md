@@ -58,7 +58,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   `testData/php86/`, tested at the 8.5 level and the IDE's highest); `concurrently` and `spawn` are
   names like any other
   since D25 withdrew the concurrency syntax (`PhaenonUnreservedWordsTest`); D18's `throws` clause
-  is erased (`PhaenonThrows` answers the exception findings it covers) and an expression body is
+  is erased (`PhaenonThrows` answers the exception findings it covers), as is `nothrow`, which
+  names nothing (design/functions.md §4.5, `PhaenonNothrowTest`), and an expression body is
   the block it compiles to, opened by the lexer and closed by `PhaenonPsiBuilder`; `.phn` is
   formatted in the canonical layout, the braces of functions and methods on their line, of
   class-likes on a line of their own, and an empty body (a function,

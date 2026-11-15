@@ -121,13 +121,15 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
      * The signature of a Phaenon function as written: modifiers, `function` where the source has it
      * (a function's, and a method's written the PHP way, not one without a keyword), name, type
      * parameters, one parameter per line as PhpStorm lays them out (all on one line in the hint),
-     * the return type. Without a written return type, the one PhpStorm infers.
+     * the return type. Without a written return type, the one PhpStorm infers. Then the `throws`
+     * clause or `nothrow`.
      */
     private fun function(function: Function, hint: Boolean): String? {
         val parameters = function.parameters
         val erased = PhaenonErasedTypes.writtenTypeParameters(function) != null ||
             PhaenonErasedTypes.returnTypeLeaf(function) != null ||
             PhaenonErasedTypes.throwsClause(function) != null ||
+            PhaenonErasedTypes.nothrowClause(function) != null ||
             parameters.any { PhaenonErasedTypes.typeLeaf(it) != null }
         if (!erased) return null
         val out = StringBuilder()
@@ -181,6 +183,10 @@ class PhaenonDocumentationProvider : AbstractDocumentationProvider() {
             styled(out, "throws", PhpHighlightingData.KEYWORD)
             out.append(' ')
             styled(out, throws.joinToString("|"), PhpHighlightingData.PRIMITIVE_TYPE_HINT)
+        }
+        if (PhaenonErasedTypes.nothrowClause(function) != null) {
+            out.append(' ')
+            styled(out, "nothrow", PhpHighlightingData.KEYWORD)
         }
         return out.toString()
     }

@@ -51,7 +51,8 @@ import com.jetbrains.php.lang.lexer.PhpWithOptionalOpenTagLexer
  *   `?` a constant there, a call that also ends in `...` would be PhpStorm's partial application
  *   with the constant for a bound argument, and its closure a parameter short.
  * - D18 (design/functions.md §3, §4): a named function's `throws A|B` clause, after its parameters
- *   or its return type, is erased whole, its names references like any erased type's; an expression
+ *   or its return type, is erased whole, its names references like any erased type's, and so is
+ *   `nothrow` (§4.5), which stands there and names nothing; an expression
  *   body `=> expr;` is handed over as the block it compiles to, the arrow's two characters split into
  *   `{` and `return` (`{` and an erased `>` under `void` or `never`), and [PhaenonPsiBuilder] closes
  *   that block behind the `;` of its expression, where the source has no `}`.
@@ -229,6 +230,13 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         val t = tok(i) ?: return false
         return t.type == PhpTokenTypes.IDENTIFIER && text(t) == word
     }
+
+    /** Whether [t] is the identifier [word] in any letter case: a contextual keyword of a function's head, as the compiler reads it. */
+    private fun isWord(t: Tok?, word: String): Boolean =
+        t != null && t.type == PhpTokenTypes.IDENTIFIER && text(t).equals(word, ignoreCase = true)
+
+    /** Whether [t] begins a clause that may follow a return type: `throws` or `nothrow`. */
+    private fun isClauseWord(t: Tok?): Boolean = isWord(t, "throws") || isWord(t, "nothrow")
 
     // ---------------------------------------------------------------- emission
 
@@ -413,12 +421,18 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
     // ---------------------------------------------------------------- triggers
 
     /**
-     * `throws A|B` after a named function's parameters or return type, before its body, `=>` or
-     * `;` (design/functions.md §4): erased whole. Elsewhere `throws` is a name like any other — a
-     * constant, a class, a trait method in an `as` adaptation.
+     * `throws A|B` after a named function's parameters or its whole return type, before its body,
+     * `=>` or `;` (design/functions.md §4): erased whole. `nothrow` (§4.5) stands in the same place
+     * and names nothing: the word is erased when the body, `=>` or `;` follows it. Both words are
+     * read in any case, as the compiler reads them. Elsewhere they are names like any other — a
+     * constant, a class, a trait method in an `as` adaptation, a return type or the first segment
+     * of one (`: Throws\Error`, `: nothrow`). Beside each other, or twice, they are left to the
+     * parser, whose syntax error is the compiler's.
      */
     private fun tryThrows(c: Tok): Plan? {
-        if (header != Header.SIGNATURE || c.type != PhpTokenTypes.IDENTIFIER || text(c) != "throws") return null
+        if (header != Header.SIGNATURE || prevSig !in SIGNATURE_ENDS) return null
+        if (isWord(c, "nothrow")) return if (typeAt(sig(1)) in BODY_STARTS) Plan(1).erase(0..0) else null
+        if (!isWord(c, "throws")) return null
         var i = sig(1)
         while (true) {
             i = scanThrowable(i) ?: return null
@@ -617,7 +631,7 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
         val s = Scan()
         val u = scanUnion(sig(1), s) ?: return null
         if (s.extraClosers > 0 || s.erase.isEmpty()) return null
-        if (typeAt(sig(u.end)) !in RETURN_TYPE_FOLLOWERS && !isIdent(sig(u.end), "throws")) return null
+        if (typeAt(sig(u.end)) !in RETURN_TYPE_FOLLOWERS && !isClauseWord(tok(sig(u.end)))) return null
         val plan = Plan(u.end).erase(s.erase)
         if (u.allErased) plan.erase(0 until u.end)
         return plan
@@ -1004,7 +1018,16 @@ class PhaenonLexer(private val base: Lexer = PhpWithOptionalOpenTagLexer()) : Lo
             PhpTokenTypes.kwSTATIC, PhpTokenTypes.kwARRAY, PhpTokenTypes.kwCALLABLE,
         )
 
-        /** What may follow a `throws` clause: the body, an expression body's arrow, the `;` of an abstract method. */
+        /**
+         * The last token of a parameter list or of a whole native return type, its Phaenon parts
+         * erased: where a `throws` clause or `nothrow` may begin. Not `:`, `?`, `|`, `&`, `(` or `\`,
+         * after which a type goes on, so that a return type named like either word stays a type.
+         */
+        val SIGNATURE_ENDS: TokenSet = TokenSet.create(
+            PhpTokenTypes.chRPAREN, PhpTokenTypes.IDENTIFIER, PhpTokenTypes.kwSTATIC, PhpTokenTypes.kwARRAY, PhpTokenTypes.kwCALLABLE,
+        )
+
+        /** What may follow a `throws` clause or `nothrow`: the body, an expression body's arrow, the `;` of an abstract method. */
         val BODY_STARTS: TokenSet = RETURN_TYPE_FOLLOWERS
 
         /** The return types under which an expression body is evaluated, not returned. */

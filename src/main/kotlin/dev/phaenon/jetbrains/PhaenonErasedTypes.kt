@@ -74,7 +74,7 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                isThrowsClause(leaf) -> Unit
+                isClause(leaf) -> Unit
                 PhaenonTokenTypes.isErased(leaf) -> parts.add(withClosureName(leaf, leaf.text.trim().removePrefix(":").trimStart()))
                 leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opHASH_ARRAY -> Unit
@@ -129,7 +129,7 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                isThrowsClause(leaf) -> Unit
+                isClause(leaf) -> Unit
                 PhaenonTokenTypes.isErased(leaf) -> first = leaf
                 leaf is PsiWhiteSpace || leaf is PsiComment -> Unit
                 type === PhpTokenTypes.opCOLON || type === PhpTokenTypes.opHASH_ARRAY -> Unit
@@ -191,7 +191,7 @@ object PhaenonErasedTypes {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                isThrowsClause(leaf) -> end = leaf
+                isClause(leaf) -> end = leaf
                 PhaenonTokenTypes.isErased(leaf) -> first = leaf
                 leaf is PsiWhiteSpace || leaf is PsiComment || type === PhpTokenTypes.opCOLON -> Unit
                 // An arrow function's `=>` stands between its return type and its expression.
@@ -206,18 +206,34 @@ object PhaenonErasedTypes {
         return text.removePrefix(":").trim().ifEmpty { null }
     }
 
-    /** Whether [leaf] is a function's erased `throws A|B` clause (design/functions.md §4). */
+    /** Whether [leaf] is a function's erased `throws A|B` clause (design/functions.md §4), its word in any case. */
     @JvmStatic
     fun isThrowsClause(leaf: PsiElement?): Boolean =
-        leaf != null && PhaenonTokenTypes.isErased(leaf) && leaf.text.startsWith("throws") && leaf.text.getOrNull(6)?.isWhitespace() == true
+        leaf != null && PhaenonTokenTypes.isErased(leaf) && leaf.text.startsWith("throws", ignoreCase = true) && leaf.text.getOrNull(6)?.isWhitespace() == true
+
+    /** Whether [leaf] is a function's erased `nothrow` (design/functions.md §4.5), in any case. */
+    @JvmStatic
+    fun isNothrowClause(leaf: PsiElement?): Boolean =
+        leaf != null && PhaenonTokenTypes.isErased(leaf) && leaf.text.equals("nothrow", ignoreCase = true)
+
+    /** Whether [leaf] is a function's erased clause, `throws A|B` or `nothrow`: what ends its return type. */
+    @JvmStatic
+    fun isClause(leaf: PsiElement?): Boolean = isThrowsClause(leaf) || isNothrowClause(leaf)
 
     /** The erased `throws` clause of a named function or method, or null when it declares none. */
     @JvmStatic
-    fun throwsClause(function: Function): PsiElement? {
+    fun throwsClause(function: Function): PsiElement? = clause(function, ::isThrowsClause)
+
+    /** The erased `nothrow` of a named function or method, or null when it does not say it. */
+    @JvmStatic
+    fun nothrowClause(function: Function): PsiElement? = clause(function, ::isNothrowClause)
+
+    /** The erased leaf between [function]'s signature and its body that [test] accepts. */
+    private fun clause(function: Function, test: (PsiElement) -> Boolean): PsiElement? {
         val tail = function.lastChild ?: return null
         var leaf: PsiElement? = PsiTreeUtil.prevLeaf(tail, true)
         while (leaf != null && (leaf is PsiWhiteSpace || leaf is PsiComment)) {
-            if (isThrowsClause(leaf)) return leaf
+            if (test(leaf)) return leaf
             leaf = PsiTreeUtil.prevLeaf(leaf, true)
         }
         return null
@@ -226,7 +242,7 @@ object PhaenonErasedTypes {
     /** The names a function's `throws` clause lists, as written. */
     @JvmStatic
     fun throwsNames(function: Function): List<String> =
-        throwsClause(function)?.text?.removePrefix("throws")?.split('|')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        throwsClause(function)?.text?.substring("throws".length)?.split('|')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
     /** The `<…>` type parameter list a function or class declares, as written; null when it declares none. */
     fun writtenTypeParameters(declaration: PsiElement): String? = declarationList(declaration)?.let { normalize(it.text) }
