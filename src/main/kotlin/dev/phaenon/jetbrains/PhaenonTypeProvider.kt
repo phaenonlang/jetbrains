@@ -323,7 +323,8 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         val kind = payload[0]
         if (kind == ALIAS) return completeAlias(payload.substring(1), project)
         if (kind == KEYED) return completeKeyed(payload.substring(1), project)
-        val fields = payload.substring(1).split(SEPARATOR)
+        // The callee may hold the separator itself, in a keyed access's deferred type: only the first one separates.
+        val fields = payload.substring(1).split(SEPARATOR, limit = 2)
         val member = fields.getOrNull(0) ?: return null
         val type = decode(fields.getOrNull(1)) ?: return null
         return when (kind) {

@@ -140,6 +140,21 @@ class PhaenonPhp86Test : BasePlatformTestCase() {
         assertContainsElements(scaled, closure(listOf("\\float"), "\\float"), closure(listOf("\\int"), "\\int"))
     }
 
+    fun testAPartialApplicationOnAReceiverReadFromAnAliasIsTheClosure() {
+        // The receiver's type is deferred with the key it was read by, and so is the callee's
+        // signature built on it: it holds this provider's own separator.
+        if (PhaenonPartialApplication.phpStormParsesPlaceholders) return
+        myFixture.configureByText(
+            "Holder.phn",
+            "namespace App;\n\ntype Holder = array{unit: Metre};\n\nfinal class Metre\n{\n    scale(int \$by, float \$length): float => \$length * \$by;\n}\n\n" +
+                "function f(Holder \$h): void\n{\n    \$viaKey = \$h['unit']->scale(2, ?);\n    \$unit = \$h['unit'];\n    \$viaVariable = \$unit->scale(2, ?);\n}\n",
+        )
+
+        val types = assignedTypes()
+        assertContainsElements(types["viaKey"]!!, closure(listOf("\\float"), "\\float"))
+        assertContainsElements(types["viaVariable"]!!, closure(listOf("\\float"), "\\float"))
+    }
+
     fun testATrailingPlaceholderStandsForTheRequiredParametersLeft() {
         // Up to 2026.2 the call is a call with a spread to PhpStorm, which counts its arguments:
         // "Required parameter '$value' missing" for each `...` here, on either target. The
