@@ -184,16 +184,28 @@ object PhaenonAliases {
      * null when it names none, which leaves the type to PhpStorm. A generic alias takes its
      * arguments, a missing one its parameter's default, else its bound, else `mixed`. An alias
      * that mentions itself, which the compiler refuses (`P2015`), is `mixed` where it comes round.
+     * The work is bounded: see `MAX_REPLACED`.
      */
     fun expanded(project: Project, type: PhaenonType): PhaenonType? {
         if (!ready(project) || keys(project).isEmpty()) return null
         var found = false
+        // What an alias with its arguments stands for, and how many aliases were replaced to say
+        // so: an alias named twice is expanded once, and one that names two that name two each,
+        // which doubles what it stands for at every step, stops being followed at MAX_REPLACED.
+        val known = HashMap<String, Pair<PhaenonType, Int>>()
+        var replaced = 0
         fun expand(node: PhaenonType, visiting: Set<String>): PhaenonType = node.map { named ->
             if (!named.name.startsWith("\\")) return@map named
             val key = key(named.name)
             val declaration = find(project, named.name) ?: return@map named
             found = true
-            if (key in visiting) return@map MIXED
+            if (key in visiting || replaced >= MAX_REPLACED) return@map MIXED
+            val spelled = named.text()
+            known[spelled]?.let { (type, cost) ->
+                replaced += cost
+                return@map type
+            }
+            val before = replaced++
             val body = PhaenonType.parse(declaration.type) ?: return@map MIXED
             val inside = visiting + key
             val arguments = HashMap<String, PhaenonType>()
@@ -203,9 +215,13 @@ object PhaenonAliases {
                     ?: MIXED
             }
             expand(body.map { inner -> arguments[inner.name]?.takeIf { inner.arguments.isEmpty() } ?: inner }, inside)
+                .also { known[spelled] = it to replaced - before }
         }
         return expand(type, emptySet()).takeIf { found }
     }
+
+    /** How many aliases one expansion replaces before the rest are `mixed`: far more than a written type names. */
+    private const val MAX_REPLACED = 1000
 
     private val MIXED = PhaenonType.Named("mixed")
 

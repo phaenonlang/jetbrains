@@ -241,4 +241,18 @@ class PhaenonAliasTypesTest : BasePlatformTestCase() {
         assertEquals("", access("\$u['id']").replace("\\string", "").trim('|'))
         assertEquals("\\array[]", access("\$o['lines']"))
     }
+
+    fun testALongChainOfAliasesIsBounded() {
+        // Each alias names the next twice: what the first stands for doubles at every step.
+        val chain = (0 until 24).joinToString("\n") { "type A$it = array{a: A${it + 1}, b: A${it + 1}};" } + "\ntype A24 = int;\n"
+        myFixture.addFileToProject("src/Chain/chain.phn", "namespace Shop\\Chain;\n\n$chain")
+        add("src/Chain/uses.phn", "namespace Shop\\Chain;\n\nfunction chained(A0 \$deep, A20 \$near): void\n{\n    \$deep['a']['a'];\n    \$near['a']['b']['a']['b'];\n}\n")
+
+        val started = System.nanoTime()
+        // Followed as far as the bound goes, and no further: the first is an array of arrays, the one near the end exact.
+        assertEquals("\\array", access("\$deep['a']['a']"))
+        assertEquals("\\int", access("\$near['a']['b']['a']['b']"))
+        val seconds = (System.nanoTime() - started) / 1_000_000_000
+        assertTrue("$seconds s", seconds < 20)
+    }
 }
