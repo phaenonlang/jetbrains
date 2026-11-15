@@ -4,6 +4,42 @@ From 0.2.1 on, release-please writes each entry from the Conventional Commits me
 previous release (`release-please-config.json`); the entry is the Marketplace's change notes for
 that version. The first release was written by hand.
 
+## [0.7.0](https://github.com/phaenonlang/jetbrains/compare/v0.6.2...v0.7.0) (2026-11-15)
+
+
+### Features
+
+* **completion:** an alias completes where a type is written ([e6c6d04](https://github.com/phaenonlang/jetbrains/commit/e6c6d045369218fec3536d29ea6b8716b99cc075))
+* **lexer:** a shape is erased with its type declaration ([291aa0b](https://github.com/phaenonlang/jetbrains/commit/291aa0b9ccdb59a5bcb2f3c3a219d6329ff46d44))
+* named shapes and type aliases across files ([0e48717](https://github.com/phaenonlang/jetbrains/commit/0e48717708cf58c8f418c7b3fd7db14a59b083c9))
+* **names:** a shape's keys are no class names ([1c31291](https://github.com/phaenonlang/jetbrains/commit/1c312916178c1f6dfa0d950c43220a0b3c62b887))
+* nothrow, erased where a throws clause goes ([e14f700](https://github.com/phaenonlang/jetbrains/commit/e14f7002c50b784327e3832bbcf87bfa917af59c))
+* nothrow, erased where a throws clause goes ([999cf63](https://github.com/phaenonlang/jetbrains/commit/999cf633dc6d2f7da3204cc4e140b6eefa9da039))
+* **resolve:** a type alias is found from any file ([3771993](https://github.com/phaenonlang/jetbrains/commit/37719939fdbaf196bfa934d51ed55f00f8e805ec))
+* the TextMate bundle reads named shapes ([426be41](https://github.com/phaenonlang/jetbrains/commit/426be410d710519ef547729156e91a58021388e0))
+* the TextMate bundle reads named shapes ([f1b9e6e](https://github.com/phaenonlang/jetbrains/commit/f1b9e6eb0204c9331d82c267382f0ef52896daa5))
+* the TextMate bundle reads nothrow ([d645ab1](https://github.com/phaenonlang/jetbrains/commit/d645ab1c732c01f8801b99d791b81212bef7ba62))
+* **types:** a declaration typed with an alias is what the alias stands for ([92f01d7](https://github.com/phaenonlang/jetbrains/commit/92f01d7c31502812322b3b723a59bfb414bfea2c))
+
+
+### Bug Fixes
+
+* an override lifts no [@throws](https://github.com/throws) void into a throws clause ([7684859](https://github.com/phaenonlang/jetbrains/commit/768485981319f6c043082365dcda2450bc9d1608))
+* **editor:** Enter in a type declaration's docblock and a shape's braces ([b6cf271](https://github.com/phaenonlang/jetbrains/commit/b6cf2711fd0fef154450ffe506df5aeefc6365e4))
+* **hierarchy:** an override is judged by what an alias erases to ([cc75afc](https://github.com/phaenonlang/jetbrains/commit/cc75afc1aaffe12e2dc96e467b60b89a56caeb71))
+* **inspections:** a default of an alias's type is no error ([720b03a](https://github.com/phaenonlang/jetbrains/commit/720b03ad424b0ff0a51181e0b988ba252bad17e1))
+* **inspections:** an alias used as a class is an undefined class ([2ef2fd8](https://github.com/phaenonlang/jetbrains/commit/2ef2fd882718ffec0cfc6616e6e2decb4c5a0602))
+* **rename:** rename is refused for a type alias ([e8501f8](https://github.com/phaenonlang/jetbrains/commit/e8501f8b9f3694c018ec8304b2f8e0a902fd2df2))
+* **resolve:** a name relative to the namespace, and one that is not ASCII ([f5d476b](https://github.com/phaenonlang/jetbrains/commit/f5d476bdbec1027f2b91745bf01d7e910d156994))
+* throws in any case, and only after a whole return type ([2c7df4b](https://github.com/phaenonlang/jetbrains/commit/2c7df4b507c0879d0402e44572c4b5daac9b519b))
+* **types:** a partial application on a receiver of two types is typed ([8bc9479](https://github.com/phaenonlang/jetbrains/commit/8bc947978830fe681dd851910a6abe4bffd11e22))
+* **types:** a partial application on a receiver of two types is typed ([430c54f](https://github.com/phaenonlang/jetbrains/commit/430c54f926b80858bc042121a9f446e5972db306))
+* **types:** a partial application on a receiver of two types is typed ([53e6962](https://github.com/phaenonlang/jetbrains/commit/53e6962050cb66fdc1cbace7ba6989fce6bc35ec))
+* **types:** a partial application on an entry of an alias keeps its closure ([1c3fd96](https://github.com/phaenonlang/jetbrains/commit/1c3fd96c5455ac1b0d9c5b6e313fed62c3c0d155))
+* **types:** a shape's key cannot end the docblock it is spelled into ([bcd888d](https://github.com/phaenonlang/jetbrains/commit/bcd888dea420d12741fa48a6f8b2c2b11c6ff6a2))
+* **types:** an exclusion the provider cannot follow leaves no type ([be12bdc](https://github.com/phaenonlang/jetbrains/commit/be12bdcdbf9154119eee56edb1022c0713455596))
+* **types:** the expansion of an alias is bounded ([d6edfb8](https://github.com/phaenonlang/jetbrains/commit/d6edfb805ad0c48dd0740735626f5bc4159b8598))
+
 ## [0.6.2](https://github.com/phaenonlang/jetbrains/compare/v0.6.1...v0.6.2) (2026-11-14)
 
 
