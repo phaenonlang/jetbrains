@@ -194,6 +194,8 @@ object PhaenonErasedTypes {
                 isThrowsClause(leaf) -> end = leaf
                 PhaenonTokenTypes.isErased(leaf) -> first = leaf
                 leaf is PsiWhiteSpace || leaf is PsiComment || type === PhpTokenTypes.opCOLON -> Unit
+                // An arrow function's `=>` stands between its return type and its expression.
+                type === PhpTokenTypes.opHASH_ARRAY -> end = leaf
                 PsiTreeUtil.getParentOfType(leaf, PhpTypeDeclaration::class.java) != null -> first = leaf
                 else -> break
             }

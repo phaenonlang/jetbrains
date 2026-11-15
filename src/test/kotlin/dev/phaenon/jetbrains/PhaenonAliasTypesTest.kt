@@ -149,6 +149,29 @@ class PhaenonAliasTypesTest : BasePlatformTestCase() {
         myFixture.configureFromExistingVirtualFile(myFixture.addFileToProject(path, text).virtualFile)
     }
 
+    fun testAnArrowFunctionReturningAnAliasIsTypedAndRaisesNoFinding() {
+        add(
+            "src/Http/arrow.phn",
+            "namespace Shop\\Http;\n\nuse Shop\\Orders\\{Line, Order};\n\nfinal class Arrow\n{\n" +
+                "    run(Line \$one): void\n    {\n" +
+                "        \$fn = fn (Line \$l): Order => ['id' => 1, 'lines' => [\$l]];\n" +
+                "        \$made = \$fn(\$one);\n        \$made['id'];\n" +
+                "        \$cl = function (Line \$l): Order {\n            return ['id' => 1, 'lines' => [\$l]];\n        };\n" +
+                "        \$built = \$cl(\$one);\n        \$built['id'];\n" +
+                "        \$rows = array_map(fn (int \$i): Line => ['sku' => 'x', 'qty' => \$i], [1, 2]);\n" +
+                "        \$st = static fn (): ?Order => null;\n" +
+                "        \$nested = fn (): callable => fn (): Line => ['sku' => 'y', 'qty' => 2];\n" +
+                "        \$wrong = fn (): Arrow => ['sku' => 'z'];\n" +
+                "    }\n\n    line(): Line => ['sku' => 'b', 'qty' => 3];\n}\n",
+        )
+
+        assertEquals("\\int", access("\$made['id']"))
+        assertEquals("\\int", access("\$built['id']"))
+        // A real class against an array is still a finding, in an arrow function as anywhere.
+        assertEquals(listOf("['sku' => 'z']"), warnings().filter { it.startsWith("PhpIncompatibleReturnTypeInspection") }.map { it.substringAfter(" at '").removeSuffix("'") })
+        assertEmpty(warnings().filter { !it.startsWith("PhpIncompatibleReturnTypeInspection") })
+    }
+
     fun testAKeyThatWouldEndADocblockEndsNothing() {
         // The alias is spelled into a docblock for PhpStorm to read: a quoted key is written by its
         // author, and none of these may end the comment, start a tag in it or leave PHP.
