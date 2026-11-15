@@ -5,6 +5,7 @@ import com.intellij.codeInsight.actions.OptimizeImportsProcessor
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiFileFactory
@@ -30,6 +31,7 @@ import com.jetbrains.php.lang.psi.elements.Function
 import com.jetbrains.php.lang.psi.elements.GroupStatement
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import com.jetbrains.php.lang.psi.elements.PhpReturn
+import com.jetbrains.php.lang.psi.elements.PhpReturnType
 import java.io.File
 
 /**
@@ -78,6 +80,60 @@ class PhaenonD18Test : BasePlatformTestCase() {
         assertEquals(listOf("NotFound", "Unavailable"), PhaenonErasedTypes.throwsNames(functions.getValue("Directory::first")))
         assertEquals(listOf("\\LogicException"), PhaenonErasedTypes.throwsNames(functions.getValue("Directory::fail")))
         assertEquals("?string", PhaenonErasedTypes.writtenReturnType(functions.getValue("Directory::find")))
+    }
+
+    /**
+     * The clause's word is read in any case, as the compiler reads it (design/functions.md §4.1),
+     * and only where a clause may begin: after the parameter list or a whole return type. A return
+     * type named `Throws`, or whose first segment is, stays the return type.
+     */
+    fun testThrowsInAnyCaseAndOnlyAfterAWholeReturnType() {
+        myFixture.configureByText(
+            "Case.phn",
+            """
+            namespace App;
+
+            use App\Errors\NotFound;
+            use App\Errors\Unavailable;
+
+            interface Lookup
+            {
+                find(int ${'$'}id): ?string Throws NotFound;
+
+                all(): list<string> THROWS NotFound|Unavailable;
+
+                first() tHrOwS NotFound => 'x';
+            }
+
+            final class Throws {}
+
+            function make(): Throws {
+                return new Throws();
+            }
+
+            function inner(): Throws\Inner|null {
+                return null;
+            }
+
+            function lower(): throws\Inner {
+                return new throws\Inner();
+            }
+            """.trimIndent() + "\n",
+        )
+
+        assertEmpty(PsiTreeUtil.findChildrenOfType(myFixture.file, PsiErrorElement::class.java).map { "${it.errorDescription} at ${it.textOffset}" })
+        val functions = functions()
+        assertEquals(listOf("NotFound"), PhaenonErasedTypes.throwsNames(functions.getValue("Lookup::find")))
+        assertEquals(listOf("NotFound", "Unavailable"), PhaenonErasedTypes.throwsNames(functions.getValue("Lookup::all")))
+        assertEquals(listOf("NotFound"), PhaenonErasedTypes.throwsNames(functions.getValue("Lookup::first")))
+        assertEquals("?string", PhaenonErasedTypes.writtenReturnType(functions.getValue("Lookup::find")))
+        assertEquals("list<string>", PhaenonErasedTypes.writtenReturnType(functions.getValue("Lookup::all")))
+        assertTrue(PsiTreeUtil.getChildOfType(functions.getValue("Lookup::first"), GroupStatement::class.java)!!.statements.single() is PhpReturn)
+        for ((name, type) in listOf("::make" to "Throws", "::inner" to "Throws\\Inner|null", "::lower" to "throws\\Inner")) {
+            val function = functions.getValue(name)
+            assertEquals(name, type, PsiTreeUtil.getChildOfType(function, PhpReturnType::class.java)?.text)
+            assertEmpty(name, PsiTreeUtil.findChildrenOfType(function, PsiComment::class.java).filter { PhaenonTokenTypes.isErased(it) }.map { it.text })
+        }
     }
 
     fun testAnExpressionBodyIsCodeAndTheReturnTypeStaysDeclared() {

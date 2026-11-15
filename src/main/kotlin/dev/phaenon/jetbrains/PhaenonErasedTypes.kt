@@ -204,10 +204,10 @@ object PhaenonErasedTypes {
         return text.removePrefix(":").trim().ifEmpty { null }
     }
 
-    /** Whether [leaf] is a function's erased `throws A|B` clause (design/functions.md §4). */
+    /** Whether [leaf] is a function's erased `throws A|B` clause (design/functions.md §4), its word in any case. */
     @JvmStatic
     fun isThrowsClause(leaf: PsiElement?): Boolean =
-        leaf != null && PhaenonTokenTypes.isErased(leaf) && leaf.text.startsWith("throws") && leaf.text.getOrNull(6)?.isWhitespace() == true
+        leaf != null && PhaenonTokenTypes.isErased(leaf) && leaf.text.startsWith("throws", ignoreCase = true) && leaf.text.getOrNull(6)?.isWhitespace() == true
 
     /** The erased `throws` clause of a named function or method, or null when it declares none. */
     @JvmStatic
@@ -224,7 +224,7 @@ object PhaenonErasedTypes {
     /** The names a function's `throws` clause lists, as written. */
     @JvmStatic
     fun throwsNames(function: Function): List<String> =
-        throwsClause(function)?.text?.removePrefix("throws")?.split('|')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+        throwsClause(function)?.text?.substring("throws".length)?.split('|')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
     /** The `<…>` type parameter list a function or class declares, as written; null when it declares none. */
     fun writtenTypeParameters(declaration: PsiElement): String? = declarationList(declaration)?.let { normalize(it.text) }

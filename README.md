@@ -148,17 +148,18 @@ after a signature and a name after a return type are syntax errors in any PHP fi
   one, erased types included. The arrow is recognised only after a named function's signature; an
   arrow function's `fn () =>` and an array's `=>` stay PHP's, below a signature still being typed
   too: the first token no return type has ends it.
-- **`throws A|B`** after a named function's parameters or return type, before `{`, `=>` or `;`, is
-  erased whole, so its names are references like any erased type's: navigation, find usages,
-  rename, and imports counted as used by Optimize Imports and the unused-import inspection.
-  Completion after `throws` offers the Throwables. Elsewhere `throws` is a name. PhpStorm's
-  exception analysis reads `@throws` tags only and has no extension point; the plugin cannot feed
-  it the clause, so it drops the findings the compiled tags would answer: "Unhandled X" where the
-  clauses in effect name X or a parent of it — the function's own, an enclosing function's for a
-  closure, a parent method's for a method with neither a docblock nor a clause, as PhpStorm reads
-  tags — and the missing-`@throws` finding where they name what the docblock lacks. A call of a
-  function whose clause names an exception is not reported as unhandled: PhpStorm does not know
-  the callee throws.
+- **`throws A|B`** after a named function's parameters or its whole return type, before `{`, `=>`
+  or `;`, is erased whole, so its names are references like any erased type's: navigation, find
+  usages, rename, and imports counted as used by Optimize Imports and the unused-import inspection.
+  Completion after `throws` offers the Throwables. The word is read in any case, as the compiler
+  reads it; elsewhere, a return type named `Throws` or `Throws\Error` included, it is a name.
+  PhpStorm's exception analysis reads `@throws` tags only and has no extension point; the plugin
+  cannot feed it the clause, so it drops the findings the compiled tags would answer: "Unhandled X"
+  where the clauses in effect name X or a parent of it — the function's own, an enclosing
+  function's for a closure, a parent method's for a method with neither a docblock nor a clause, as
+  PhpStorm reads tags — and the missing-`@throws` finding where they name what the docblock lacks.
+  A call of a function whose clause names an exception is not reported as unhandled: PhpStorm does
+  not know the callee throws.
 - **The canonical layout** is the `.phn` code style: the formatter is handed the project's PHP code
   style with the brace placement of functions, methods and closures set to the end of the
   declaration's line and that of class-likes to the next line (amended with D19,
@@ -601,7 +602,8 @@ PHAENON_XDEBUG=/path/to/xdebug.so ./gradlew test --tests '*Xdebug*'
   wrong value is PhpStorm's "Return value is expected to be …", and nothing else is reported (no
   missing `return`, no value under `void` or `never`); completion works in the body; the clause's
   names are found by find usages, renamed with their class and keep their imports through Optimize
-  Imports and the unused-import inspection; completion after `throws` offers Throwables only; an
+  Imports and the unused-import inspection; completion after `throws` offers Throwables only; the
+  word is read in any case, and a return type named `Throws`, or `Throws\Inner`, is no clause; an
   "Unhandled" exception the clause names is not reported and one it does not name is, in a closure
   the enclosing function's clause answers, a method without a docblock inherits the clause of the
   method it implements and one with a docblock does not, and a call reported for two exceptions
