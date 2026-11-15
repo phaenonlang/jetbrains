@@ -259,8 +259,9 @@ internal object PhaenonOverrides {
         while (leaf != null) {
             val type = PsiUtilCore.getElementType(leaf)
             when {
-                // The `throws` clause ends the return type; [Signature.throwsNames] carries it over.
-                PhaenonErasedTypes.isThrowsClause(leaf) -> break
+                // A clause ends the return type: [Signature.throwsNames] carries a `throws` clause over,
+                // and an override that writes none inherits `nothrow` (design/functions.md §4.5).
+                PhaenonErasedTypes.isClause(leaf) -> break
                 PhaenonTokenTypes.isErased(leaf) -> {
                     erased = true
                     var from = leaf.textRange.startOffset
