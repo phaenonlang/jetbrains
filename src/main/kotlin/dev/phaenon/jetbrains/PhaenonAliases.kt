@@ -63,8 +63,13 @@ import java.io.DataOutput
  */
 object PhaenonAliases {
 
-    /** The lower-cased key of a qualified name: no leading backslash. */
-    fun key(fqn: String): String = fqn.trimStart('\\').lowercase()
+    /**
+     * The key of a qualified name: no leading backslash, and lower-cased as PHP lower-cases a
+     * class's name, its ASCII letters alone (`Заказ` and `заказ` are two names).
+     */
+    fun key(fqn: String): String = buildString {
+        for (c in fqn.trimStart('\\')) append(if (c in 'A'..'Z') c.lowercaseChar() else c)
+    }
 
     /**
      * The keys of every alias the index holds; a name not among them is no alias, which is what
@@ -393,6 +398,6 @@ class PhaenonAliasIndex : FileBasedIndexExtension<String, List<PhaenonAliasIndex
         private const val VERSION = 1 + 1000 * PhaenonFileElementType.PSI_VERSION
 
         /** What a file that declares an alias holds: `type`, a name, then `=` or `<`, blanks and comments between them. */
-        private val MAY_DECLARE = Regex("""(?is)(?<![\w$\\>:])type(?:\s|/\*.*?\*/|//[^\n]*|#[^\n]*)+[a-z_]\w*(?:\s|/\*.*?\*/|//[^\n]*|#[^\n]*)*[=<]""")
+        private val MAY_DECLARE = Regex("""(?is)(?<![\p{L}\p{N}_$\\>:])type(?:\s|/\*.*?\*/|//[^\n]*|#[^\n]*)+[\p{L}_][\p{L}\p{N}_]*(?:\s|/\*.*?\*/|//[^\n]*|#[^\n]*)*[=<]""")
     }
 }

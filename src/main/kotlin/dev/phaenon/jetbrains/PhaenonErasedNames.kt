@@ -161,8 +161,10 @@ object PhaenonErasedNames {
         if (name.trimStart('\\').lowercase() in NOT_A_CLASS) return null
         if (name.startsWith("\\")) return name
         val first = name.substringBefore('\\')
-        imports(context.containingFile)[first.lowercase()]?.let { return it + name.substring(first.length) }
         val namespace = namespaceOf(context)?.fqn?.trim('\\').orEmpty()
+        // `namespace\Row` is the current namespace's, whatever the imports.
+        if (first.equals("namespace", ignoreCase = true) && first.length < name.length) return (if (namespace.isEmpty()) "" else "\\$namespace") + name.substring(first.length)
+        imports(context.containingFile)[first.lowercase()]?.let { return it + name.substring(first.length) }
         return if (namespace.isEmpty()) "\\$name" else "\\$namespace\\$name"
     }
 

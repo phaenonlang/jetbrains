@@ -255,4 +255,17 @@ class PhaenonAliasTypesTest : BasePlatformTestCase() {
         val seconds = (System.nanoTime() - started) / 1_000_000_000
         assertTrue("$seconds s", seconds < 20)
     }
+
+    fun testANameRelativeToTheNamespaceAndANameThatIsNotAsciiAreAliases() {
+        myFixture.addFileToProject("src/Orders/more.phn", "namespace Shop\\Orders;\n\ntype Заказ = array{id: int};\n")
+        add("src/Orders/more-uses.phn", "namespace Shop\\Orders;\n\nfunction more(Заказ \$z, namespace\\Line \$rel): void\n{\n    \$z['id'];\n    \$rel['sku'];\n}\n")
+
+        assertNotNull(PhaenonAliases.find(project, "\\Shop\\Orders\\Заказ"))
+        // PHP lower-cases the ASCII letters of a name and no others.
+        assertNull(PhaenonAliases.find(project, "\\Shop\\Orders\\заказ"))
+        assertNotNull(PhaenonAliases.find(project, "\\shop\\orders\\Заказ"))
+        assertEquals("\\int", access("\$z['id']"))
+        assertEquals("\\string", access("\$rel['sku']"))
+        assertEmpty(warnings())
+    }
 }

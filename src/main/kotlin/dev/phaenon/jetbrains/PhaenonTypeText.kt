@@ -162,6 +162,8 @@ class PhaenonTypeText(private val context: PsiElement?, private val typeParamete
         if (name.startsWith("\\")) return name
         val first = name.substringBefore('\\')
         val rest = name.substring(first.length)
+        // `namespace\Row` is the current namespace's, whatever the imports.
+        if (first.equals("namespace", ignoreCase = true) && rest.isNotEmpty()) return namespace + rest
         aliases[first]?.let { return "\\" + it.trimStart('\\') + rest }
         return if (namespace.isEmpty()) "\\$name" else "$namespace\\$name"
     }
