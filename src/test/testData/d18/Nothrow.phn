@@ -1,0 +1,52 @@
+namespace App;
+
+use App\Errors\NotFound;
+
+/** Finds names. */
+interface Finder
+{
+    find(int $id): ?string nothrow;
+
+    all(): list<string> nothrow;
+
+    supports(string $kind): bool NoThrow;
+}
+
+abstract class Base
+{
+    abstract protected label(): string nothrow;
+}
+
+final class Names extends Base implements Finder
+{
+    /** @param list<string> $names */
+    __construct(private array $names) {}
+
+    find(int $id): ?string nothrow {
+        return $this->names[$id] ?? null;
+    }
+
+    all(): list<string> nothrow => $this->names;
+
+    supports(string $kind): bool => $kind === 'name';
+
+    count() nothrow {
+        return \count($this->names);
+    }
+
+    log(string $message): void nothrow => $this->write($message);
+
+    static of(string ...$names): static nothrow => new static(array_values($names));
+
+    first(): string throws NotFound => $this->find(0) ?? throw new NotFound(0);
+
+    protected label(): string => 'names';
+
+    private write(string $message): void NOTHROW {
+        echo $message;
+    }
+}
+
+function twice(int $x): int nothrow => $x * 2;
+
+function none() nothrow {}

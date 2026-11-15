@@ -31,7 +31,9 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  *   function's `@throws` tags too;
  * - the clauses of the methods it overrides, when it has neither a docblock nor a clause of its own
  *   (or a docblock with `{@inheritDoc}`): its compiled copy has no docblock, and PhpStorm reads the
- *   parent's tags for a method without one;
+ *   parent's tags for a method without one. `nothrow` (design/functions.md §4.5) is a clause that
+ *   names nothing: its compiled copy has a docblock, `@throws void`, and no parent's tag answers
+ *   for it;
  * - the `@throws` tags PhpStorm reads itself, for a site where it reports several exceptions at
  *   once, some of them documented.
  *
@@ -154,7 +156,7 @@ object PhaenonThrows {
         if (function is Method) {
             val doc = function.docComment
             // The compiled method has no docblock, or one that inherits: PhpStorm reads the parent's.
-            if (doc == null && names.isEmpty() || doc?.hasInheritDocTag() == true) {
+            if (doc == null && names.isEmpty() && PhaenonErasedTypes.nothrowClause(function) == null || doc?.hasInheritDocTag() == true) {
                 for (parent in superMethods(function)) if (!collect(parent, into, seen)) return false
             }
         }
