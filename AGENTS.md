@@ -38,7 +38,12 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   the parser through `PhaenonParserDefinition`) whose class names are references
   (`PhaenonErasedReferenceContributor`, `PhaenonErasedNames`; fixtures `testData/erased/`),
   completed by `PhaenonErasedCompletionContributor` and left alone by the spell-checker
-  (`PhaenonSpellcheckingStrategy`); `PhaenonFormattingModelBuilder` runs PhpStorm's PHP formatter on
+  (`PhaenonSpellcheckingStrategy`); a `type` declaration is erased whole with its docblock, a shape
+  `array{…}` is read in it alone and its keys are no class names, and its alias is a name of its
+  namespace: `PhaenonAliasIndex` holds the declarations of `.phn` files by qualified name,
+  `PhaenonAliases` resolves a name to one and expands it, and `PhaenonTypeProvider` gives a
+  declaration typed with an alias, and a key read off it, the type the alias stands for (fixtures
+  `testData/shapes/`); `PhaenonFormattingModelBuilder` runs PhpStorm's PHP formatter on
   `.phn` files and decides the spacing next to erased constructs; `PhaenonDocCommentEnterHandler`,
   `PhaenonOverrides` (Implement / Override Methods and override completion) and
   `PhaenonPipeConversionIntention` make PhpStorm's generated code Phaenon's (fixtures
@@ -113,7 +118,8 @@ PHAENON_PHN=../phaenon/bin/phn ./gradlew test --tests '*PhaenonLayoutTest*'   # 
   alters what a `.phn` parses into also bumps `PhaenonFileElementType.PSI_VERSION`: the stubs of
   `.phn` files carry PhpStorm's stub version, and the bump is what re-indexes them after an update
   (README § How it works).
-- Known limits (README § Limitations): `type` aliases are erased whole, type arguments of user
+- Known limits (README § Limitations): a `type` alias has no Find Usages, Rename or structure view
+  entry and stays a class reference to PhpStorm beside its type, type arguments of user
   generics are dropped, tuples type as element-array unions, a partial application is also its
   callee's result to PhpStorm; the implied `strict_types` is not modelled; the lexer, the editor
   colouring (`com.jetbrains.php.baseLexerProvider`) and debugging
