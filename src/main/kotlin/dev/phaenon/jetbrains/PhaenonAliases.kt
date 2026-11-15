@@ -90,6 +90,12 @@ object PhaenonAliases {
 
     fun isAlias(project: Project, fqn: String): Boolean = find(project, fqn) != null
 
+    /** Every alias of the project no class shadows, for completion: one declaration per name. */
+    fun all(project: Project): List<PhaenonAliasIndex.Declaration> {
+        if (!ready(project)) return emptyList()
+        return keys(project).mapNotNull { find(project, it) }
+    }
+
     /** The declarations of the alias [fqn] names, as navigation targets; several when it is declared twice. */
     fun declarations(project: Project, fqn: String): List<PhaenonTypeAlias> {
         if (find(project, fqn) == null) return emptyList()
