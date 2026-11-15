@@ -443,7 +443,9 @@ fun PhaenonType.text(): String = when (this) {
  * compiler writes into the output (design/collections.md §4, §6.9). `list<T>` stays, `map<K, V>`
  * is `array<K, V>`, `bytes` is `string`, `class<T>` is `class-string<T>`, a tuple is the
  * positional shape `array{A, B}`, a closure type is `\Closure(A, B=, C...): R` with its return
- * bracketed when it is a union, and a shape that names no key is `array`. Class names are written
+ * bracketed when it is a union, and a shape that names no key is `array`. The text is written
+ * into a docblock, and nothing in it can end one: names and keywords are words, and a shape's
+ * quoted key that could (a `*` before a `/`, `'@x'`, a key over two lines) is left out. Class names are written
  * as they stand, so the type is to be qualified first; a bare name that is no keyword is a type
  * parameter nobody bound, `mixed`.
  */
@@ -453,7 +455,13 @@ fun PhaenonType.docblock(): String = when (this) {
     is PhaenonType.Tuple -> elements.joinToString(", ", "array{", "}") { it.docblock() }
     is PhaenonType.Closure -> "\\Closure" + parameters.joinToString(", ", "(", ")") { it.type.docblock() + if (it.variadic) "..." else if (it.optional) "=" else "" } +
         (returnType?.let { ": " + if (it is PhaenonType.Union || it is PhaenonType.Intersection) "(${it.docblock()})" else it.docblock() } ?: "")
-    is PhaenonType.Shape -> if (entries.isEmpty() && open) "array" else shape(entries.map { it.key + (if (it.optional) "?" else "") + ": " + it.type.docblock() }, open)
+    is PhaenonType.Shape -> {
+        // A quoted key is the one text of a type its author chose freely: one that could end the
+        // docblock it is written into, or start a tag in it, is left out, and the shape left open.
+        val written = entries.filter { isDocblockSafe(it.key) }
+        val open = open || written.size < entries.size
+        if (written.isEmpty() && open) "array" else shape(written.map { it.key + (if (it.optional) "?" else "") + ": " + it.type.docblock() }, open)
+    }
     is PhaenonType.Named -> {
         val arguments = if (arguments.isEmpty()) "" else arguments.joinToString(", ", "<", ">") { it.docblock() }
         when {
@@ -466,6 +474,22 @@ fun PhaenonType.docblock(): String = when (this) {
         }
     }
 }
+
+/**
+ * Whether a shape's key, as written, may stand in a docblock: a name, an integer, or a quoted
+ * string of letters, digits, blanks and the punctuation that means nothing to a comment. Not a
+ * `*` beside a `/`, which ends or opens a comment, nor `@`, braces, a line break, a quote or a
+ * backslash inside the quotes, nor `<` or `>` beside `?`.
+ */
+private fun isDocblockSafe(key: String): Boolean {
+    if (key.isEmpty() || key[0] != '\'' && key[0] != '"') return key.all { it.isLetterOrDigit() || it == '_' || it == '-' }
+    if (key.length < 2 || key.last() != key[0]) return false
+    val content = key.substring(1, key.length - 1)
+    if ("*/" in content || "/*" in content || "?>" in content || "<?" in content) return false
+    return content.all { it.isLetterOrDigit() || it in DOCBLOCK_SAFE }
+}
+
+private const val DOCBLOCK_SAFE = " _-.:,;/*+=!?&%^~|\$#()[]<>"
 
 private fun shape(entries: List<String>, open: Boolean): String = (if (open) entries + "..." else entries).joinToString(", ", "array{", "}")
 

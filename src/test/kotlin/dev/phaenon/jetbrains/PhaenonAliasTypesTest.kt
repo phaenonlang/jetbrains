@@ -129,4 +129,43 @@ class PhaenonAliasTypesTest : BasePlatformTestCase() {
         val plain = myFixture.doHighlighting().filter { it.inspectionToolId == "PhpUndefinedClassInspection" }.map { it.text }
         assertEquals(listOf("Line", "Line"), plain)
     }
+
+    // ---------------------------------------------------------------- the edges
+
+    /** Every default inspection over the open file: what is reported as a warning or an error, the test project's noise aside. */
+    private fun warnings(): List<String> {
+        val tools = LocalInspectionEP.LOCAL_INSPECTION.extensionList.filter { it.language == "PHP" && it.enabledByDefault }.map { it.instantiateTool() }
+        myFixture.enableInspections(*tools.toTypedArray())
+        return myFixture.doHighlighting()
+            .filter { it.severity.myVal >= HighlightSeverity.WARNING.myVal }
+            .filter { it.inspectionToolId !in NOISE }
+            .map { "${it.inspectionToolId ?: it.severity}: ${it.description} at '${it.text}'" }
+    }
+
+    /** The test project has neither PHP's own stubs nor a PSR-4 root, and the fixtures read keys for their types alone. */
+    private val NOISE = setOf("PhpUndefinedFunctionInspection", "PhpIllegalPsrClassPathInspection", "PhpExpressionResultUnusedInspection", "PhpUnusedLocalVariableInspection")
+
+    private fun add(path: String, text: String) {
+        myFixture.configureFromExistingVirtualFile(myFixture.addFileToProject(path, text).virtualFile)
+    }
+
+    fun testAKeyThatWouldEndADocblockEndsNothing() {
+        // The alias is spelled into a docblock for PhpStorm to read: a quoted key is written by its
+        // author, and none of these may end the comment, start a tag in it or leave PHP.
+        myFixture.addFileToProject(
+            "src/Orders/odd.phn",
+            "namespace Shop\\Orders;\n\ntype Mime = array{'*/*': int, 'text/html': string, '@x': int, '{@see Y}': int, '?>': int, 'two\nlines': int, '/** x': int, \"q'q\": int};\n",
+        )
+        add("src/Orders/mime.phn", "namespace Shop\\Orders;\n\nfinal class Mimes\n{\n    __construct(private Mime \$all) {}\n\n    of(Mime \$m): int\n    {\n        \$m['@x'];\n        \$m['two\nlines'];\n        \$this->all['text/html'];\n        \$m['text/html'];\n        return \$m['*/*'];\n    }\n}\n")
+
+        // Read off a parameter, every key has its entry: the plugin looks it up in the alias's own text.
+        assertEquals("\\int", access("\$m['*/*']"))
+        assertEquals("\\string", access("\$m['text/html']"))
+        assertEquals("\\int", access("\$m['@x']"))
+        assertEquals("\\int", access("\$m['two\nlines']"))
+        // Read off a property, PhpStorm looks the key up in what it was given: the keys that are safe to give.
+        assertEquals("\\string", access("\$this->all['text/html']"))
+        assertEmpty(warnings())
+        assertEquals("array{'text/html': string, ...}", PhaenonType.parse("array{'*/*': int, 'text/html': string, '@x': int, '{@see Y}': int, '?>': int, 'two\nlines': int, '/** x': int, \"q'q\": int}")!!.docblock())
+    }
 }

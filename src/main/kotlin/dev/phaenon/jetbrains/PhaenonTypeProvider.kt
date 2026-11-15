@@ -1,5 +1,6 @@
 package dev.phaenon.jetbrains
 
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.CachedValueProvider
@@ -265,8 +266,18 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
             CachedValueProvider.Result.create(ConcurrentHashMap<String, PhpType>(), PsiModificationTracker.getInstance(project))
         }
         return types.computeIfAbsent(text) {
-            val function = PhpPsiElementFactory.createPhpPsiFromText(project, Function::class.java, "/**\n * @return $text\n */\nfunction f() {}")
-            PhpType().add(function.type)
+            // PhpStorm's factory fails by assertion on text that is no function; whatever it fails
+            // by, the answer is no type. The text is safe by construction ([PhaenonType.docblock]).
+            val function = try {
+                PhpPsiElementFactory.createPhpPsiFromText(project, Function::class.java, "/**\n * @return $text\n */\nfunction f() {}")
+            } catch (e: ProcessCanceledException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            } catch (e: AssertionError) {
+                null
+            }
+            function?.let { PhpType().add(it.type) } ?: PhpType.EMPTY
         }.takeIf { !it.isEmpty }
     }
 
