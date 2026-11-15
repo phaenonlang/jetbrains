@@ -62,8 +62,8 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
     /** The closure a partial application creates, deferred to [complete]: the callee is an index lookup. */
     private fun partial(call: FunctionReference): PhpType? {
         val shape = PhaenonPartialApplication.of(call) ?: return null
-        val callee = call.signature.takeIf { it.isNotEmpty() } ?: return null
-        return PhpType().add(signature(PARTIAL, shape.encode(), PhpType().add(callee)))
+        val callee = signatures(call) ?: return null
+        return PhpType().add(signature(PARTIAL, shape.encode(), callee))
     }
 
     /** `$x |> $o->m(1, ?)`: the type of the call the stage becomes, the callee's return type. */
@@ -73,7 +73,17 @@ class PhaenonTypeProvider : PhpTypeProvider4 {
         while (right is ParenthesizedExpression) right = right.argument
         val call = right as? FunctionReference ?: return null
         if (PhaenonPartialApplication.of(call) == null) return null
-        return call.signature.takeIf { it.isNotEmpty() }?.let { PhpType().add(it) }
+        return signatures(call)
+    }
+
+    /**
+     * The signatures of a call's callee, one for each type its receiver may have, each a member of
+     * its own: PhpStorm joins them with `|`, and joined they are no signature.
+     */
+    private fun signatures(call: FunctionReference): PhpType? {
+        val type = PhpType()
+        call.signature.split('|').filter { it.isNotEmpty() }.forEach { type.add(it) }
+        return type.takeIf { !it.isEmpty }
     }
 
     private fun completePartial(shapeText: String, callee: PhpType, project: Project): PhpType {
