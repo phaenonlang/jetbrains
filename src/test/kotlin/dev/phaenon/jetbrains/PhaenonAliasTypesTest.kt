@@ -268,4 +268,21 @@ class PhaenonAliasTypesTest : BasePlatformTestCase() {
         assertEquals("\\string", access("\$rel['sku']"))
         assertEmpty(warnings())
     }
+
+    fun testAPartialApplicationOnAReceiverReadFromAnAliasIsTheClosure() {
+        // Up to 2026.2 the plugin types a partial application, from the callee's signature. Here the
+        // receiver's type is deferred with the key it was read by, and so is the callee's signature
+        // built on it: it holds this provider's own separator.
+        if (PhaenonPartialApplication.phpStormParsesPlaceholders) return
+        add(
+            "src/Units/units.phn",
+            "namespace Shop\\Units;\n\ntype Holder = array{unit: Metre};\n\nfinal class Metre\n{\n    scale(int \$by, float \$length): float => \$length * \$by;\n}\n\n" +
+                "function f(Holder \$h): void\n{\n    \$viaKey = \$h['unit']->scale(2, ?);\n    \$unit = \$h['unit'];\n    \$viaVariable = \$unit->scale(2, ?);\n}\n",
+        )
+
+        for (name in listOf("viaKey", "viaVariable")) {
+            val assigned = PsiTreeUtil.findChildrenOfType(myFixture.file, com.jetbrains.php.lang.psi.elements.Variable::class.java).first { it.name == name }
+            assertContainsElements(assigned.type.global(project).typesWithParametrisedParts, closure(listOf("\\float"), "\\float"))
+        }
+    }
 }
