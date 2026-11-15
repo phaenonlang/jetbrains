@@ -191,4 +191,26 @@ class PhaenonAliasTypesTest : BasePlatformTestCase() {
         assertEmpty(warnings())
         assertEquals("array{'text/html': string, ...}", PhaenonType.parse("array{'*/*': int, 'text/html': string, '@x': int, '{@see Y}': int, '?>': int, 'two\nlines': int, '/** x': int, \"q'q\": int}")!!.docblock())
     }
+
+    fun testAnOverrideIsJudgedByWhatAnAliasErasesTo() {
+        myFixture.addFileToProject(
+            "vendor/acme/Contract.php",
+            "<?php\nnamespace Acme;\n\ninterface Arrayable\n{\n    /** @return array<string, mixed> */\n    public function toArray(): array;\n\n    public function fill(array \$data): void;\n\n    public function name(): string;\n}\n",
+        )
+        add(
+            "src/Http/over.phn",
+            "namespace Shop\\Http;\n\nuse Acme\\Arrayable;\nuse Shop\\Orders\\{Line, Order};\n\ntype Lines = list<Line>;\ntype Id = int|string;\n\n" +
+                "interface Source\n{\n    get(int \$id): map<string, mixed>;\n\n    set(map<string, mixed> \$row): void;\n\n    all(): list<Line>;\n\n    one(): ?map<string, mixed>;\n\n    same(Order \$order): Order;\n\n    id(): Id;\n\n    count(): int;\n}\n\n" +
+                "final class Impl implements Source, Arrayable\n{\n" +
+                "    toArray(): Order => ['id' => 1, 'lines' => []];\n\n    fill(Order \$data): void {}\n\n" +
+                "    get(int \$id): Order => ['id' => \$id, 'lines' => []];\n\n    set(Order \$row): void {}\n\n" +
+                "    all(): Lines => [];\n\n    one(): ?Order => null;\n\n    same(Order \$order): Order => \$order;\n\n    id(): int => 1;\n\n" +
+                // The two that are wrong: a shape where a string is returned, where an int is.
+                "    name(): Order => ['id' => 1, 'lines' => []];\n\n    count(): Lines => [];\n}\n",
+        )
+
+        // The compiler writes `array` for each alias here, and so does the judgement: only the two real ones are left.
+        val hierarchy = warnings().filter { it.contains("compatible") }.map { it.substringBefore(":") + " @" + it.substringAfter(" at '").removeSuffix("'") }
+        assertEquals(listOf("PhaenonHierarchyChecks @Order", "PhaenonHierarchyChecks @Lines"), hierarchy)
+    }
 }
