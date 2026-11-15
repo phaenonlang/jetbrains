@@ -12,7 +12,7 @@ import com.jetbrains.php.lang.psi.elements.MethodReference
 import com.jetbrains.php.lang.psi.elements.PhpReference
 
 /**
- * Two corrections to "go to declaration".
+ * Three corrections to "go to declaration".
  *
  * A class, function or constant declared in a `.phn` file is declared a second time by the `.php`
  * the compiler wrote from it, when that output is in the project (built beside the source, or
@@ -23,12 +23,16 @@ import com.jetbrains.php.lang.psi.elements.PhpReference
  *
  * A docblock type naming a type parameter in scope, `@var T $x`, goes to the declaration of
  * `T` in the enclosing `<T of …>` list, which PhpStorm's own resolution cannot find.
+ *
+ * A name that is a `type` alias's, `Row` in `find(): ?Row` or in `use App\Orders\Row;`, goes to
+ * the `type` declaration, which PhpStorm, looking for a class, cannot find either.
  */
 class PhaenonGotoDeclarationHandler : GotoDeclarationHandler {
 
     override fun getGotoDeclarationTargets(sourceElement: PsiElement?, offset: Int, editor: Editor?): Array<PsiElement>? {
         if (sourceElement == null) return null
         sourceDeclarations(sourceElement, offset)?.let { return it }
+        typeAlias(sourceElement)?.let { return it }
         return typeParameterInDocblock(sourceElement)?.let { arrayOf(it) }
     }
 
@@ -48,6 +52,14 @@ class PhaenonGotoDeclarationHandler : GotoDeclarationHandler {
         val sources = targets.filter { !PhaenonFiles.isGeneratedOutput(it.containingFile) }
         if (sources.size == targets.size || sources.isEmpty()) return null
         return sources.toTypedArray()
+    }
+
+    /**
+     * A name in a type position, a docblock or a `use` that no class bears and a `type` alias
+     * does goes to the alias's declaration, in whatever file it is (design/generics.md §11.6).
+     */
+    private fun typeAlias(sourceElement: PsiElement): Array<PsiElement>? {
+        return PhaenonAliases.namedAt(sourceElement).takeIf { it.isNotEmpty() }?.toTypedArray()
     }
 
     /** `@var T $x`: a docblock type naming a type parameter in scope goes to the parameter's declaration. */

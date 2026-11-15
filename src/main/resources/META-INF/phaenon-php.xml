@@ -78,6 +78,9 @@
         <findUsagesHandlerFactory implementation="dev.phaenon.jetbrains.PhaenonTypeParameterFindUsagesHandlerFactory"/>
         <referencesSearch implementation="dev.phaenon.jetbrains.PhaenonDocTypeReferenceSearcher"/>
 
+        <!-- `type` declarations by qualified name: an alias is a name of its namespace, found from any file. -->
+        <fileBasedIndex implementation="dev.phaenon.jetbrains.PhaenonAliasIndex"/>
+
         <!-- The stubs of .phn files carry PhpStorm's stub version: after a plugin update that changed
              the PSI they are re-indexed once (PhaenonFileElementType.PSI_VERSION). -->
         <postStartupActivity implementation="dev.phaenon.jetbrains.PhaenonReindexActivity"/>

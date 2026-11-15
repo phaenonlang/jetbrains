@@ -41,13 +41,14 @@ class PhaenonErasedReferenceContributor : PsiReferenceContributor() {
 /**
  * A class name written in an erased construct. [qualified] is the name as written (`User`,
  * `Event\Created`, `\Closure`), and `\Closure` for a bare `Closure(…)`; the range covers its last
- * segment, which is what a rename changes.
+ * segment, which is what a rename changes. A name no class bears may be a `type` alias's
+ * (`list<Row>`, a shape's `lines: list<Line>`), and then refers to the alias's declaration.
  */
 class PhaenonClassReference(element: PsiElement, range: TextRange, private val qualified: String) :
     PsiPolyVariantReferenceBase<PsiElement>(element, range, true) {
 
     override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> =
-        PsiElementResolveResult.createResults(PhaenonErasedNames.resolve(qualified, element))
+        PsiElementResolveResult.createResults(PhaenonErasedNames.resolve(qualified, element).ifEmpty { PhaenonAliases.inErased(qualified, element) })
 
     override fun handleElementRename(newElementName: String): PsiElement = renameIn(element, rangeInElement, newElementName)
 

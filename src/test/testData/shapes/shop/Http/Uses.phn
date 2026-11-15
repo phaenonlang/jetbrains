@@ -1,0 +1,60 @@
+namespace Shop\Http;
+
+use Shop\Orders;
+use Shop\Orders\{Line, Order as Placed};
+use Shop\Orders\Customer;
+use Shop\Orders\Page;
+
+// The ways a file of another namespace names an alias: an import, an import
+// under another name, a group, a name through its namespace's import. Each
+// is typed as what the alias stands for.
+final class Uses
+{
+    private ?Placed $last = null;
+
+    /** @var list<Line> */
+    private array $lines = [];
+
+    private Page<Line> $page;
+
+    __construct(private Orders\Orders $orders, private Line $line = ['sku' => 'a', 'qty' => 1])
+    {
+        $this->page = ['items' => [], 'total' => 0];
+    }
+
+    place(Customer $buyer): Placed
+    {
+        $this->last = $this->orders->place($buyer, ['sku' => 'a', 'qty' => 2], $this->line);
+        return $this->last;
+    }
+
+    total(Orders\Order $order): int
+    {
+        $total = 0;
+        foreach ($order['lines'] as $line) {
+            $total += $line['qty'];
+        }
+        $name = isset($order['buyer']) ? $order['buyer']->name : '';
+        return $total + strlen($name) + $this->page['total'];
+    }
+
+    first(Page<Placed> $page): ?Placed => $page['items'][0] ?? null;
+
+    firstId(Page<Placed> $page): int
+    {
+        $first = $page['items'][0];
+        return $first['id'];
+    }
+
+    stored(int $id): int
+    {
+        $order = $this->orders->find($id);
+        return $order === null ? 0 : $order['id'] + count($order['lines']);
+    }
+
+    line(): Line => ['sku' => 'b', 'qty' => 3];
+
+    lines(): list<Line> => $this->lines;
+
+    skus(): list<string> => array_map(fn (Line $line): string => $line['sku'], $this->lines);
+}

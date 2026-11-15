@@ -73,6 +73,9 @@ import com.jetbrains.php.lang.psi.resolve.types.PhpType
  *
  * A docblock type naming a type parameter in scope, `@var T $x`, is "Undefined class 'T'" to
  * PhpStorm, which has no `@template` to read it from; the name is declared in the erased list.
+ * So is the name of a `type` alias (design/generics.md §11.6) wherever a type is named, in a
+ * signature, a docblock or a `use`: a class to PhpStorm, declared in an erased `type` declaration
+ * of this file or another, which [PhaenonAliases] finds.
  *
  * "Other declarations of class 'X' exist at X.php" is PhpStorm seeing the `.php` the compiler
  * wrote from the class's own `.phn`: not a conflict, the same class twice. The finding stays when
@@ -148,7 +151,7 @@ class PhaenonHighlightFilter : HighlightInfoFilter {
         }
         if (UNDEFINED_CLASS.let { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             val leaf = file.findElementAt(info.startOffset) ?: return true
-            return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf)
+            return leaf.text !in PhaenonErasedTypes.typeParametersInScope(leaf) && !PhaenonAliases.isNamedAt(leaf)
         }
         if (UNUSED_IMPORT.any { (prefix, suffix) -> description.startsWith(prefix) && description.endsWith(suffix) }) {
             return !importIsUsedInAnErasedType(info, file)
