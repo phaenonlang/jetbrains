@@ -36,6 +36,10 @@
         </intentionAction>
         <daemon.intentionActionFilter implementation="dev.phaenon.jetbrains.PhaenonPipeQuickFixFilter"/>
 
+        <!-- Enter in a `type` declaration, one comment to PhpStorm: its docblock is continued with ` * `, and a
+             shape's braces just opened are parted. -->
+        <enterHandlerDelegate implementation="dev.phaenon.jetbrains.PhaenonTypeDeclarationEnterHandler" order="first"/>
+
         <!-- `/**` + Enter: PhpStorm's stub without the @param/@return tags a declared (or erased) type makes redundant. -->
         <enterHandlerDelegate implementation="dev.phaenon.jetbrains.PhaenonDocCommentEnterHandler" order="before phpEnterHandler"/>
 

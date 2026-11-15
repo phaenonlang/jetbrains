@@ -172,6 +172,39 @@ class PhaenonShapesTest : BasePlatformTestCase() {
         assertTrue("2.5 million tokens took $seconds s", seconds < 60)
     }
 
+    // ---------------------------------------------------------------- editing a declaration
+
+    fun testEnterContinuesADeclarationsDocblockAndPartsAShapesBraces() {
+        fun entered(text: String): String {
+            myFixture.configureByText("Enter.phn", text)
+            myFixture.type("\n")
+            val document = myFixture.editor.document.text
+            val caret = myFixture.editor.caretModel.offset
+            return document.substring(0, caret) + "<caret>" + document.substring(caret)
+        }
+        val rest = "\n\nfinal class A {}\n"
+
+        // The docblock is erased with its declaration: its lines are continued as a docblock's are.
+        assertEquals(
+            "namespace App;\n\n/**\n * A row.\n * <caret>\n */\ntype Row = array{id: int};$rest",
+            entered("namespace App;\n\n/**\n * A row.<caret>\n */\ntype Row = array{id: int};$rest"),
+        )
+        assertEquals(
+            "namespace App;\n\n/**\n * <caret>\n * A row.\n */\ntype Row = array{id: int};$rest",
+            entered("namespace App;\n\n/**<caret>\n * A row.\n */\ntype Row = array{id: int};$rest"),
+        )
+        // A shape just opened: the brace goes below, the caret between.
+        assertEquals("namespace App;\n\ntype Row = array{\n    <caret>\n};$rest", entered("namespace App;\n\ntype Row = array{<caret>};$rest"))
+        assertEquals(
+            "namespace App;\n\ntype Row = array{\n    lines: list<array{\n        <caret>\n    }>,\n};$rest",
+            entered("namespace App;\n\ntype Row = array{\n    lines: list<array{<caret>}>,\n};$rest"),
+        )
+        // Anywhere else in the declaration, the line's indent is kept, as before.
+        assertEquals("namespace App;\n\ntype Row = array{\n    id: int,\n    <caret>\n};$rest", entered("namespace App;\n\ntype Row = array{\n    id: int,<caret>\n};$rest"))
+        // A class's docblock is PhpStorm's.
+        assertEquals("namespace App;\n\n/**\n * A class.\n * <caret>\n */\nfinal class A {}\n", entered("namespace App;\n\n/**\n * A class.<caret>\n */\nfinal class A {}\n"))
+    }
+
     // ---------------------------------------------------------------- reading the erased text
 
     fun testAShapeIsReadSpelledBackAndSpelledForADocblock() {
