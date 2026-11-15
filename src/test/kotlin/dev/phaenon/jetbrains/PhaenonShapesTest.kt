@@ -11,6 +11,8 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.jetbrains.php.config.PhpLanguageLevel
 import com.jetbrains.php.config.PhpProjectConfigurationFacade
 import com.jetbrains.php.lang.PhpFileType
+import com.jetbrains.php.lang.inspections.PhpUndefinedClassInspection
+import com.jetbrains.php.lang.inspections.PhpUnusedAliasInspection
 import com.jetbrains.php.lang.psi.elements.Method
 import com.jetbrains.php.lang.psi.elements.PhpClass
 import java.io.File
@@ -18,8 +20,9 @@ import java.io.File
 /**
  * Named shapes (design/collections.md §6): `array{id: int, name?: string}` in the right-hand side
  * of a `type` declaration, which [PhaenonLexer] erases whole, braces and all. These tests are the
- * lexer's: what is erased, and what a declaration that is still being typed does to the file
- * around it.
+ * lexer's, what is erased and what a declaration that is still being typed does to the file
+ * around it, and those of the erased text: how a shape is read back out of it, and which of its
+ * words name a class.
  */
 class PhaenonShapesTest : BasePlatformTestCase() {
 
@@ -167,6 +170,58 @@ class PhaenonShapesTest : BasePlatformTestCase() {
         assertFalse(deep.any { it.first === PhaenonTokenTypes.ERASED && it.second.contains("{") })
         // Under a second on a laptop; a scan that started over at each token would take hours.
         assertTrue("2.5 million tokens took $seconds s", seconds < 60)
+    }
+
+    // ---------------------------------------------------------------- reading the erased text
+
+    fun testAShapeIsReadSpelledBackAndSpelledForADocblock() {
+        val written = "?array{id: int, 'a-b'?: list<array{sku: string}>, -1: (int, \\App\\User), f: Closure(array{a: int}, int=, string...): array{b: int}|null, ...}"
+        val type = PhaenonType.parse(written)!!
+
+        assertEquals(type, PhaenonType.parse(type.text()))
+        assertEquals(
+            "array{id: int, 'a-b'?: list<array{sku: string}>, -1: array{int, \\App\\User}, f: \\Closure(array{a: int}, int=, string...): (array{b: int}|null), ...}|null",
+            type.docblock(),
+        )
+        // The vocabulary the compiler writes: a map is an array, bytes a string, a type parameter nobody bound mixed.
+        assertEquals("array<string, string>|class-string<\\App\\User>|mixed|(\\A&\\B)", PhaenonType.parse("map<string, bytes>|class<\\App\\User>|T|(\\A&\\B)")!!.docblock())
+        assertEquals("array", PhaenonType.parse("array{...}")!!.docblock())
+        assertEquals("array{}", PhaenonType.parse("array { }")!!.docblock())
+        assertNull(PhaenonType.parse("array{id: int"))
+        assertNull(PhaenonType.parse("array{int, string}"))
+    }
+
+    fun testATypeDeclarationIsReadWithItsDocblockAndItsParameters() {
+        val alias = PhaenonType.alias("/** A page of rows. */\n// since 0.5\nTYPE Page<T of object = \\stdClass, K> = array{items: list<T>, /* how many */ total: int};")!!
+
+        assertEquals("Page", alias.name)
+        assertEquals("Page", "/** A page of rows. */\n// since 0.5\nTYPE Page<T".substring(alias.offset, alias.offset + 4))
+        assertEquals(listOf("T", "K"), alias.parameters.map { it.name })
+        assertEquals(listOf("object", null), alias.parameters.map { it.bound?.text() })
+        assertEquals(listOf("\\stdClass", null), alias.parameters.map { it.default?.text() })
+        assertEquals("array{items: list<T>, total: int}", alias.type!!.text())
+        // What is no declaration, and one whose type is still being written.
+        assertNull(PhaenonType.alias("final class Row {}"))
+        assertNull(PhaenonType.alias("typed = 1;"))
+        assertNull(PhaenonType.alias("type Row"))
+        assertNull(PhaenonType.alias("type Row = array{id: int")!!.type)
+    }
+
+    fun testAShapesKeysAreNoClassNames() {
+        myFixture.enableInspections(PhpUnusedAliasInspection::class.java, PhpUndefinedClassInspection::class.java)
+        myFixture.addFileToProject("src/Model/Id.phn", "namespace Shop\\Model;\n\nfinal class Id {}\nfinal class Name {}\nfinal class Tag {}\n")
+        val file = myFixture.addFileToProject(
+            "src/Model/keys.phn",
+            "namespace Shop\\Keys;\n\nuse Shop\\Model\\Id;\nuse Shop\\Model\\Name;\nuse Shop\\Model\\Tag;\n\n" +
+                "/** A row: see Name. */\ntype Row = array{id: int, name?: string, tag: Tag, 'Id': int, list: list<Tag>, /* Name */ 0: int};\n",
+        )
+        myFixture.configureFromExistingVirtualFile(file.virtualFile)
+
+        val leaf = PsiTreeUtil.collectElementsOfType(myFixture.file, PsiComment::class.java).single { PhaenonTokenTypes.isErased(it) }
+        assertEquals(listOf("Tag", "Tag"), PhaenonErasedNames.classNames(leaf).map { it.second })
+        // `id` and `name` are keys, and a comment names nothing: only the import a type names is used.
+        val unused = myFixture.doHighlighting().filter { it.description.orEmpty().startsWith("Import") }.map { it.text }
+        assertEquals(listOf("Shop\\Model\\Id", "Shop\\Model\\Name"), unused)
     }
 
     private fun erased(file: PsiFile): List<String> =

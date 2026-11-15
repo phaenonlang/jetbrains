@@ -58,6 +58,8 @@ class PhaenonTypeText(private val context: PsiElement, private val typeParameter
         is PhaenonType.Intersection -> PhpType().also { t -> node.members.forEach { t.add(type(it)) } }
         // A tuple is a positional array.
         is PhaenonType.Tuple -> PhpType().also { t -> node.elements.forEach { t.add(type(it).pluralise()) } }
+        // Written in a `type` declaration alone: anywhere else it is the array it erases to.
+        is PhaenonType.Shape -> PhpType.ARRAY
         is PhaenonType.Closure -> closure(node)
         is PhaenonType.Named -> named(node)
     }

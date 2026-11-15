@@ -279,6 +279,10 @@ object PhaenonErasedTypes {
      * declaration list `<…>` that names it. Null when no enclosing declaration does.
      */
     fun typeParameterDeclaration(element: PsiElement, name: String): PhaenonTypeParameter? {
+        // In a `type` declaration the parameter is the alias's own, declared in the same leaf.
+        if (PhaenonTokenTypes.isErased(element)) {
+            PhaenonType.alias(element.text)?.parameters?.firstOrNull { it.name == name }?.let { return PhaenonTypeParameter(element, it.offset, name) }
+        }
         var scope: PsiElement? = element
         while (scope != null) {
             val list = declarationList(scope)

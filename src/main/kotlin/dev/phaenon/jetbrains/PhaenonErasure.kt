@@ -198,6 +198,7 @@ object PhaenonErasure {
             is PhaenonType.Union -> node.members.flatMapTo(LinkedHashSet()) { atoms(it) }
             is PhaenonType.Intersection -> node.members.flatMapTo(LinkedHashSet()) { atoms(it) }
             is PhaenonType.Tuple -> setOf(Atom.Native("array"))
+            is PhaenonType.Shape -> setOf(Atom.Native("array"))
             is PhaenonType.Closure -> setOf(Atom.Native("\\Closure"))
             is PhaenonType.Named -> named(node)
         }
