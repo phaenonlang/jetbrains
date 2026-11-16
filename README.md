@@ -395,11 +395,15 @@ or an `.editorconfig` says.
 
 ## Install
 
-In PhpStorm, **Settings → Plugins → Marketplace**, search for *Phaenon*, install, restart; the
-JetBrains Marketplace then brings the updates. Each release is also a zip on this repository's
-[releases page](https://github.com/phaenonlang/jetbrains/releases), for **Settings → Plugins → ⚙ →
-Install Plugin from Disk…**, and `./gradlew buildPlugin` builds one from a checkout (JDK 21, see
-[Build](#build)). Any `.phn` file opens as Phaenon.
+The plugin is not listed on the JetBrains Marketplace yet: it is awaiting approval there. Until it
+is, install it from disk. Download the zip of the
+[latest release](https://github.com/phaenonlang/jetbrains/releases/latest), then in PhpStorm
+**Settings → Plugins → ⚙ → Install Plugin from Disk…**, choose the zip and restart. An update is
+the next release's zip, installed the same way. `./gradlew buildPlugin` builds one from a checkout
+(JDK 21, see [Build](#build)). Any `.phn` file opens as Phaenon.
+
+Once the plugin is listed, **Settings → Plugins → Marketplace**, a search for *Phaenon*, will
+install it, and the JetBrains Marketplace will bring the updates.
 
 Requires PhpStorm 2026.1.4 or newer (or another JetBrains IDE 2026.1.4+ with the PHP plugin for
 full support).
